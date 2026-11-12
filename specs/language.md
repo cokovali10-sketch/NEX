@@ -18,6 +18,7 @@ planned and are not yet implemented.
 - Unary negation.
 - `if`, `elif`, `else`.
 - `while`.
+- `for ... in ... .. ...`.
 - `return`, `break`, `continue`.
 - Function calls.
 - Built-in `print` and `println`.

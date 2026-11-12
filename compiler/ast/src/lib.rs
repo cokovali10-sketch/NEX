@@ -75,6 +75,12 @@ pub enum StmtKind {
         cond: Expr,
         body: Block,
     },
+    For {
+        var: String,
+        start: Expr,
+        end: Expr,
+        body: Block,
+    },
     Return(Option<Expr>),
     Break,
     Continue,

@@ -241,6 +241,7 @@ impl<'a> Parser<'a> {
             TokenKind::Let | TokenKind::Var => Some(self.parse_let()),
             TokenKind::If => Some(self.parse_if()),
             TokenKind::While => Some(self.parse_while()),
+            TokenKind::For => Some(self.parse_for()),
             TokenKind::Return => Some(self.parse_return()),
             TokenKind::Break => {
                 let start = self.advance().span;
@@ -357,6 +358,60 @@ impl<'a> Parser<'a> {
         let span = start.merge(body.span);
         Stmt {
             kind: StmtKind::While { cond, body },
+            span,
+        }
+    }
+
+    fn parse_for(&mut self) -> Stmt {
+        let start = self.advance().span;
+        let Some((var, _var_span)) = self.expect_ident("after `for`") else {
+            self.recover_statement();
+            return Stmt {
+                kind: StmtKind::Expr(Expr {
+                    kind: ExprKind::Error,
+                    span: start,
+                }),
+                span: start,
+            };
+        };
+
+        if !self.expect(&TokenKind::In, "after loop variable") {
+            self.recover_statement();
+            return Stmt {
+                kind: StmtKind::Expr(Expr {
+                    kind: ExprKind::Error,
+                    span: start,
+                }),
+                span: start,
+            };
+        }
+
+        let range_start = self.parse_expr();
+        if !self.eat(&TokenKind::DotDot) {
+            self.error(
+                "NXP012",
+                "expected `..` in `for` range",
+                self.peek_token().span,
+            );
+            self.recover_statement();
+            return Stmt {
+                kind: StmtKind::Expr(Expr {
+                    kind: ExprKind::Error,
+                    span: start,
+                }),
+                span: start,
+            };
+        }
+        let range_end = self.parse_expr();
+        let body = self.parse_block();
+        let span = start.merge(body.span);
+        Stmt {
+            kind: StmtKind::For {
+                var,
+                start: range_start,
+                end: range_end,
+                body,
+            },
             span,
         }
     }

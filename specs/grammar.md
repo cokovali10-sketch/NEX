@@ -15,6 +15,7 @@ statement      := let_stmt
                | var_stmt
                | if_stmt
                | while_stmt
+               | for_stmt
                | return_stmt
                | break_stmt
                | continue_stmt
@@ -28,6 +29,7 @@ if_stmt        := "if" expression ":" block
                   { "elif" expression ":" block }
                   [ "else" ":" block ]
 while_stmt     := "while" expression ":" block
+for_stmt       := "for" IDENT "in" expression ".." expression ":" block
 return_stmt    := "return" [ expression ] NEWLINE
 break_stmt     := "break" NEWLINE
 continue_stmt  := "continue" NEWLINE

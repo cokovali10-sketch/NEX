@@ -258,6 +258,12 @@ fn lower_statement(
         StmtKind::While { cond, body } => {
             lower_while(builder, cond, body, scopes, storage, analysis)
         }
+        StmtKind::For {
+            var,
+            start,
+            end,
+            body,
+        } => lower_for(builder, var, start, end, body, scopes, storage, analysis),
         StmtKind::Return(value) => {
             if let Some(value) = value {
                 let operand = lower_expr(builder, value, scopes, storage, analysis, Type::Error)?;
@@ -373,6 +379,101 @@ fn lower_while(
     scopes.pop();
     builder.loop_stack.pop();
     if !builder.current_terminated() {
+        builder.terminate(Terminator::Br(cond_bb));
+    }
+
+    builder.current = exit_bb;
+    Ok(())
+}
+
+fn lower_for(
+    builder: &mut FunctionBuilder,
+    var: &str,
+    start: &Expr,
+    end: &Expr,
+    body: &Block,
+    scopes: &mut Vec<HashMap<String, Slot>>,
+    storage: &HashMap<nex_diagnostics::Span, (ValueId, IrType)>,
+    analysis: &Analysis,
+) -> Result<(), String> {
+    let start_val = lower_expr(builder, start, scopes, storage, analysis, Type::Error)?;
+    let end_val = lower_expr(builder, end, scopes, storage, analysis, Type::Error)?;
+    let var_ty = analysis.expr_type(start.span).unwrap_or(Type::Error);
+
+    // Allocate loop variable in entry and initialize.
+    let var_ptr = builder.alloca_at_entry(IrType::from_type(var_ty));
+    builder.emit(Inst::Store {
+        ptr: var_ptr,
+        value: start_val,
+        ty: IrType::from_type(var_ty),
+    });
+
+    let cond_bb = builder.new_block();
+    let body_bb = builder.new_block();
+    let exit_bb = builder.new_block();
+
+    // Condition: var < end
+    builder.terminate(Terminator::Br(cond_bb));
+    builder.current = cond_bb;
+    let var_load = {
+        let dst = builder.new_value();
+        builder.emit(Inst::Load {
+            dst,
+            ptr: var_ptr,
+            ty: IrType::from_type(var_ty),
+        });
+        dst
+    };
+    let cmp_dst = builder.new_value();
+    builder.emit(Inst::Bin {
+        dst: cmp_dst,
+        op: BinOp::Lt,
+        ty: IrType::from_type(var_ty),
+        lhs: Operand::Value(var_load),
+        rhs: end_val,
+    });
+    builder.terminate(Terminator::CondBr {
+        cond: Operand::Value(cmp_dst),
+        then_bb: body_bb,
+        else_bb: exit_bb,
+    });
+
+    builder.current = body_bb;
+    builder.loop_stack.push((exit_bb, cond_bb));
+    scopes.push(HashMap::new());
+    // expose var to body
+    if let Some(scope) = scopes.last_mut() {
+        scope.insert(var.to_string(), Slot::Local(var_ptr, IrType::from_type(var_ty)));
+    }
+    lower_stmts(builder, &body.stmts, scopes, storage, analysis)?;
+    scopes.pop();
+    builder.loop_stack.pop();
+
+    // increment
+    if !builder.current_terminated() {
+        let var_load = {
+            let dst = builder.new_value();
+            builder.emit(Inst::Load {
+                dst,
+                ptr: var_ptr,
+                ty: IrType::from_type(var_ty),
+            });
+            dst
+        };
+        let one = Operand::Const(Const::Int(1));
+        let inc_dst = builder.new_value();
+        builder.emit(Inst::Bin {
+            dst: inc_dst,
+            op: BinOp::Add,
+            ty: IrType::from_type(var_ty),
+            lhs: Operand::Value(var_load),
+            rhs: one,
+        });
+        builder.emit(Inst::Store {
+            ptr: var_ptr,
+            value: Operand::Value(inc_dst),
+            ty: IrType::from_type(var_ty),
+        });
         builder.terminate(Terminator::Br(cond_bb));
     }
 

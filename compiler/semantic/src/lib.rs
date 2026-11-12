@@ -396,6 +396,42 @@ impl<'a> Checker<'a> {
                 self.check_block(body, false);
                 self.loop_depth -= 1;
             }
+            StmtKind::For { var, start, end, body } => {
+                let start_ty = self.infer(start);
+                let end_ty = self.infer(end);
+                if start_ty != Type::Error && end_ty != Type::Error {
+                    if !start_ty.is_integer() || !end_ty.is_integer() {
+                        self.error(
+                            "NXS024",
+                            "for loop bounds must be integers",
+                            statement.span,
+                        );
+                    } else if start_ty != end_ty {
+                        self.error(
+                            "NXS008",
+                            format!(
+                                "for loop bounds have different types `{start_ty}` and `{end_ty}`"
+                            ),
+                            statement.span,
+                        );
+                    }
+                }
+
+                let var_ty = if start_ty != Type::Error {
+                    start_ty
+                } else {
+                    end_ty
+                };
+
+                self.loop_depth += 1;
+                self.scopes.push(HashMap::new());
+                if var_ty != Type::Error {
+                    self.declare(var, var_ty, false, statement.span);
+                }
+                self.check_block(body, false);
+                self.scopes.pop();
+                self.loop_depth -= 1;
+            }
             StmtKind::Return(value) => {
                 let Some(sig) = self.current_fn.clone() else {
                     return;
