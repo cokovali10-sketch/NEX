@@ -1,0 +1,12 @@
+[package]
+name = "nex-integration-tests"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "End-to-end integration tests for the NEX compiler"
+
+[dev-dependencies]
+nex-driver.workspace = true
+nex-backend.workspace = true
+nex-diagnostics.workspace = true

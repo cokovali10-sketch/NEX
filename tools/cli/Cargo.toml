@@ -1,0 +1,20 @@
+[package]
+name = "nex-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Command-line interface for the NEX ecosystem"
+
+[[bin]]
+name = "nex"
+path = "src/main.rs"
+
+[dependencies]
+nex-driver.workspace = true
+nex-backend.workspace = true
+nex-diagnostics.workspace = true
+nex-lexer.workspace = true
+nex-parser.workspace = true
+nex-ast.workspace = true
+nex-semantic.workspace = true
