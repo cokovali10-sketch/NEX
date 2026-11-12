@@ -1,0 +1,31 @@
+# Rust
+/target/
+**/*.rs.bk
+*.pdb
+
+# NEX build artifacts
+/build/
+**/build/
+*.ll
+*.o
+*.obj
+*.exe
+*.lib
+*.a
+*.pdb
+*.ilk
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Local environment
+.env
+.env.*

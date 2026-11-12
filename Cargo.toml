@@ -1,0 +1,37 @@
+[workspace]
+resolver = "3"
+members = [
+    "compiler/diagnostics",
+    "compiler/lexer",
+    "compiler/ast",
+    "compiler/parser",
+    "compiler/semantic",
+    "compiler/ir",
+    "compiler/backend",
+    "compiler/driver",
+    "tools/cli",
+    "tests/integration",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT"
+authors = ["NEX Engineering"]
+repository = "https://github.com/nex-lang/nex"
+description = "NEX native compiled programming language and developer ecosystem"
+
+[workspace.dependencies]
+nex-diagnostics = { path = "compiler/diagnostics" }
+nex-lexer = { path = "compiler/lexer" }
+nex-ast = { path = "compiler/ast" }
+nex-parser = { path = "compiler/parser" }
+nex-semantic = { path = "compiler/semantic" }
+nex-ir = { path = "compiler/ir" }
+nex-backend = { path = "compiler/backend" }
+nex-driver = { path = "compiler/driver" }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
