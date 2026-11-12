@@ -5,7 +5,8 @@
 //! the compiler report more than one independent error per file.
 
 use nex_ast::{
-    BinOp, Block, Expr, ExprKind, FnDecl, Param, Program, Stmt, StmtKind, TypeExpr, UnaryOp,
+    BinOp, Block, ConstDecl, Expr, ExprKind, FnDecl, Param, Program, Stmt, StmtKind, TypeExpr,
+    UnaryOp,
 };
 use nex_diagnostics::{Diagnostic, Span};
 use nex_lexer::{Token, TokenKind};
@@ -37,6 +38,7 @@ impl<'a> Parser<'a> {
 
     fn parse_program(mut self) -> ParseResult {
         let start = self.peek_token().span.start;
+        let mut consts = Vec::new();
         let mut functions = Vec::new();
 
         while !self.check(&TokenKind::Eof) {
@@ -44,7 +46,13 @@ impl<'a> Parser<'a> {
                 continue;
             }
 
-            if self.check(&TokenKind::Fn) {
+            if self.check(&TokenKind::Const) {
+                if let Some(constant) = self.parse_const() {
+                    consts.push(constant);
+                } else {
+                    self.synchronize_item();
+                }
+            } else if self.check(&TokenKind::Fn) {
                 if let Some(function) = self.parse_function() {
                     functions.push(function);
                 } else {
@@ -79,6 +87,7 @@ impl<'a> Parser<'a> {
         let end = self.peek_token().span.end;
         ParseResult {
             program: Program {
+                consts,
                 functions,
                 span: Span::new(start, end),
             },
@@ -111,6 +120,32 @@ impl<'a> Parser<'a> {
             params,
             ret,
             body,
+            span,
+        })
+    }
+
+    fn parse_const(&mut self) -> Option<ConstDecl> {
+        let start = self.advance().span;
+        let (name, _name_span) = self.expect_ident("after `const`")?;
+
+        let ty = if self.eat(&TokenKind::Colon) {
+            Some(self.parse_type())
+        } else {
+            None
+        };
+
+        if !self.expect(&TokenKind::Eq, "in constant declaration") {
+            self.recover_statement();
+            return None;
+        }
+
+        let init = self.parse_expr();
+        let span = start.merge(init.span);
+        self.expect_line_end();
+        Some(ConstDecl {
+            name,
+            ty,
+            init,
             span,
         })
     }

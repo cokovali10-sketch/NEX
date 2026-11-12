@@ -16,6 +16,8 @@ pub struct FnSig {
 
 #[derive(Debug, Clone)]
 pub struct Analysis {
+    pub consts: BTreeMap<String, Type>,
+    pub const_exprs: BTreeMap<String, Expr>,
     pub functions: BTreeMap<String, FnSig>,
     pub expr_types: HashMap<Span, Type>,
     pub decl_types: HashMap<Span, Type>,
@@ -65,6 +67,8 @@ impl<'a> Checker<'a> {
         let mut checker = Self {
             program,
             analysis: Analysis {
+                consts: BTreeMap::new(),
+                const_exprs: BTreeMap::new(),
                 functions: BTreeMap::new(),
                 expr_types: HashMap::new(),
                 decl_types: HashMap::new(),
@@ -74,6 +78,7 @@ impl<'a> Checker<'a> {
             current_fn: None,
             loop_depth: 0,
         };
+        checker.collect_consts();
         checker.collect_functions();
         checker.check_main();
         checker.check_functions();
@@ -141,6 +146,84 @@ impl<'a> Checker<'a> {
                     span: function.span,
                 },
             );
+        }
+    }
+
+    fn collect_consts(&mut self) {
+        for constant in &self.program.consts {
+            if self.analysis.consts.contains_key(&constant.name) {
+                self.error(
+                    "NXS003",
+                    format!("duplicate constant `{}`", constant.name),
+                    constant.span,
+                );
+                continue;
+            }
+
+            if !self.is_const_expr(&constant.init, &mut std::collections::HashSet::new()) {
+                self.error(
+                    "NXS023",
+                    format!(
+                        "constant `{}` initializer must be a compile-time constant expression",
+                        constant.name
+                    ),
+                    constant.init.span,
+                );
+            }
+
+            let expected = constant.ty.as_ref().map(|ty| self.resolve_type(ty));
+            let inferred = if let Some(expected) = expected {
+                self.check_expected(&constant.init, expected)
+            } else {
+                self.infer(&constant.init)
+            };
+
+            let declared_ty = expected.unwrap_or(inferred);
+            if declared_ty == Type::Void || declared_ty == Type::Error {
+                if declared_ty == Type::Void {
+                    self.error(
+                        "NXS002",
+                        format!("constant `{}` cannot have type `void`", constant.name),
+                        constant.span,
+                    );
+                }
+                continue;
+            }
+
+            self.analysis.consts.insert(constant.name.clone(), declared_ty);
+            self.analysis
+                .const_exprs
+                .insert(constant.name.clone(), constant.init.clone());
+        }
+    }
+
+    fn is_const_expr(&self, expr: &Expr, visiting: &mut std::collections::HashSet<String>) -> bool {
+        match &expr.kind {
+            ExprKind::Int(_) | ExprKind::Float(_) | ExprKind::Bool(_) | ExprKind::Char(_) | ExprKind::Str(_) => {
+                true
+            }
+            ExprKind::Unary { operand, .. } => self.is_const_expr(operand, visiting),
+            ExprKind::Binary { left, right, .. } => {
+                self.is_const_expr(left, visiting) && self.is_const_expr(right, visiting)
+            }
+            ExprKind::Cast { expr: inner, .. } => self.is_const_expr(inner, visiting),
+            ExprKind::Ident(name) => {
+                if !self.analysis.consts.contains_key(name) {
+                    return false;
+                }
+                if !visiting.insert(name.clone()) {
+                    return false;
+                }
+                let result = self
+                    .analysis
+                    .const_exprs
+                    .get(name)
+                    .map(|init| self.is_const_expr(init, visiting))
+                    .unwrap_or(false);
+                visiting.remove(name);
+                result
+            }
+            _ => false,
         }
     }
 
@@ -415,6 +498,8 @@ impl<'a> Checker<'a> {
             ExprKind::Ident(name) => {
                 if let Some(var) = self.lookup(name) {
                     var.ty
+                } else if let Some(ty) = self.analysis.consts.get(name).copied() {
+                    ty
                 } else {
                     self.error("NXS001", format!("unknown variable `{name}`"), expr.span);
                     Type::Error

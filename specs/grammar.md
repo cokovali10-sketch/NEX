@@ -4,7 +4,8 @@ This grammar describes the syntax implemented by the NEX 0.1 parser. Indentation
 tokens are produced by the lexer.
 
 ```ebnf
-program        := { function } EOF
+program        := { const_decl | function } EOF
+const_decl     := "const" IDENT [ ":" type ] "=" expression NEWLINE
 function       := "fn" IDENT "(" [ params ] ")" [ "->" type ] ":" block
 params         := param { "," param } [ "," ]
 param          := IDENT ":" type

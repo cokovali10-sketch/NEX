@@ -398,6 +398,9 @@ fn lower_expr(
         ExprKind::Char(value) => Ok(Operand::Const(crate::types::Const::Char(*value))),
         ExprKind::Bool(value) => Ok(Operand::Const(crate::types::Const::Bool(*value))),
         ExprKind::Ident(name) => {
+            if let Some(init) = analysis.const_exprs.get(name) {
+                return lower_expr(builder, init, scopes, storage, analysis, Type::Error);
+            }
             let slot = lookup_slot(scopes, name)
                 .ok_or_else(|| format!("unknown variable `{name}` during code generation"))?;
             match slot {

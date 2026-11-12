@@ -22,6 +22,7 @@ planned and are not yet implemented.
 - Function calls.
 - Built-in `print` and `println`.
 - Explicit casts with `as`.
+- Top-level `const` declarations with compile-time constant initializers.
 
 ## Planned
 

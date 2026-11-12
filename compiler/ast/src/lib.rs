@@ -8,7 +8,16 @@ use nex_diagnostics::Span;
 
 #[derive(Debug, Clone)]
 pub struct Program {
+    pub consts: Vec<ConstDecl>,
     pub functions: Vec<FnDecl>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct ConstDecl {
+    pub name: String,
+    pub ty: Option<TypeExpr>,
+    pub init: Expr,
     pub span: Span,
 }
 
