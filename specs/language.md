@@ -21,6 +21,7 @@ planned and are not yet implemented.
 - `return`, `break`, `continue`.
 - Function calls.
 - Built-in `print` and `println`.
+- Explicit casts with `as`.
 
 ## Planned
 

@@ -119,16 +119,16 @@ fn main() -> i32:
 }
 
 #[test]
-fn unsigned_and_casts_print() {
+fn casts_work() {
     let source = r#"
 fn main():
     let x: u8 = 255
     print(x)
     print(1.25 as f64)
 "#;
-    // `as` is not implemented in 0.1, so this program must fail to compile.
-    let result = compile(source);
-    assert!(result.has_errors());
+    let (stdout, _stderr, code) = run_source(source);
+    assert_eq!(code, 0);
+    assert_eq!(stdout, "2551.25");
 }
 
 #[test]

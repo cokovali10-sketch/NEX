@@ -38,8 +38,9 @@ and_expr       := not_expr { ("and" | "&&") not_expr }
 not_expr       := ("not" | "!") not_expr | comparison
 comparison     := additive { ("==" | "!=" | "<" | "<=" | ">" | ">=") additive }
 additive       := multiplicative { ("+" | "-") multiplicative }
-multiplicative := unary { ("*" | "/" | "%") unary }
-unary          := "-" unary | postfix
+multiplicative := cast { ("*" | "/" | "%") cast }
+cast           := unary { "as" type }
+unary          := "-" cast | postfix
 postfix        := primary { "(" [ arguments ] ")" }
 arguments      := expression { "," expression } [ "," ]
 primary        := INT | FLOAT | STRING | CHAR | "true" | "false"

@@ -38,6 +38,16 @@ requires an explicit conversion.
 - `not` requires `bool`.
 - Unary `-` requires a signed integer or floating point type.
 
+## Explicit casts
+
+`as` can convert between numeric types, `bool`, and `char`:
+
+```nex
+let x = 42 as f64
+let y = 3.9 as i64
+let z = true as i64
+```
+
 ## Planned
 
 - Generic type parameters.

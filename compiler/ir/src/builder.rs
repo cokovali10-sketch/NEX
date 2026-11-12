@@ -551,6 +551,38 @@ fn lower_expr(
                 Ok(Operand::Const(Const::Bool(false)))
             }
         }
+        ExprKind::Cast { expr: inner, ty: _ } => {
+            let source_ty = analysis.expr_type(inner.span).unwrap_or(Type::Error);
+            let target_ty = expr_ty;
+            if source_ty == target_ty {
+                return lower_expr(builder, inner, scopes, storage, analysis, Type::Error);
+            }
+
+            if target_ty == Type::Bool && (source_ty.is_integer() || source_ty == Type::Char) {
+                let value = lower_expr(builder, inner, scopes, storage, analysis, Type::Error)?;
+                let dst = builder.new_value();
+                builder.emit(Inst::Bin {
+                    dst,
+                    op: BinOp::Ne,
+                    ty: IrType::from_type(source_ty),
+                    lhs: value,
+                    rhs: Operand::Const(Const::Int(0)),
+                });
+                return Ok(Operand::Value(dst));
+            }
+
+            let kind = cast_kind(source_ty, target_ty)?;
+            let value = lower_expr(builder, inner, scopes, storage, analysis, Type::Error)?;
+            let dst = builder.new_value();
+            builder.emit(Inst::Cast {
+                dst,
+                kind,
+                from: IrType::from_type(source_ty),
+                to: IrType::from_type(target_ty),
+                operand: value,
+            });
+            Ok(Operand::Value(dst))
+        }
         ExprKind::Error => Err("invalid expression reached code generation".to_string()),
     }
 }
@@ -707,4 +739,79 @@ fn runtime_print_name(base: &str, ty: Type) -> Result<(String, PrintCast), Strin
 
     let _ = name_prefix;
     Ok((runtime_name, cast))
+}
+fn cast_kind(source: Type, target: Type) -> Result<CastKind, String> {
+    use nex_semantic::Type as T;
+    match (source, target) {
+        (s, t) if s.is_integer() && t.is_integer() => {
+            let s_bits = integer_bits(s);
+            let t_bits = integer_bits(t);
+            if t_bits > s_bits {
+                if s.is_signed_integer() {
+                    Ok(CastKind::SignExtend)
+                } else {
+                    Ok(CastKind::ZeroExtend)
+                }
+            } else if t_bits < s_bits {
+                Ok(CastKind::Truncate)
+            } else {
+                Ok(CastKind::Truncate)
+            }
+        }
+        (s, t) if s.is_integer() && t.is_float() => {
+            if s.is_unsigned_integer() {
+                Ok(CastKind::UnsignedIntToFloat)
+            } else {
+                Ok(CastKind::SignedIntToFloat)
+            }
+        }
+        (s, t) if s.is_float() && t.is_integer() => {
+            if t.is_unsigned_integer() || t == T::Bool || t == T::Char {
+                Ok(CastKind::FloatToUnsignedInt)
+            } else {
+                Ok(CastKind::FloatToSignedInt)
+            }
+        }
+        (s, t) if s.is_float() && t.is_float() => {
+            if integer_bits_float(t) > integer_bits_float(s) {
+                Ok(CastKind::FloatExtend)
+            } else {
+                Ok(CastKind::Truncate)
+            }
+        }
+        (T::Bool, t) if t.is_integer() || t == T::Char => Ok(CastKind::ZeroExtend),
+        (T::Char, t) if t.is_integer() => {
+            if integer_bits(t) >= 32 {
+                Ok(CastKind::ZeroExtend)
+            } else {
+                Ok(CastKind::Truncate)
+            }
+        }
+        (s, T::Char) if s.is_integer() => {
+            if integer_bits(s) <= 32 {
+                Ok(CastKind::ZeroExtend)
+            } else {
+                Ok(CastKind::Truncate)
+            }
+        }
+        _ => Err(format!("cannot lower cast from {source} to {target}")),
+    }
+}
+
+fn integer_bits(ty: Type) -> u32 {
+    match ty {
+        Type::I8 | Type::U8 | Type::Bool => 8,
+        Type::I16 | Type::U16 => 16,
+        Type::I32 | Type::U32 | Type::Char => 32,
+        Type::I64 | Type::U64 => 64,
+        _ => 0,
+    }
+}
+
+fn integer_bits_float(ty: Type) -> u32 {
+    match ty {
+        Type::F32 => 32,
+        Type::F64 => 64,
+        _ => 0,
+    }
 }

@@ -100,6 +100,10 @@ pub enum ExprKind {
         callee_span: Span,
         args: Vec<Expr>,
     },
+    Cast {
+        expr: Box<Expr>,
+        ty: TypeExpr,
+    },
     /// Parser recovery node. It must be rejected by semantic analysis.
     Error,
 }

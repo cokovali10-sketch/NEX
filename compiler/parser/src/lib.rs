@@ -444,8 +444,25 @@ impl<'a> Parser<'a> {
         left
     }
 
+    fn parse_cast(&mut self) -> Expr {
+        let mut expr = self.parse_unary();
+        while self.check(&TokenKind::As) {
+            self.advance();
+            let ty = self.parse_type();
+            let span = expr.span.merge(ty.span);
+            expr = Expr {
+                kind: ExprKind::Cast {
+                    expr: Box::new(expr),
+                    ty,
+                },
+                span,
+            };
+        }
+        expr
+    }
+
     fn parse_multiplicative(&mut self) -> Expr {
-        let mut left = self.parse_unary();
+        let mut left = self.parse_cast();
         loop {
             let op = match self.peek() {
                 TokenKind::Star => BinOp::Mul,
@@ -454,7 +471,7 @@ impl<'a> Parser<'a> {
                 _ => break,
             };
             self.advance();
-            let right = self.parse_unary();
+            let right = self.parse_cast();
             left = binary(op, left, right);
         }
         left
@@ -463,7 +480,7 @@ impl<'a> Parser<'a> {
     fn parse_unary(&mut self) -> Expr {
         if self.check(&TokenKind::Minus) {
             let start = self.advance().span;
-            let operand = self.parse_unary();
+            let operand = self.parse_cast();
             let span = start.merge(operand.span);
             Expr {
                 kind: ExprKind::Unary {

@@ -116,6 +116,11 @@ pub enum CastKind {
     SignExtend,
     ZeroExtend,
     FloatExtend,
+    Truncate,
+    SignedIntToFloat,
+    UnsignedIntToFloat,
+    FloatToSignedInt,
+    FloatToUnsignedInt,
 }
 
 #[derive(Debug, Clone, PartialEq)]

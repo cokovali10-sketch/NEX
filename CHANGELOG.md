@@ -4,6 +4,7 @@
 
 ### Added
 
+- Explicit `as` casts between numeric types, `bool`, and `char`.
 - Initial NEX workspace and repository governance files.
 - Indentation-aware lexer with diagnostics.
 - Recursive-descent parser for functions, bindings, control flow, and expressions.

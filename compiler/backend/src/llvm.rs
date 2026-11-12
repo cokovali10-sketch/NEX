@@ -225,6 +225,11 @@ impl<'a> Emitter<'a> {
                     CastKind::SignExtend => "sext",
                     CastKind::ZeroExtend => "zext",
                     CastKind::FloatExtend => "fpext",
+                    CastKind::Truncate => "trunc",
+                    CastKind::SignedIntToFloat => "sitofp",
+                    CastKind::UnsignedIntToFloat => "uitofp",
+                    CastKind::FloatToSignedInt => "fptosi",
+                    CastKind::FloatToUnsignedInt => "fptoui",
                 };
                 body.push_str(&format!(
                     "  %v{} = {} {} {} to {}\n",

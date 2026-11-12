@@ -522,6 +522,22 @@ impl<'a> Checker<'a> {
                 callee_span,
                 args,
             } => self.check_call(callee, *callee_span, args, expr.span),
+            ExprKind::Cast { expr: inner, ty } => {
+                let source_ty = self.infer(inner);
+                let target_ty = self.resolve_type(ty);
+                if source_ty == Type::Error || target_ty == Type::Error {
+                    Type::Error
+                } else if self.can_cast(source_ty, target_ty) {
+                    target_ty
+                } else {
+                    self.error(
+                        "NXS022",
+                        format!("cannot cast `{source_ty}` to `{target_ty}`"),
+                        expr.span,
+                    );
+                    Type::Error
+                }
+            }
             ExprKind::Error => Type::Error,
         };
 
@@ -636,6 +652,15 @@ impl<'a> Checker<'a> {
         } else {
             false
         }
+    }
+
+    fn can_cast(&self, source: Type, target: Type) -> bool {
+        if source == target {
+            return true;
+        }
+        let source_numeric = source.is_numeric() || source == Type::Bool || source == Type::Char;
+        let target_numeric = target.is_numeric() || target == Type::Bool || target == Type::Char;
+        source_numeric && target_numeric
     }
 
     fn resolve_type(&mut self, ty: &nex_ast::TypeExpr) -> Type {
