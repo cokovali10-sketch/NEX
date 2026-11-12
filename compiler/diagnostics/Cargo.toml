@@ -1,0 +1,9 @@
+[package]
+name = "nex-diagnostics"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Source spans, diagnostics and human-readable rendering for NEX"
+
+[dependencies]

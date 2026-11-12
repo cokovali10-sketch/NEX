@@ -1,0 +1,12 @@
+[package]
+name = "nex-parser"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Recursive-descent parser for NEX 0.1"
+
+[dependencies]
+nex-diagnostics.workspace = true
+nex-lexer.workspace = true
+nex-ast.workspace = true
