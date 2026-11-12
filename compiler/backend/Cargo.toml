@@ -1,0 +1,13 @@
+[package]
+name = "nex-backend"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "LLVM textual IR emission and native toolchain integration for NEX"
+
+[dependencies]
+nex-diagnostics.workspace = true
+nex-ir.workspace = true
+nex-semantic.workspace = true
+nex-ast.workspace = true

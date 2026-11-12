@@ -1,0 +1,15 @@
+[package]
+name = "nex-semantic"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Scope resolution and type checking for NEX 0.1"
+
+[dependencies]
+nex-diagnostics.workspace = true
+nex-ast.workspace = true
+
+[dev-dependencies]
+nex-lexer.workspace = true
+nex-parser.workspace = true

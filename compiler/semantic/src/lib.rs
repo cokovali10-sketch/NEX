@@ -1,0 +1,710 @@
+mod types;
+
+pub use types::Type;
+
+use nex_ast::{Expr, ExprKind, Program, Stmt, StmtKind};
+use nex_diagnostics::{Diagnostic, Span};
+use std::collections::{BTreeMap, HashMap};
+
+#[derive(Debug, Clone)]
+pub struct FnSig {
+    pub name: String,
+    pub params: Vec<Type>,
+    pub ret: Type,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct Analysis {
+    pub functions: BTreeMap<String, FnSig>,
+    pub expr_types: HashMap<Span, Type>,
+    pub decl_types: HashMap<Span, Type>,
+    pub diagnostics: Vec<Diagnostic>,
+}
+
+impl Analysis {
+    pub fn has_errors(&self) -> bool {
+        self.diagnostics.iter().any(Diagnostic::is_error)
+    }
+
+    pub fn function(&self, name: &str) -> Option<&FnSig> {
+        self.functions.get(name)
+    }
+
+    pub fn expr_type(&self, span: Span) -> Option<Type> {
+        self.expr_types.get(&span).copied()
+    }
+
+    pub fn decl_type(&self, span: Span) -> Option<Type> {
+        self.decl_types.get(&span).copied()
+    }
+}
+
+pub use types::Type as NexType;
+
+#[derive(Clone)]
+struct VarInfo {
+    ty: Type,
+    mutable: bool,
+}
+
+struct Checker<'a> {
+    program: &'a Program,
+    analysis: Analysis,
+    scopes: Vec<HashMap<String, VarInfo>>,
+    current_fn: Option<FnSig>,
+    loop_depth: usize,
+}
+
+pub fn analyze(program: &Program) -> Analysis {
+    Checker::analyze_program(program)
+}
+
+impl<'a> Checker<'a> {
+    fn analyze_program(program: &'a Program) -> Analysis {
+        let mut checker = Self {
+            program,
+            analysis: Analysis {
+                functions: BTreeMap::new(),
+                expr_types: HashMap::new(),
+                decl_types: HashMap::new(),
+                diagnostics: Vec::new(),
+            },
+            scopes: Vec::new(),
+            current_fn: None,
+            loop_depth: 0,
+        };
+        checker.collect_functions();
+        checker.check_main();
+        checker.check_functions();
+        checker.analysis
+    }
+
+    fn collect_functions(&mut self) {
+        for function in &self.program.functions {
+            if function.name == "print" || function.name == "println" {
+                self.error(
+                    "NXS019",
+                    format!(
+                        "function name `{}` is reserved for the built-in print family",
+                        function.name
+                    ),
+                    function.span,
+                );
+            }
+
+            if function.name.starts_with("nex_rt_") {
+                self.error(
+                    "NXS020",
+                    format!(
+                        "function name `{}` uses the reserved `nex_rt_` ABI prefix",
+                        function.name
+                    ),
+                    function.span,
+                );
+            }
+
+            if self.analysis.functions.contains_key(&function.name) {
+                self.error(
+                    "NXS003",
+                    format!("duplicate function `{}`", function.name),
+                    function.span,
+                );
+                continue;
+            }
+
+            let mut params = Vec::with_capacity(function.params.len());
+            for param in &function.params {
+                let ty = self.resolve_type(&param.ty);
+                if ty == Type::Void {
+                    self.error(
+                        "NXS002",
+                        format!("parameter `{}` cannot have type `void`", param.name),
+                        param.ty.span,
+                    );
+                }
+                params.push(ty);
+            }
+
+            let ret = function
+                .ret
+                .as_ref()
+                .map(|ty| self.resolve_type(ty))
+                .unwrap_or(Type::Void);
+
+            self.analysis.functions.insert(
+                function.name.clone(),
+                FnSig {
+                    name: function.name.clone(),
+                    params,
+                    ret,
+                    span: function.span,
+                },
+            );
+        }
+    }
+
+    fn check_main(&mut self) {
+        let sig = self.analysis.functions.get("main").cloned();
+        let Some(sig) = sig else {
+            self.error(
+                "NXS011",
+                "program entry point `fn main()` is required",
+                self.program.span,
+            );
+            return;
+        };
+
+        if !sig.params.is_empty() {
+            self.error(
+                "NXS011",
+                "NEX 0.1 `main` must not accept parameters",
+                sig.span,
+            );
+        }
+
+        if !matches!(sig.ret, Type::Void | Type::I32) {
+            self.error(
+                "NXS011",
+                format!(
+                    "NEX 0.1 `main` must return `void` or `i32`, found `{}`",
+                    sig.ret
+                ),
+                sig.span,
+            );
+        }
+    }
+
+    fn check_functions(&mut self) {
+        let functions = self.program.functions.clone();
+        for function in functions {
+            let Some(sig) = self.analysis.functions.get(&function.name).cloned() else {
+                continue;
+            };
+            self.current_fn = Some(sig.clone());
+            self.scopes.clear();
+            let mut param_scope = HashMap::new();
+            for (param, ty) in function.params.iter().zip(sig.params.iter()) {
+                if param_scope.contains_key(&param.name) {
+                    self.error(
+                        "NXS018",
+                        format!("duplicate parameter `{}`", param.name),
+                        param.span,
+                    );
+                }
+                param_scope.insert(
+                    param.name.clone(),
+                    VarInfo {
+                        ty: *ty,
+                        mutable: false,
+                    },
+                );
+            }
+            self.scopes.push(param_scope);
+            self.loop_depth = 0;
+            self.check_block(&function.body, true);
+
+            if sig.ret != Type::Void && !self.block_returns(&function.body) {
+                self.error(
+                    "NXS010",
+                    format!(
+                        "function `{}` may exit without returning a value of type `{}`",
+                        function.name, sig.ret
+                    ),
+                    function.span,
+                );
+            }
+
+            self.current_fn = None;
+            self.scopes.clear();
+        }
+    }
+
+    fn check_block(&mut self, block: &nex_ast::Block, _top_level: bool) {
+        self.scopes.push(HashMap::new());
+        let mut returned = false;
+        for statement in &block.stmts {
+            if returned {
+                self.warning("NXS017", "unreachable statement", statement.span);
+            }
+            self.check_statement(statement);
+            returned = returned || self.stmt_returns(statement);
+        }
+        self.scopes.pop();
+    }
+
+    fn check_statement(&mut self, statement: &Stmt) {
+        match &statement.kind {
+            StmtKind::Let {
+                name,
+                mutable,
+                ty,
+                init,
+            } => {
+                let expected = ty
+                    .as_ref()
+                    .map(|annotation| self.resolve_type(annotation))
+                    .unwrap_or(Type::Error);
+
+                let inferred = if ty.is_some() {
+                    self.check_expected(init, expected)
+                } else {
+                    self.infer(init)
+                };
+
+                let declared_ty = if ty.is_some() {
+                    if inferred == Type::Error {
+                        Type::Error
+                    } else {
+                        expected
+                    }
+                } else {
+                    inferred
+                };
+
+                if declared_ty == Type::Void {
+                    self.error(
+                        "NXS002",
+                        format!("variable `{name}` cannot have type `void`"),
+                        statement.span,
+                    );
+                }
+
+                self.analysis.decl_types.insert(statement.span, declared_ty);
+                self.declare(name, declared_ty, *mutable, statement.span);
+            }
+            StmtKind::Assign { name, value } => {
+                let Some(var) = self.lookup(name) else {
+                    self.error(
+                        "NXS016",
+                        format!("cannot assign to undeclared variable `{name}`"),
+                        statement.span,
+                    );
+                    self.infer(value);
+                    return;
+                };
+                if !var.mutable {
+                    self.error(
+                        "NXS007",
+                        format!(
+                            "cannot assign to immutable variable `{name}`; declare it with `var`"
+                        ),
+                        statement.span,
+                    );
+                }
+                let var_ty = var.ty;
+                self.check_expected(value, var_ty);
+            }
+            StmtKind::If {
+                branches,
+                else_branch,
+            } => {
+                for (condition, block) in branches {
+                    self.check_bool(condition);
+                    self.check_block(block, false);
+                }
+                if let Some(block) = else_branch {
+                    self.check_block(block, false);
+                }
+            }
+            StmtKind::While { cond, body } => {
+                self.check_bool(cond);
+                self.loop_depth += 1;
+                self.check_block(body, false);
+                self.loop_depth -= 1;
+            }
+            StmtKind::Return(value) => {
+                let Some(sig) = self.current_fn.clone() else {
+                    return;
+                };
+                if sig.ret == Type::Void {
+                    if let Some(value) = value {
+                        self.infer(value);
+                        self.error("NXS009", "function does not return a value", statement.span);
+                    }
+                } else if let Some(value) = value {
+                    self.check_expected(value, sig.ret);
+                } else {
+                    self.error(
+                        "NXS009",
+                        format!("function must return a value of type `{}`", sig.ret),
+                        statement.span,
+                    );
+                }
+            }
+            StmtKind::Break | StmtKind::Continue => {
+                if self.loop_depth == 0 {
+                    let keyword = match statement.kind {
+                        StmtKind::Break => "break",
+                        StmtKind::Continue => "continue",
+                        _ => unreachable!(),
+                    };
+                    self.error(
+                        "NXS012",
+                        format!("`{keyword}` outside of a loop"),
+                        statement.span,
+                    );
+                }
+            }
+            StmtKind::Expr(expr) => {
+                self.infer(expr);
+            }
+        }
+    }
+
+    fn check_bool(&mut self, expr: &Expr) {
+        let ty = self.infer(expr);
+        if ty != Type::Error && ty != Type::Bool {
+            self.error(
+                "NXS014",
+                format!("condition must be `bool`, found `{ty}`"),
+                expr.span,
+            );
+        }
+    }
+
+    fn check_expected(&mut self, expr: &Expr, expected: Type) -> Type {
+        if expected == Type::Error {
+            return Type::Error;
+        }
+
+        if let ExprKind::Int(_) = &expr.kind {
+            if let Some(range) = expected.integer_range() {
+                let value = match expr.kind {
+                    ExprKind::Int(value) => value as i128,
+                    _ => 0,
+                };
+                if value < range.0 || value > range.1 {
+                    self.error(
+                        "NXS021",
+                        format!("integer literal {} does not fit in `{}`", value, expected),
+                        expr.span,
+                    );
+                    self.analysis.expr_types.insert(expr.span, Type::Error);
+                    return Type::Error;
+                }
+            }
+        }
+
+        if self.coerce_literal(expr, expected) {
+            return expected;
+        }
+
+        let actual = self.infer(expr);
+        if actual == Type::Error || expected == Type::Error {
+            return Type::Error;
+        }
+        if actual != expected {
+            self.error(
+                "NXS006",
+                format!("type mismatch: expected `{expected}`, found `{actual}`"),
+                expr.span,
+            );
+            return Type::Error;
+        }
+        actual
+    }
+
+    fn infer(&mut self, expr: &Expr) -> Type {
+        let ty = match &expr.kind {
+            ExprKind::Int(_) => Type::I64,
+            ExprKind::Float(_) => Type::F64,
+            ExprKind::Str(_) => Type::String,
+            ExprKind::Char(_) => Type::Char,
+            ExprKind::Bool(_) => Type::Bool,
+            ExprKind::Ident(name) => {
+                if let Some(var) = self.lookup(name) {
+                    var.ty
+                } else {
+                    self.error("NXS001", format!("unknown variable `{name}`"), expr.span);
+                    Type::Error
+                }
+            }
+            ExprKind::Unary { op, operand } => {
+                let operand_ty = self.infer(operand);
+                if operand_ty == Type::Error {
+                    Type::Error
+                } else {
+                    match op {
+                        nex_ast::UnaryOp::Neg => {
+                            if operand_ty.is_signed_integer() || operand_ty.is_float() {
+                                operand_ty
+                            } else if operand_ty.is_unsigned_integer() {
+                                self.error(
+                                    "NXS008",
+                                    format!(
+                                        "unary `-` is not defined for unsigned type `{operand_ty}`"
+                                    ),
+                                    expr.span,
+                                );
+                                Type::Error
+                            } else {
+                                self.error(
+                                    "NXS008",
+                                    format!("unary `-` is not defined for type `{operand_ty}`"),
+                                    expr.span,
+                                );
+                                Type::Error
+                            }
+                        }
+                        nex_ast::UnaryOp::Not => {
+                            if operand_ty == Type::Bool {
+                                Type::Bool
+                            } else {
+                                self.error(
+                                    "NXS008",
+                                    format!("`not` requires `bool`, found `{operand_ty}`"),
+                                    expr.span,
+                                );
+                                Type::Error
+                            }
+                        }
+                    }
+                }
+            }
+            ExprKind::Binary { op, left, right } => {
+                use nex_ast::BinOp;
+                match op {
+                    BinOp::And | BinOp::Or => {
+                        self.check_bool(left);
+                        self.check_bool(right);
+                        Type::Bool
+                    }
+                    BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Rem => {
+                        let Some(ty) = self.unify_operands(left, right) else {
+                            return Type::Error;
+                        };
+                        if ty.is_numeric() {
+                            ty
+                        } else {
+                            self.error(
+                                "NXS008",
+                                format!("arithmetic is not defined for type `{ty}`"),
+                                expr.span,
+                            );
+                            Type::Error
+                        }
+                    }
+                    BinOp::Eq | BinOp::Ne => {
+                        let Some(ty) = self.unify_operands(left, right) else {
+                            return Type::Error;
+                        };
+                        if ty == Type::Bool || ty == Type::Char || ty.is_numeric() {
+                            Type::Bool
+                        } else {
+                            self.error(
+                                "NXS008",
+                                format!("equality is not implemented for type `{ty}` in NEX 0.1"),
+                                expr.span,
+                            );
+                            Type::Error
+                        }
+                    }
+                    BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge => {
+                        let Some(ty) = self.unify_operands(left, right) else {
+                            return Type::Error;
+                        };
+                        if ty == Type::Bool || ty == Type::Char || ty.is_numeric() {
+                            Type::Bool
+                        } else {
+                            self.error(
+                                "NXS008",
+                                format!("ordering is not defined for type `{ty}` in NEX 0.1"),
+                                expr.span,
+                            );
+                            Type::Error
+                        }
+                    }
+                }
+            }
+            ExprKind::Call {
+                callee,
+                callee_span,
+                args,
+            } => self.check_call(callee, *callee_span, args, expr.span),
+            ExprKind::Error => Type::Error,
+        };
+
+        self.analysis.expr_types.insert(expr.span, ty);
+        ty
+    }
+
+    fn check_call(&mut self, callee: &str, callee_span: Span, args: &[Expr], span: Span) -> Type {
+        if callee == "print" || callee == "println" {
+            if args.len() != 1 {
+                self.error(
+                    "NXS004",
+                    format!(
+                        "`{callee}` expects exactly one argument, found {}",
+                        args.len()
+                    ),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let arg_ty = self.infer(&args[0]);
+            if arg_ty != Type::Error && !arg_ty.is_printable() {
+                self.error(
+                    "NXS015",
+                    format!("`{callee}` cannot print a value of type `{arg_ty}`"),
+                    args[0].span,
+                );
+                return Type::Error;
+            }
+            return Type::Void;
+        }
+
+        let Some(sig) = self.analysis.functions.get(callee).cloned() else {
+            self.error(
+                "NXS004",
+                format!("unknown function `{callee}`"),
+                callee_span,
+            );
+            for arg in args {
+                self.infer(arg);
+            }
+            return Type::Error;
+        };
+
+        if args.len() != sig.params.len() {
+            self.error(
+                "NXS004",
+                format!(
+                    "function `{callee}` expects {} argument(s), found {}",
+                    sig.params.len(),
+                    args.len()
+                ),
+                span,
+            );
+        }
+
+        for (index, arg) in args.iter().enumerate() {
+            if let Some(expected) = sig.params.get(index) {
+                self.check_expected(arg, *expected);
+            } else {
+                self.infer(arg);
+            }
+        }
+
+        sig.ret
+    }
+
+    fn unify_operands(&mut self, left: &Expr, right: &Expr) -> Option<Type> {
+        let left_ty = self.infer(left);
+        let right_ty = self.infer(right);
+        if left_ty == Type::Error || right_ty == Type::Error {
+            return None;
+        }
+        if left_ty == right_ty {
+            return Some(left_ty);
+        }
+        if self.coerce_literal(right, left_ty) {
+            return Some(left_ty);
+        }
+        if self.coerce_literal(left, right_ty) {
+            return Some(right_ty);
+        }
+        self.error(
+            "NXS008",
+            format!(
+                "operands have different types `{left_ty}` and `{right_ty}`; NEX 0.1 does not apply implicit widening"
+            ),
+            left.span.merge(right.span),
+        );
+        None
+    }
+
+    fn coerce_literal(&mut self, expr: &Expr, expected: Type) -> bool {
+        let fits = match &expr.kind {
+            ExprKind::Int(value) => {
+                if let Some(range) = expected.integer_range() {
+                    let value = *value as i128;
+                    value >= range.0 && value <= range.1
+                } else {
+                    false
+                }
+            }
+            ExprKind::Float(_) => expected == Type::F32 || expected == Type::F64,
+            _ => false,
+        };
+        if fits {
+            self.analysis.expr_types.insert(expr.span, expected);
+            true
+        } else {
+            false
+        }
+    }
+
+    fn resolve_type(&mut self, ty: &nex_ast::TypeExpr) -> Type {
+        let Some(resolved) = Type::from_name(&ty.name) else {
+            self.error("NXS002", format!("unknown type `{}`", ty.name), ty.span);
+            return Type::Error;
+        };
+        if resolved == Type::Void {
+            // `void` is only valid as a function return type. Callers can still
+            // accept it; parameter/variable checks happen at the call site.
+        }
+        resolved
+    }
+
+    fn declare(&mut self, name: &str, ty: Type, mutable: bool, span: Span) {
+        let Some(scope) = self.scopes.last_mut() else {
+            return;
+        };
+        if scope.contains_key(name) {
+            self.error(
+                "NXS013",
+                format!("duplicate variable `{name}` in the same scope"),
+                span,
+            );
+            return;
+        }
+        scope.insert(name.to_string(), VarInfo { ty, mutable });
+    }
+
+    fn lookup(&mut self, name: &str) -> Option<VarInfo> {
+        for scope in self.scopes.iter().rev() {
+            if let Some(var) = scope.get(name) {
+                return Some(var.clone());
+            }
+        }
+        None
+    }
+
+    fn block_returns(&self, block: &nex_ast::Block) -> bool {
+        block
+            .stmts
+            .iter()
+            .any(|statement| self.stmt_returns(statement))
+    }
+
+    fn stmt_returns(&self, statement: &Stmt) -> bool {
+        match &statement.kind {
+            StmtKind::Return(_) => true,
+            StmtKind::If {
+                branches,
+                else_branch: Some(else_block),
+            } => {
+                !branches.is_empty()
+                    && branches.iter().all(|(_, block)| self.block_returns(block))
+                    && self.block_returns(else_block)
+            }
+            _ => false,
+        }
+    }
+
+    fn error(&mut self, code: &str, message: impl Into<String>, span: Span) {
+        self.analysis
+            .diagnostics
+            .push(Diagnostic::error(code, message, span));
+    }
+
+    fn warning(&mut self, code: &str, message: impl Into<String>, span: Span) {
+        self.analysis
+            .diagnostics
+            .push(Diagnostic::warning(code, message, span));
+    }
+}

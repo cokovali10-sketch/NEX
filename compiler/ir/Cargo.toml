@@ -1,0 +1,12 @@
+[package]
+name = "nex-ir"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "NEX intermediate representation and LLVM IR construction"
+
+[dependencies]
+nex-diagnostics.workspace = true
+nex-ast.workspace = true
+nex-semantic.workspace = true

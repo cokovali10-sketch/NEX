@@ -1,0 +1,20 @@
+[package]
+name = "nex-driver"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Compilation pipeline for NEX"
+
+[[bin]]
+name = "nexc"
+path = "src/bin/nexc.rs"
+
+[dependencies]
+nex-diagnostics.workspace = true
+nex-lexer.workspace = true
+nex-ast.workspace = true
+nex-parser.workspace = true
+nex-semantic.workspace = true
+nex-ir.workspace = true
+nex-backend.workspace = true
