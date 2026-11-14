@@ -190,7 +190,9 @@ impl<'a> Checker<'a> {
                 continue;
             }
 
-            self.analysis.consts.insert(constant.name.clone(), declared_ty);
+            self.analysis
+                .consts
+                .insert(constant.name.clone(), declared_ty);
             self.analysis
                 .const_exprs
                 .insert(constant.name.clone(), constant.init.clone());
@@ -199,9 +201,11 @@ impl<'a> Checker<'a> {
 
     fn is_const_expr(&self, expr: &Expr, visiting: &mut std::collections::HashSet<String>) -> bool {
         match &expr.kind {
-            ExprKind::Int(_) | ExprKind::Float(_) | ExprKind::Bool(_) | ExprKind::Char(_) | ExprKind::Str(_) => {
-                true
-            }
+            ExprKind::Int(_)
+            | ExprKind::Float(_)
+            | ExprKind::Bool(_)
+            | ExprKind::Char(_)
+            | ExprKind::Str(_) => true,
             ExprKind::Unary { operand, .. } => self.is_const_expr(operand, visiting),
             ExprKind::Binary { left, right, .. } => {
                 self.is_const_expr(left, visiting) && self.is_const_expr(right, visiting)
@@ -396,16 +400,17 @@ impl<'a> Checker<'a> {
                 self.check_block(body, false);
                 self.loop_depth -= 1;
             }
-            StmtKind::For { var, start, end, body } => {
+            StmtKind::For {
+                var,
+                start,
+                end,
+                body,
+            } => {
                 let start_ty = self.infer(start);
                 let end_ty = self.infer(end);
                 if start_ty != Type::Error && end_ty != Type::Error {
                     if !start_ty.is_integer() || !end_ty.is_integer() {
-                        self.error(
-                            "NXS024",
-                            "for loop bounds must be integers",
-                            statement.span,
-                        );
+                        self.error("NXS024", "for loop bounds must be integers", statement.span);
                     } else if start_ty != end_ty {
                         self.error(
                             "NXS008",

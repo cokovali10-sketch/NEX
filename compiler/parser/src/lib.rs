@@ -435,19 +435,45 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_expression_or_assignment(&mut self) -> Stmt {
-        if let TokenKind::Ident(name) = self.peek()
-            && self.peek_kind(1) == &TokenKind::Eq
-        {
+        if let TokenKind::Ident(name) = self.peek() {
             let name = name.clone();
-            let start = self.advance().span;
-            self.advance();
-            let value = self.parse_expr();
-            let span = start.merge(value.span);
-            self.expect_line_end();
-            return Stmt {
-                kind: StmtKind::Assign { name, value },
-                span,
-            };
+            let next = self.peek_kind(1).clone();
+
+            if next == TokenKind::Eq {
+                let start = self.advance().span;
+                self.advance();
+                let value = self.parse_expr();
+                let span = start.merge(value.span);
+                self.expect_line_end();
+                return Stmt {
+                    kind: StmtKind::Assign { name, value },
+                    span,
+                };
+            }
+
+            if let Some(op) = compound_bin_op(&next) {
+                let start = self.advance().span;
+                self.advance();
+                let rhs = self.parse_expr();
+                let span = start.merge(rhs.span);
+                self.expect_line_end();
+                let target = Expr {
+                    kind: ExprKind::Ident(name.clone()),
+                    span: start,
+                };
+                let value = Expr {
+                    kind: ExprKind::Binary {
+                        op,
+                        left: Box::new(target),
+                        right: Box::new(rhs),
+                    },
+                    span,
+                };
+                return Stmt {
+                    kind: StmtKind::Assign { name, value },
+                    span,
+                };
+            }
         }
 
         let expr = self.parse_expr();
@@ -864,6 +890,17 @@ impl<'a> Parser<'a> {
     }
 }
 
+fn compound_bin_op(kind: &TokenKind) -> Option<BinOp> {
+    Some(match kind {
+        TokenKind::PlusEq => BinOp::Add,
+        TokenKind::MinusEq => BinOp::Sub,
+        TokenKind::StarEq => BinOp::Mul,
+        TokenKind::SlashEq => BinOp::Div,
+        TokenKind::PercentEq => BinOp::Rem,
+        _ => return None,
+    })
+}
+
 fn binary(op: BinOp, left: Expr, right: Expr) -> Expr {
     let span = left.span.merge(right.span);
     Expr {
@@ -951,5 +988,25 @@ mod tests {
     fn rejects_unimplemented_struct() {
         let result = parse_source("struct Point:\n    x: i64\n");
         assert!(result.diagnostics.iter().any(|d| d.code == "NXP010"));
+    }
+
+    #[test]
+    fn desugars_compound_assignment() {
+        let result = parse_source("fn main():\n    var x = 1\n    x += 2 * 3\n");
+        assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+        let StmtKind::Assign { name, value } = &result.program.functions[0].body.stmts[1].kind
+        else {
+            panic!("expected assignment");
+        };
+        assert_eq!(name, "x");
+        let ExprKind::Binary { op, left, right } = &value.kind else {
+            panic!("expected binary expression");
+        };
+        assert_eq!(*op, BinOp::Add);
+        assert!(matches!(left.kind, ExprKind::Ident(ref ident) if ident == "x"));
+        assert!(matches!(
+            right.kind,
+            ExprKind::Binary { op: BinOp::Mul, .. }
+        ));
     }
 }

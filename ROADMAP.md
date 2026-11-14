@@ -18,7 +18,7 @@
 - [ ] Modules and imports.
 - [ ] Structs, enums, and pattern matching.
 - [ ] Arrays and tuples.
-- [ ] Explicit casts and conversions.
+- [x] Explicit casts and conversions between numeric types, `bool`, and `char`.
 - [ ] Better control-flow analysis and definite-return checking.
 - [ ] Richer diagnostics with fixes and suggestions.
 

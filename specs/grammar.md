@@ -24,7 +24,7 @@ statement      := let_stmt
 
 let_stmt       := "let" IDENT [ ":" type ] "=" expression NEWLINE
 var_stmt       := "var" IDENT [ ":" type ] "=" expression NEWLINE
-assignment     := IDENT "=" expression NEWLINE
+assignment     := IDENT ( "=" | "+=" | "-=" | "*=" | "/=" | "%=" ) expression NEWLINE
 if_stmt        := "if" expression ":" block
                   { "elif" expression ":" block }
                   [ "else" ":" block ]

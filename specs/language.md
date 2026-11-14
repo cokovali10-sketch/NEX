@@ -9,6 +9,8 @@ planned and are not yet implemented.
 - Function declarations with parameters and optional return type.
 - `let` (immutable) and `var` (mutable) bindings with type inference.
 - Assignment to mutable bindings.
+- Compound assignment operators `+=`, `-=`, `*=`, `/=`, `%=` (desugared to
+  `x = x <op> value`).
 - Integer `i64`, floating point `f64`, `bool`, `char`, and `string` types.
 - Numeric types `i8`, `i16`, `i32`, `u8`, `u16`, `u32`, `u64`, `f32` in
   annotations and casts through literal coercion.

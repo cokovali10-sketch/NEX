@@ -551,6 +551,16 @@ impl<'a> Lexer<'a> {
             (TokenKind::DotDot, 2)
         } else if rest.starts_with("->") {
             (TokenKind::Arrow, 2)
+        } else if rest.starts_with("+=") {
+            (TokenKind::PlusEq, 2)
+        } else if rest.starts_with("-=") {
+            (TokenKind::MinusEq, 2)
+        } else if rest.starts_with("*=") {
+            (TokenKind::StarEq, 2)
+        } else if rest.starts_with("/=") {
+            (TokenKind::SlashEq, 2)
+        } else if rest.starts_with("%=") {
+            (TokenKind::PercentEq, 2)
         } else if rest.starts_with("==") {
             (TokenKind::EqEq, 2)
         } else if rest.starts_with("!=") {

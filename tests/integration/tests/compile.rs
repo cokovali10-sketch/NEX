@@ -73,6 +73,51 @@ fn main():
 }
 
 #[test]
+fn compound_assignment() {
+    let source = r#"
+fn main():
+    var total = 0
+    var i = 1
+    while i <= 4:
+        total += i
+        i += 1
+    print(total)
+    var x = 10
+    x -= 3
+    x *= 2
+    x /= 2
+    x %= 5
+    print(x)
+"#;
+    let (stdout, _stderr, code) = run_source(source);
+    assert_eq!(code, 0);
+    assert_eq!(stdout, "102");
+}
+
+#[test]
+fn break_and_continue_in_for_loops() {
+    let source = r#"
+fn main():
+    var sum = 0
+    for i in 0..10:
+        if i % 2 == 0:
+            continue
+        sum += i
+    print(sum)
+
+    var count = 0
+    for i in 0..100:
+        if i == 5:
+            break
+        count += 1
+    print(count)
+"#;
+    let (stdout, _stderr, code) = run_source(source);
+    assert_eq!(code, 0);
+    assert_eq!(stdout, "255");
+}
+
+#[test]
 fn if_elif_else() {
     let source = r#"
 fn classify(x: i64) -> i64:
