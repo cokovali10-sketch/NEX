@@ -982,7 +982,12 @@ fn lower_expr(
             if let Some((_, index)) = analysis.variant_value(expr.span) {
                 return Ok(Operand::Const(Const::Int(index as i64)));
             }
-            if let Some(init) = analysis.const_exprs.get(name) {
+            let resolved = analysis
+                .aliases
+                .get(name)
+                .cloned()
+                .unwrap_or_else(|| name.clone());
+            if let Some(init) = analysis.const_exprs.get(&resolved) {
                 return lower_expr(builder, init, scopes, storage, analysis, Type::Error);
             }
             let slot = lookup_slot(scopes, name)
@@ -1132,6 +1137,12 @@ fn lower_expr(
             Ok(Operand::Value(dst))
         }
         ExprKind::Call { callee, args, .. } => {
+            let callee = analysis
+                .aliases
+                .get(callee)
+                .cloned()
+                .unwrap_or_else(|| callee.clone());
+            let callee = callee.as_str();
             if callee == "print" || callee == "println" {
                 if args.len() != 1 {
                     return Err(format!("`{callee}` expects exactly one argument"));
@@ -1186,7 +1197,7 @@ fn lower_expr(
             };
             builder.emit(Inst::Call {
                 dst,
-                name: callee.clone(),
+                name: callee.to_string(),
                 args: arg_values,
                 ret,
             });
@@ -1229,9 +1240,18 @@ fn lower_expr(
             });
             Ok(Operand::Value(dst))
         }
-        ExprKind::Field { base, .. } => {
+        ExprKind::Field { base, name, .. } => {
             if let Some((_, index)) = analysis.variant_value(expr.span) {
                 return Ok(Operand::Const(Const::Int(index as i64)));
+            }
+            // Module item access: `math.PI`.
+            if let ExprKind::Ident(module_name) = &base.kind {
+                if analysis.modules.contains(module_name) {
+                    let qualified = format!("{}.{}", module_name, name);
+                    if let Some(init) = analysis.const_exprs.get(&qualified) {
+                        return lower_expr(builder, init, scopes, storage, analysis, Type::Error);
+                    }
+                }
             }
             let Some((struct_name, index, field_ty)) = analysis.field_read(expr.span) else {
                 return Err("missing field information during code generation".to_string());

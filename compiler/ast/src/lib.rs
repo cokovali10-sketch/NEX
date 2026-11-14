@@ -8,6 +8,8 @@ use nex_diagnostics::Span;
 
 #[derive(Debug, Clone)]
 pub struct Program {
+    pub modules: Vec<String>,
+    pub uses: Vec<UseDecl>,
     pub structs: Vec<StructDecl>,
     pub enums: Vec<EnumDecl>,
     pub consts: Vec<ConstDecl>,
@@ -16,8 +18,15 @@ pub struct Program {
 }
 
 #[derive(Debug, Clone)]
+pub struct UseDecl {
+    pub path: Vec<String>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
 pub struct StructDecl {
     pub name: String,
+    pub public: bool,
     pub fields: Vec<FieldDecl>,
     pub span: Span,
 }
@@ -32,6 +41,7 @@ pub struct FieldDecl {
 #[derive(Debug, Clone)]
 pub struct EnumDecl {
     pub name: String,
+    pub public: bool,
     pub variants: Vec<VariantDecl>,
     pub span: Span,
 }
@@ -45,6 +55,7 @@ pub struct VariantDecl {
 #[derive(Debug, Clone)]
 pub struct ConstDecl {
     pub name: String,
+    pub public: bool,
     pub ty: Option<TypeExpr>,
     pub init: Expr,
     pub span: Span,
@@ -53,6 +64,7 @@ pub struct ConstDecl {
 #[derive(Debug, Clone)]
 pub struct FnDecl {
     pub name: String,
+    pub public: bool,
     pub params: Vec<Param>,
     pub ret: Option<TypeExpr>,
     pub body: Block,

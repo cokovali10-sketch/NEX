@@ -4,7 +4,9 @@ This grammar describes the syntax implemented by the NEX 0.1 parser. Indentation
 tokens are produced by the lexer.
 
 ```ebnf
-program        := { enum_decl | struct_decl | const_decl | function } EOF
+program        := { module_decl | use_decl | enum_decl | struct_decl | const_decl | function } EOF
+module_decl    := "module" IDENT ":" block
+use_decl       := "use" IDENT { "." IDENT } NEWLINE
 enum_decl      := "enum" IDENT ":" NEWLINE INDENT variant+ DEDENT
 variant        := IDENT NEWLINE
 struct_decl    := "struct" IDENT ":" NEWLINE INDENT field+ DEDENT

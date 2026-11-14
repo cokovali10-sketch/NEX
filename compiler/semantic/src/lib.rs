@@ -42,6 +42,8 @@ pub struct Analysis {
     pub structs: BTreeMap<String, StructInfo>,
     pub enums: BTreeMap<String, EnumInfo>,
     pub arrays: BTreeMap<String, ArrayInfo>,
+    pub modules: std::collections::HashSet<String>,
+    pub aliases: std::collections::HashMap<String, String>,
     /// Variant name to the interned name of the enum that declares it.
     pub variant_map: HashMap<String, &'static str>,
     pub consts: BTreeMap<String, Type>,
@@ -128,6 +130,8 @@ impl<'a> Checker<'a> {
                 structs: BTreeMap::new(),
                 enums: BTreeMap::new(),
                 arrays: BTreeMap::new(),
+                modules: std::collections::HashSet::new(),
+                aliases: std::collections::HashMap::new(),
                 variant_map: HashMap::new(),
                 consts: BTreeMap::new(),
                 const_exprs: BTreeMap::new(),
@@ -143,6 +147,7 @@ impl<'a> Checker<'a> {
             current_fn: None,
             loop_depth: 0,
         };
+        checker.collect_modules();
         checker.collect_structs();
         checker.collect_enums();
         checker.collect_consts();
@@ -323,6 +328,23 @@ impl<'a> Checker<'a> {
                     variants,
                 },
             );
+        }
+    }
+
+    fn collect_modules(&mut self) {
+        for name in &self.program.modules {
+            self.analysis.modules.insert(name.clone());
+        }
+        for use_decl in &self.program.uses {
+            if use_decl.path.len() == 1 {
+                // `use foo` makes `foo` available (already a module name).
+                continue;
+            }
+            if use_decl.path.len() >= 2 {
+                let qualified = use_decl.path.join(".");
+                let short = use_decl.path.last().cloned().unwrap();
+                self.analysis.aliases.insert(short, qualified);
+            }
         }
     }
 
@@ -984,6 +1006,26 @@ impl<'a> Checker<'a> {
             ExprKind::Char(_) => Type::Char,
             ExprKind::Bool(_) => Type::Bool,
             ExprKind::Ident(name) => {
+                if let Some(qualified) = self.analysis.aliases.get(name).cloned() {
+                    // Resolve the alias by walking the qualified path.
+                    let mut current = Expr {
+                        kind: ExprKind::Ident(qualified.split('.').next().unwrap().to_string()),
+                        span: expr.span,
+                    };
+                    for part in qualified.split('.').skip(1) {
+                        current = Expr {
+                            kind: ExprKind::Field {
+                                base: Box::new(current),
+                                name: part.to_string(),
+                                name_span: expr.span,
+                            },
+                            span: expr.span,
+                        };
+                    }
+                    let ty = self.infer(&current);
+                    self.analysis.expr_types.insert(expr.span, ty);
+                    return ty;
+                }
                 if let Some(var) = self.lookup(name) {
                     var.ty
                 } else if let Some(ty) = self.analysis.consts.get(name).copied() {
@@ -1121,6 +1163,33 @@ impl<'a> Checker<'a> {
                 name_span,
             } => {
                 if let ExprKind::Ident(base_name) = &base.kind
+                    && self.analysis.modules.contains(base_name)
+                {
+                    let qualified = format!("{}.{}", base_name, name);
+                    if let Some(ty) = self.analysis.consts.get(&qualified).copied() {
+                        self.analysis.expr_types.insert(expr.span, ty);
+                        return ty;
+                    }
+                    if let Some(info) = self.analysis.structs.get(&qualified).cloned() {
+                        let ty = Type::Struct(info.name_static);
+                        self.analysis.expr_types.insert(expr.span, ty);
+                        return ty;
+                    }
+                    if let Some(info) = self.analysis.enums.get(&qualified).cloned() {
+                        let ty = Type::Enum(info.name_static);
+                        self.analysis.expr_types.insert(expr.span, ty);
+                        return ty;
+                    }
+                    self.error(
+                        "NXS001",
+                        format!("unknown item `{name}` in module `{base_name}`"),
+                        *name_span,
+                    );
+                    self.analysis.expr_types.insert(expr.span, Type::Error);
+                    return Type::Error;
+                }
+
+                if let ExprKind::Ident(base_name) = &base.kind
                     && self.lookup(base_name).is_none()
                     && self.analysis.enum_info(base_name).is_some()
                 {
@@ -1142,6 +1211,24 @@ impl<'a> Checker<'a> {
                     let base_ty = self.infer(base);
                     if base_ty == Type::Error {
                         Type::Error
+                    } else if let Type::Enum(enum_name) = base_ty {
+                        let info = self.analysis.enums.get(enum_name).cloned();
+                        if let Some(info) = info
+                            && let Some(index) =
+                                info.variants.iter().position(|variant| variant == name)
+                        {
+                            self.analysis
+                                .variant_values
+                                .insert(expr.span, (info.name_static, index as u32));
+                            Type::Enum(info.name_static)
+                        } else {
+                            self.error(
+                                "NXS030",
+                                format!("enum `{enum_name}` has no variant `{name}`"),
+                                *name_span,
+                            );
+                            Type::Error
+                        }
                     } else if let Type::Struct(struct_name) = base_ty {
                         let info = self.analysis.structs.get(struct_name).cloned();
                         if let Some(info) = info
@@ -1297,6 +1384,13 @@ impl<'a> Checker<'a> {
     }
 
     fn check_call(&mut self, callee: &str, callee_span: Span, args: &[Expr], span: Span) -> Type {
+        let callee = self
+            .analysis
+            .aliases
+            .get(callee)
+            .cloned()
+            .unwrap_or_else(|| callee.to_string());
+        let callee = callee.as_str();
         if callee == "print" || callee == "println" {
             if args.len() != 1 {
                 self.error(

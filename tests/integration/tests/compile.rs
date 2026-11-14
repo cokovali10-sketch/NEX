@@ -441,6 +441,37 @@ fn main():
 }
 
 #[test]
+fn modules_and_use_work() {
+    let source = r#"
+module math:
+    pub fn add(a: i64, b: i64) -> i64:
+        return a + b
+
+    pub const PI: f64 = 3.14
+
+    pub enum Color:
+        Red
+        Green
+
+use math.add
+use math.PI
+
+fn main():
+    print(add(2, 3))
+    print(" ")
+    print(PI)
+    print(" ")
+    print(math.Color.Red == math.Color.Red)
+    print(" ")
+    let c = math.Color.Green
+    print(c == math.Color.Green)
+"#;
+    let (stdout, _stderr, code) = run_source(source);
+    assert_eq!(code, 0);
+    assert_eq!(stdout, "5 3.14 true true");
+}
+
+#[test]
 fn if_elif_else() {
     let source = r#"
 fn classify(x: i64) -> i64:

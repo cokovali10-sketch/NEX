@@ -4,6 +4,7 @@
 
 ### Added
 
+- Nested modules (`module name:`) and `use` aliases.
 - Tuple literals and positional field access.
 - Array literals and indexing reads/writes.
 - Enum declarations and `match` over enum values.

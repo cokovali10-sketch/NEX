@@ -19,8 +19,8 @@ around another language runtime.
 - Implemented in the language: functions, bindings, `if`/`elif`/`else`,
   `while`, `for`, `const`, explicit casts, string equality, compound
   assignment, structs with scalar fields, enums with `match`, arrays,
-  and tuples.
-- Not implemented yet: generics, modules, imports, tuples, the full
+  tuples, and modules with `use`.
+- Not implemented yet: generics, the full
   standard library, package manager, debugger, profiler, and NEX Studio.
 - Platform support today: Windows x86-64 with Clang. The compiler is designed to
   target other platforms, but only the host platform is tested.

@@ -6,7 +6,7 @@
 
 use nex_ast::{
     BinOp, Block, ConstDecl, EnumDecl, Expr, ExprKind, FieldDecl, FnDecl, MatchArm, Param, Program,
-    Stmt, StmtKind, StructDecl, TypeExpr, UnaryOp, VariantDecl,
+    Stmt, StmtKind, StructDecl, TypeExpr, UnaryOp, UseDecl, VariantDecl,
 };
 use nex_diagnostics::{Diagnostic, Span};
 use nex_lexer::{Token, TokenKind};
@@ -38,6 +38,8 @@ impl<'a> Parser<'a> {
 
     fn parse_program(mut self) -> ParseResult {
         let start = self.peek_token().span.start;
+        let mut modules = Vec::new();
+        let mut uses = Vec::new();
         let mut structs = Vec::new();
         let mut enums = Vec::new();
         let mut consts = Vec::new();
@@ -48,27 +50,49 @@ impl<'a> Parser<'a> {
                 continue;
             }
 
+            let is_public = self.eat(&TokenKind::Pub);
+
             if self.check(&TokenKind::Struct) {
-                if let Some(definition) = self.parse_struct() {
+                if let Some(mut definition) = self.parse_struct() {
+                    definition.public = is_public;
                     structs.push(definition);
                 } else {
                     self.synchronize_item();
                 }
             } else if self.check(&TokenKind::Enum) {
-                if let Some(definition) = self.parse_enum() {
+                if let Some(mut definition) = self.parse_enum() {
+                    definition.public = is_public;
                     enums.push(definition);
                 } else {
                     self.synchronize_item();
                 }
             } else if self.check(&TokenKind::Const) {
-                if let Some(constant) = self.parse_const() {
+                if let Some(mut constant) = self.parse_const() {
+                    constant.public = is_public;
                     consts.push(constant);
                 } else {
                     self.synchronize_item();
                 }
             } else if self.check(&TokenKind::Fn) {
-                if let Some(function) = self.parse_function() {
+                if let Some(mut function) = self.parse_function() {
+                    function.public = is_public;
                     functions.push(function);
+                } else {
+                    self.synchronize_item();
+                }
+            } else if self.check(&TokenKind::Module) {
+                if let Some((name, funcs, consts2, structs2, enums2)) = self.parse_module() {
+                    modules.push(name);
+                    functions.extend(funcs);
+                    consts.extend(consts2);
+                    structs.extend(structs2);
+                    enums.extend(enums2);
+                } else {
+                    self.synchronize_item();
+                }
+            } else if self.check(&TokenKind::Use) {
+                if let Some(decl) = self.parse_use() {
+                    uses.push(decl);
                 } else {
                     self.synchronize_item();
                 }
@@ -79,8 +103,6 @@ impl<'a> Parser<'a> {
                     | TokenKind::Trait
                     | TokenKind::Import
                     | TokenKind::From
-                    | TokenKind::Module
-                    | TokenKind::Use
                     | TokenKind::Extern => format!(
                         "`{}` declarations are not implemented in NEX 0.1",
                         token.kind.symbol()
@@ -98,6 +120,8 @@ impl<'a> Parser<'a> {
         let end = self.peek_token().span.end;
         ParseResult {
             program: Program {
+                modules,
+                uses,
                 structs,
                 enums,
                 consts,
@@ -130,6 +154,7 @@ impl<'a> Parser<'a> {
         let span = start.merge(body.span);
         Some(FnDecl {
             name,
+            public: false,
             params,
             ret,
             body,
@@ -157,6 +182,7 @@ impl<'a> Parser<'a> {
         self.expect_line_end();
         Some(ConstDecl {
             name,
+            public: false,
             ty,
             init,
             span,
@@ -209,6 +235,7 @@ impl<'a> Parser<'a> {
         self.eat(&TokenKind::Dedent);
         Some(StructDecl {
             name,
+            public: false,
             fields,
             span: Span::new(start.start, end),
         })
@@ -250,6 +277,7 @@ impl<'a> Parser<'a> {
         self.eat(&TokenKind::Dedent);
         Some(EnumDecl {
             name,
+            public: false,
             variants,
             span: Span::new(start.start, end),
         })
@@ -363,6 +391,118 @@ impl<'a> Parser<'a> {
             stmts,
             span: Span::new(start, end),
         }
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn parse_module(
+        &mut self,
+    ) -> Option<(
+        String,
+        Vec<FnDecl>,
+        Vec<ConstDecl>,
+        Vec<StructDecl>,
+        Vec<EnumDecl>,
+    )> {
+        let start = self.advance().span; // module
+        let (name, _name_span) = self.expect_ident("after `module`")?;
+
+        if !self.expect(&TokenKind::Colon, "after module name") {
+            self.synchronize_item();
+            return None;
+        }
+        self.expect_line_end();
+
+        if !self.eat(&TokenKind::Indent) {
+            let span = self.peek_token().span;
+            self.error("NXP002", "expected an indented module body after `:`", span);
+            return None;
+        }
+
+        let mut functions = Vec::new();
+        let mut consts = Vec::new();
+        let mut structs = Vec::new();
+        let mut enums = Vec::new();
+
+        while !self.check(&TokenKind::Dedent) && !self.check(&TokenKind::Eof) {
+            if self.eat(&TokenKind::Newline) {
+                continue;
+            }
+
+            let is_public = self.eat(&TokenKind::Pub);
+
+            if self.check(&TokenKind::Struct) {
+                if let Some(mut definition) = self.parse_struct() {
+                    definition.name = format!("{name}.{}", definition.name);
+                    definition.public = is_public;
+                    structs.push(definition);
+                } else {
+                    self.synchronize_item();
+                }
+            } else if self.check(&TokenKind::Enum) {
+                if let Some(mut definition) = self.parse_enum() {
+                    definition.name = format!("{name}.{}", definition.name);
+                    definition.public = is_public;
+                    enums.push(definition);
+                } else {
+                    self.synchronize_item();
+                }
+            } else if self.check(&TokenKind::Const) {
+                if let Some(mut constant) = self.parse_const() {
+                    constant.name = format!("{name}.{}", constant.name);
+                    constant.public = is_public;
+                    consts.push(constant);
+                } else {
+                    self.synchronize_item();
+                }
+            } else if self.check(&TokenKind::Fn) {
+                if let Some(mut function) = self.parse_function() {
+                    function.name = format!("{name}.{}", function.name);
+                    function.public = is_public;
+                    functions.push(function);
+                } else {
+                    self.synchronize_item();
+                }
+            } else if self.check(&TokenKind::Module) {
+                self.error(
+                    "NXP010",
+                    "nested modules are not supported in NEX 0.2".to_string(),
+                    self.peek_token().span,
+                );
+                self.synchronize_item();
+            } else {
+                let token = self.peek_token().clone();
+                self.error(
+                    "NXP010",
+                    format!("expected a declaration, found {}", token.kind.describe()),
+                    token.span,
+                );
+                self.synchronize_item();
+            }
+        }
+
+        let _end = self.peek_token().span.end;
+        self.eat(&TokenKind::Dedent);
+        let _ = start;
+        Some((name, functions, consts, structs, enums))
+    }
+
+    fn parse_use(&mut self) -> Option<UseDecl> {
+        let start = self.advance().span; // use
+        let Some((first, _)) = self.expect_ident("after `use`") else {
+            self.synchronize_item();
+            return None;
+        };
+        let mut path = vec![first];
+        while self.eat(&TokenKind::Dot) {
+            let Some((next, _)) = self.expect_ident("in use path") else {
+                self.synchronize_item();
+                return None;
+            };
+            path.push(next);
+        }
+        let span = start.merge(self.peek_token().span);
+        self.expect_line_end();
+        Some(UseDecl { path, span })
     }
 
     fn parse_params(&mut self) -> Vec<Param> {
@@ -823,16 +963,45 @@ impl<'a> Parser<'a> {
         let mut expr = self.parse_primary();
         loop {
             if self.check(&TokenKind::LParen) {
-                let ExprKind::Ident(callee) = &expr.kind else {
-                    let span = self.peek_token().span;
-                    self.error(
-                        "NXP004",
-                        "only named functions can be called in NEX 0.1",
-                        span,
-                    );
-                    break;
+                let callee = match &expr.kind {
+                    ExprKind::Ident(name) => name.clone(),
+                    ExprKind::Field { .. } => {
+                        // Support calls through module paths such as `math.add(...)`.
+                        let mut parts = Vec::new();
+                        let mut current = expr.clone();
+                        while let ExprKind::Field {
+                            base: inner,
+                            name: field,
+                            ..
+                        } = &current.kind
+                        {
+                            parts.push(field.clone());
+                            current = *inner.clone();
+                        }
+                        if let ExprKind::Ident(root) = &current.kind {
+                            parts.push(root.clone());
+                            parts.reverse();
+                            parts.join(".")
+                        } else {
+                            let span = self.peek_token().span;
+                            self.error(
+                                "NXP004",
+                                "only named functions can be called in NEX 0.1",
+                                span,
+                            );
+                            break;
+                        }
+                    }
+                    _ => {
+                        let span = self.peek_token().span;
+                        self.error(
+                            "NXP004",
+                            "only named functions can be called in NEX 0.1",
+                            span,
+                        );
+                        break;
+                    }
                 };
-                let callee = callee.clone();
                 let callee_span = expr.span;
                 let (args, close_span) = self.parse_arguments();
                 expr = Expr {

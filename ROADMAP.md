@@ -15,7 +15,6 @@
 
 ## NEX 0.2 - Semantic Core
 
-- [ ] Modules and imports.
 - [x] Structs: declarations with scalar fields, construction, field access,
       field assignment, and struct copies by binding initialization.
 - [x] Enums and `match` over enum values (case arms and `else` arm).
@@ -23,8 +22,8 @@
 - [ ] Nested struct fields and struct parameters/return values.
 - [x] Arrays: literals, indexing reads and writes.
 - [x] Tuples.
-- [ ] Modules and imports.
-- [x] Explicit casts and conversions between numeric types, `bool`, and `char`.
+- [x] Modules and imports (nested `module` blocks and `use` aliases).
+- [ ] Traits and pattern matching beyond enums.
 - [ ] Better control-flow analysis and definite-return checking.
 - [ ] Richer diagnostics with fixes and suggestions.
 
