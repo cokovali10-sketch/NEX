@@ -1,0 +1,8 @@
+[package]
+name = "tuples"
+version = "0.1.0"
+edition = "2026"
+description = "Tuples and positional field access example"
+
+[build]
+entry = "src/main.nex"

@@ -848,7 +848,17 @@ impl<'a> Parser<'a> {
 
             if self.check(&TokenKind::Dot) {
                 self.advance();
-                let Some((name, name_span)) = self.expect_ident("after `.`") else {
+                let (name, name_span) = if let TokenKind::Ident(name) = self.peek() {
+                    let name = name.clone();
+                    let span = self.advance().span;
+                    (name, span)
+                } else if let TokenKind::Int(value) = self.peek() {
+                    let value = *value;
+                    let span = self.advance().span;
+                    (value.to_string(), span)
+                } else {
+                    let span = self.peek_token().span;
+                    self.error("NXP004", "expected a field name after `.`", span);
                     break;
                 };
                 let span = expr.span.merge(name_span);
@@ -957,9 +967,34 @@ impl<'a> Parser<'a> {
             }
             TokenKind::LParen => {
                 self.advance();
-                let expr = self.parse_expr();
-                self.expect(&TokenKind::RParen, "after expression");
-                expr
+                if self.check(&TokenKind::RParen) {
+                    let close = self.advance().span;
+                    self.error("NXP014", "empty tuples are not supported in NEX 0.2", close);
+                    Expr {
+                        kind: ExprKind::Error,
+                        span: token.span.merge(close),
+                    }
+                } else {
+                    let first = self.parse_expr();
+                    if self.eat(&TokenKind::Comma) {
+                        let mut elements = vec![first];
+                        while !self.check(&TokenKind::RParen) && !self.check(&TokenKind::Eof) {
+                            elements.push(self.parse_expr());
+                            if !self.eat(&TokenKind::Comma) {
+                                break;
+                            }
+                        }
+                        let close = self.peek_token().span;
+                        self.expect(&TokenKind::RParen, "after tuple elements");
+                        Expr {
+                            kind: ExprKind::Tuple(elements),
+                            span: token.span.merge(close),
+                        }
+                    } else {
+                        self.expect(&TokenKind::RParen, "after expression");
+                        first
+                    }
+                }
             }
             TokenKind::LBracket => {
                 let start = self.advance().span;

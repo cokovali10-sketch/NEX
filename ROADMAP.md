@@ -22,7 +22,8 @@
 - [ ] Traits and pattern matching beyond enums.
 - [ ] Nested struct fields and struct parameters/return values.
 - [x] Arrays: literals, indexing reads and writes.
-- [ ] Tuples.
+- [x] Tuples.
+- [ ] Modules and imports.
 - [x] Explicit casts and conversions between numeric types, `bool`, and `char`.
 - [ ] Better control-flow analysis and definite-return checking.
 - [ ] Richer diagnostics with fixes and suggestions.

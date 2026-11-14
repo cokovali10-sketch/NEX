@@ -1,0 +1,17 @@
+fn main():
+    let t = (1, 2, 3)
+    print("tuple: ")
+    print(t.0)
+    print(t.1)
+    println(t.2)
+
+    var u = (10, 20)
+    u.0 = 99
+    print("after update: ")
+    print(u.0)
+    println(u.1)
+
+    let v = u
+    u.0 = 7
+    print("copy stayed: ")
+    println(v.0)

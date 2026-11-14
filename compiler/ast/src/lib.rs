@@ -170,6 +170,7 @@ pub enum ExprKind {
         expr: Box<Expr>,
         ty: TypeExpr,
     },
+    Tuple(Vec<Expr>),
     Array(Vec<Expr>),
     Index {
         base: Box<Expr>,

@@ -644,6 +644,39 @@ fn lower_struct_place(
             }
             Ok(ptr)
         }
+        ExprKind::Tuple(elements) => {
+            let ty = analysis
+                .expr_type(expr.span)
+                .ok_or_else(|| "missing type information for tuple".to_string())?;
+            let Type::Struct(name) = ty else {
+                return Err("not a tuple value".to_string());
+            };
+            let info = analysis
+                .struct_info(name)
+                .ok_or_else(|| "missing tuple type information".to_string())?;
+            let ptr = builder.alloca_at_entry(IrType::Struct(name));
+            for (index, element) in elements.iter().enumerate() {
+                let Some((_, field_ty)) = info.fields.get(index) else {
+                    return Err("too many values for tuple".to_string());
+                };
+                let ir_ty = IrType::from_type(*field_ty);
+                let value = lower_expr(builder, element, scopes, storage, analysis, *field_ty)?;
+                let field_ptr = builder.new_value();
+                builder.emit(Inst::FieldPtr {
+                    dst: field_ptr,
+                    base: ptr,
+                    struct_name: name,
+                    index: index as u32,
+                    field_ty: ir_ty,
+                });
+                builder.emit(Inst::Store {
+                    ptr: field_ptr,
+                    value,
+                    ty: ir_ty,
+                });
+            }
+            Ok(ptr)
+        }
         _ => Err("struct values must be variables or constructor calls".to_string()),
     }
 }
@@ -1252,6 +1285,11 @@ fn lower_expr(
                 ty: elem_ir,
             });
             Ok(Operand::Value(loaded))
+        }
+        ExprKind::Tuple(elements) => {
+            let _ = elements;
+            let source = lower_struct_place(builder, expr, scopes, storage, analysis)?;
+            Ok(Operand::Value(source))
         }
         ExprKind::Error => Err("invalid expression reached code generation".to_string()),
     }

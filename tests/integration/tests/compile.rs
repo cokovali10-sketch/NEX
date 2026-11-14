@@ -415,6 +415,32 @@ fn array_errors_are_reported() {
 }
 
 #[test]
+fn tuples_work() {
+    let source = r#"
+fn main():
+    let t = (1, 2, 3)
+    print(t.0)
+    print(t.1)
+    print(t.2)
+
+    var u = (10, 20)
+    u.0 = 99
+    print(u.0)
+    print(u.1)
+
+    let v = u
+    u.0 = 7
+    print(v.0)
+    print(u.0)
+
+    print(t.0 + t.2)
+"#;
+    let (stdout, _stderr, code) = run_source(source);
+    assert_eq!(code, 0);
+    assert_eq!(stdout, "12399209974");
+}
+
+#[test]
 fn if_elif_else() {
     let source = r#"
 fn classify(x: i64) -> i64:

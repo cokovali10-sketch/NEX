@@ -1233,6 +1233,46 @@ impl<'a> Checker<'a> {
                     Type::Error
                 }
             }
+            ExprKind::Tuple(elements) => {
+                if elements.is_empty() {
+                    self.error(
+                        "NXS037",
+                        "empty tuples are not supported in NEX 0.2".to_string(),
+                        expr.span,
+                    );
+                    Type::Error
+                } else {
+                    let elem_ty = self.infer(&elements[0]);
+                    if elem_ty == Type::Error {
+                        for element in &elements[1..] {
+                            self.infer(element);
+                        }
+                        Type::Error
+                    } else {
+                        for element in &elements[1..] {
+                            self.check_expected(element, elem_ty);
+                        }
+                        let elem_types = vec![elem_ty; elements.len()];
+                        let name = intern_tuple_name(&elem_types);
+                        if !self.analysis.structs.contains_key(name) {
+                            let fields: Vec<(String, Type)> = elem_types
+                                .iter()
+                                .enumerate()
+                                .map(|(index, ty)| (index.to_string(), *ty))
+                                .collect();
+                            self.analysis.structs.insert(
+                                name.to_string(),
+                                StructInfo {
+                                    name: name.to_string(),
+                                    name_static: name,
+                                    fields,
+                                },
+                            );
+                        }
+                        Type::Struct(name)
+                    }
+                }
+            }
             ExprKind::Cast { expr: inner, ty } => {
                 let source_ty = self.infer(inner);
                 let target_ty = self.resolve_type(ty);
@@ -1476,6 +1516,26 @@ impl<'a> Checker<'a> {
     }
 }
 
+fn intern_tuple_name(elem_types: &[Type]) -> &'static str {
+    let signature: String = elem_types
+        .iter()
+        .map(|ty| sanitize_type_name(ty.name()))
+        .collect::<Vec<_>>()
+        .join("_");
+    Box::leak(format!("tuple_{}_{}", elem_types.len(), signature).into_boxed_str())
+}
+
+fn sanitize_type_name(name: &str) -> String {
+    name.chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() {
+                character
+            } else {
+                '_'
+            }
+        })
+        .collect()
+}
 fn intern_array_type(elem: Type, len: usize) -> (&'static str, &'static str) {
     let display = Box::leak(format!("[{}; {}]", elem, len).into_boxed_str());
     let llvm = Box::leak(format!("[{} x {}]", len, llvm_type_name(elem)).into_boxed_str());

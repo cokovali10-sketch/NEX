@@ -12,6 +12,7 @@
 - User-defined `struct` with scalar fields (see below)
 - User-defined `enum` (lowered to an `i32` tag)
 - Fixed-size arrays `[T; N]` (inferred from non-empty literals)
+- User-defined `tuple` (anonymous struct with positional fields)
 
 ## Type inference
 
@@ -96,6 +97,20 @@ a[1] = 9
 - Array values can be copied by initializing a binding from an existing array
   variable or literal.
 - Array types cannot be written in source yet, so arrays cannot be function
+  parameters, return values, constants, printed, or compared.
+
+## Tuples
+
+```nex
+let t = (1, 2, 3)
+print(t.0)
+```
+
+- Tuple types are inferred from literals and have positional fields `0`, `1`, ...
+- Fields are read with `t.0` and assigned with `t.0 = value` for `var`
+  bindings.
+- Tuple values can be copied by initializing a binding.
+- Tuple types cannot be written in source yet, so tuples cannot be function
   parameters, return values, constants, printed, or compared.
 
 ## Explicit casts

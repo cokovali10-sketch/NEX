@@ -58,6 +58,7 @@ arguments      := expression { "," expression } [ "," ]
 primary        := INT | FLOAT | STRING | CHAR | "true" | "false"
                | IDENT
                | "[" [ expression { "," expression } [ "," ] ] "]"
+               | "(" expression ( "," expression )* [ "," ] ")"
                | "(" expression ")"
 
 type           := IDENT
