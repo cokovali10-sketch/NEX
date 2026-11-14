@@ -16,6 +16,8 @@ pub enum IrType {
     F32,
     F64,
     String,
+    /// User-defined record type, emitted as `%struct.<name>` in LLVM IR.
+    Struct(&'static str),
     Void,
 }
 
@@ -35,6 +37,7 @@ impl IrType {
             Type::F32 => Self::F32,
             Type::F64 => Self::F64,
             Type::String => Self::String,
+            Type::Struct(name) => Self::Struct(name),
             Type::Void => Self::Void,
             Type::Error => Self::Void,
         }
@@ -186,6 +189,15 @@ pub enum Inst {
         args: Vec<Operand>,
         ret: IrType,
     },
+    /// Compute a pointer to a struct field: `getelementptr inbounds %struct.X,
+    /// ptr %base, i32 0, i32 <index>`.
+    FieldPtr {
+        dst: ValueId,
+        base: ValueId,
+        struct_name: &'static str,
+        index: u32,
+        field_ty: IrType,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -216,6 +228,13 @@ pub struct IrFunction {
 }
 
 #[derive(Debug, Clone)]
+pub struct StructDef {
+    pub name: &'static str,
+    pub fields: Vec<IrType>,
+}
+
+#[derive(Debug, Clone)]
 pub struct IrModule {
+    pub structs: Vec<StructDef>,
     pub functions: Vec<IrFunction>,
 }

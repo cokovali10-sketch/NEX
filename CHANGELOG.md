@@ -4,6 +4,8 @@
 
 ### Added
 
+- Struct declarations with scalar fields, construction, field access, and
+  field assignment.
 - String equality and inequality (`==`, `!=`) with content comparison.
 - Compound assignment operators `+=`, `-=`, `*=`, `/=`, `%=`.
 - Explicit `as` casts between numeric types, `bool`, and `char`.
@@ -22,7 +24,9 @@
 ### Known limitations
 
 - Only Windows x86-64 is tested.
-- No generics, structs, enums, modules, arrays, or standard library yet.
+- No generics, enums, modules, arrays, or standard library yet.
+- Struct fields must be scalar types; struct values cannot be passed to
+  functions, returned, printed, or used as constants yet.
 - No ownership or lifetime checking yet.
 - `nex fmt`, `nex lint`, `nex add`, and `nex benchmark` are not implemented.
 - `nex` arithmetic is limited to `i64`, `f64`, `bool`, `char`, and `string`.

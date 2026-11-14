@@ -8,8 +8,23 @@ use nex_diagnostics::Span;
 
 #[derive(Debug, Clone)]
 pub struct Program {
+    pub structs: Vec<StructDecl>,
     pub consts: Vec<ConstDecl>,
     pub functions: Vec<FnDecl>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct StructDecl {
+    pub name: String,
+    pub fields: Vec<FieldDecl>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct FieldDecl {
+    pub name: String,
+    pub ty: TypeExpr,
     pub span: Span,
 }
 
@@ -67,6 +82,11 @@ pub enum StmtKind {
         name: String,
         value: Expr,
     },
+    AssignField {
+        base: String,
+        field: String,
+        value: Expr,
+    },
     If {
         branches: Vec<(Expr, Block)>,
         else_branch: Option<Block>,
@@ -118,6 +138,11 @@ pub enum ExprKind {
     Cast {
         expr: Box<Expr>,
         ty: TypeExpr,
+    },
+    Field {
+        base: Box<Expr>,
+        name: String,
+        name_span: Span,
     },
     /// Parser recovery node. It must be rejected by semantic analysis.
     Error,

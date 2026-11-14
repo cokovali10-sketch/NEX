@@ -1,0 +1,35 @@
+struct Point:
+    x: i64
+    y: i64
+
+struct Item:
+    name: string
+    price: f64
+    in_stock: bool
+
+fn main():
+    var p = Point(3, 4)
+    print("point: ")
+    println(p.x)
+    println(p.y)
+
+    p.x += 1
+    print("moved point: ")
+    println(p.x)
+
+    var item = Item("coffee", 2.5, true)
+    print("item: ")
+    println(item.name)
+    print("price: ")
+    println(item.price)
+    print("in stock: ")
+    println(item.in_stock)
+
+    item.price -= 0.5
+    print("sale price: ")
+    println(item.price)
+
+    let copy = item
+    item.price = 99.0
+    print("copy price: ")
+    println(copy.price)

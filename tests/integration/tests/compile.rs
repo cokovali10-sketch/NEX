@@ -137,6 +137,98 @@ fn main():
 }
 
 #[test]
+fn structs_work() {
+    let source = r#"
+struct Point:
+    x: i64
+    y: i64
+
+fn main():
+    var p = Point(1, 2)
+    print(p.x)
+    print(p.y)
+    p.x = 10
+    print(p.x + p.y)
+
+    let q = p
+    p.x = 99
+    print(q.x)
+"#;
+    let (stdout, _stderr, code) = run_source(source);
+    assert_eq!(code, 0);
+    assert_eq!(stdout, "121210");
+}
+
+#[test]
+fn struct_fields_can_be_mixed_scalar_types() {
+    let source = r#"
+struct Item:
+    name: string
+    price: f64
+    in_stock: bool
+
+fn main():
+    var item = Item("tea", 2.5, true)
+    print(item.name)
+    print(item.price)
+    print(item.in_stock)
+    item.price = 1.25
+    print(item.price)
+"#;
+    let (stdout, _stderr, code) = run_source(source);
+    assert_eq!(code, 0);
+    assert_eq!(stdout, "tea2.5true1.25");
+}
+
+#[test]
+fn struct_errors_are_reported() {
+    let unknown_field =
+        compile("struct Point:\n    x: i64\n\nfn main():\n    var p = Point(1)\n    print(p.y)\n");
+    assert!(
+        unknown_field
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == "NXS027"),
+        "{:?}",
+        unknown_field.diagnostics
+    );
+
+    let immutable_field =
+        compile("struct Point:\n    x: i64\n\nfn main():\n    let p = Point(1)\n    p.x = 2\n");
+    assert!(
+        immutable_field
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == "NXS007"),
+        "{:?}",
+        immutable_field.diagnostics
+    );
+
+    let parameter = compile(
+        "struct Point:\n    x: i64\n\nfn f(p: Point) -> i64:\n    return p.x\n\nfn main():\n    print(1)\n",
+    );
+    assert!(
+        parameter
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == "NXS028"),
+        "{:?}",
+        parameter.diagnostics
+    );
+
+    let printed =
+        compile("struct Point:\n    x: i64\n\nfn main():\n    let p = Point(1)\n    print(p)\n");
+    assert!(
+        printed
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == "NXS015"),
+        "{:?}",
+        printed.diagnostics
+    );
+}
+
+#[test]
 fn if_elif_else() {
     let source = r#"
 fn classify(x: i64) -> i64:

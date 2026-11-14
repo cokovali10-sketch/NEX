@@ -16,8 +16,11 @@ around another language runtime.
 - Implemented: lexer, parser, AST, semantic analysis, type inference for a small
   subset, NEX IR, LLVM textual IR backend, native executable generation, CLI,
   end-to-end tests.
-- Not implemented yet: generics, structs, enums, modules, imports, arrays, the
-  full standard library, package manager, debugger, profiler, and NEX Studio.
+- Implemented in the language: functions, bindings, `if`/`elif`/`else`,
+  `while`, `for`, `const`, explicit casts, string equality, compound
+  assignment, and structs with scalar fields.
+- Not implemented yet: generics, enums, modules, imports, arrays, the full
+  standard library, package manager, debugger, profiler, and NEX Studio.
 - Platform support today: Windows x86-64 with Clang. The compiler is designed to
   target other platforms, but only the host platform is tested.
 

@@ -1,0 +1,8 @@
+[package]
+name = "structs"
+version = "0.1.0"
+edition = "2026"
+description = "Structs and field access example"
+
+[build]
+entry = "src/main.nex"

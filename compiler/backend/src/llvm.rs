@@ -48,6 +48,22 @@ impl<'a> Emitter<'a> {
         out.push_str("; ModuleID = 'nex'\n");
         out.push_str("source_filename = \"nex\"\n\n");
 
+        for definition in &self.module.structs {
+            let fields = definition
+                .fields
+                .iter()
+                .map(|ty| llvm_type(*ty))
+                .collect::<Vec<_>>()
+                .join(", ");
+            out.push_str(&format!(
+                "%struct.{} = type {{ {} }}\n",
+                definition.name, fields
+            ));
+        }
+        if !self.module.structs.is_empty() {
+            out.push('\n');
+        }
+
         let mut body = String::new();
         let mut sig_map: HashMap<String, (Vec<IrType>, IrType)> = HashMap::new();
         for function in &self.module.functions {
@@ -165,6 +181,18 @@ impl<'a> Emitter<'a> {
                     dst.0,
                     llvm_type(*ty),
                     ptr.0
+                ));
+            }
+            Inst::FieldPtr {
+                dst,
+                base,
+                struct_name,
+                index,
+                field_ty: _,
+            } => {
+                body.push_str(&format!(
+                    "  %v{} = getelementptr inbounds %struct.{}, ptr %v{}, i32 0, i32 {}\n",
+                    dst.0, struct_name, base.0, index
                 ));
             }
             Inst::Bin {
@@ -393,22 +421,23 @@ fn block_label(id: BlockId) -> String {
     }
 }
 
-fn llvm_type(ty: IrType) -> &'static str {
+fn llvm_type(ty: IrType) -> String {
     match ty {
-        IrType::Bool => "i1",
-        IrType::Char => "i32",
-        IrType::I8 => "i8",
-        IrType::I16 => "i16",
-        IrType::I32 => "i32",
-        IrType::I64 => "i64",
-        IrType::U8 => "i8",
-        IrType::U16 => "i16",
-        IrType::U32 => "i32",
-        IrType::U64 => "i64",
-        IrType::F32 => "float",
-        IrType::F64 => "double",
-        IrType::String => "ptr",
-        IrType::Void => "void",
+        IrType::Bool => "i1".to_string(),
+        IrType::Char => "i32".to_string(),
+        IrType::I8 => "i8".to_string(),
+        IrType::I16 => "i16".to_string(),
+        IrType::I32 => "i32".to_string(),
+        IrType::I64 => "i64".to_string(),
+        IrType::U8 => "i8".to_string(),
+        IrType::U16 => "i16".to_string(),
+        IrType::U32 => "i32".to_string(),
+        IrType::U64 => "i64".to_string(),
+        IrType::F32 => "float".to_string(),
+        IrType::F64 => "double".to_string(),
+        IrType::String => "ptr".to_string(),
+        IrType::Struct(name) => format!("%struct.{name}"),
+        IrType::Void => "void".to_string(),
     }
 }
 

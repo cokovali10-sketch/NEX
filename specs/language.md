@@ -25,13 +25,17 @@ planned and are not yet implemented.
 - Function calls.
 - Built-in `print` and `println`.
 - String equality (`==`, `!=`) comparing contents.
+- Struct declarations with scalar fields, construction, field access, and
+  field assignment (see `specs/types.md`).
 - Explicit casts with `as`.
 - Top-level `const` declarations with compile-time constant initializers.
 
 ## Planned
 
 - Generics and type constraints.
-- Structs, enums, traits, and pattern matching.
+- Enums, traits, and pattern matching.
+- Structs with nested struct fields, struct function parameters/returns, and
+  struct constants.
 - Arrays, tuples, and optional/result types.
 - Modules and imports.
 - Async/await and structured concurrency.
@@ -50,7 +54,8 @@ planned and are not yet implemented.
 
 ## Program structure
 
-A program is a sequence of function declarations. `fn main()` is required.
+A program is a sequence of struct, constant, and function declarations.
+`fn main()` is required.
 
 ```nex
 fn main():

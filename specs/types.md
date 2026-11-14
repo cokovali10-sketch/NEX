@@ -9,6 +9,7 @@
 - `f32`, `f64`
 - `string`
 - `void` (function return only)
+- User-defined `struct` with scalar fields (see below)
 
 ## Type inference
 
@@ -40,6 +41,25 @@ requires an explicit conversion.
 - `not` requires `bool`.
 - Unary `-` requires a signed integer or floating point type.
 
+## User-defined structs
+
+```nex
+struct Point:
+    x: i64
+    y: i64
+```
+
+- Fields are declared as `name: type`, one per line.
+- A struct is constructed positionally: `Point(1, 2)`.
+- Fields are read with `p.x` and assigned with `p.x = value` (including the
+  compound assignment operators) when the binding was declared with `var`.
+- Field types must be scalar: `bool`, `char`, the numeric types, or `string`.
+  Nested struct fields are planned.
+- A struct value can be copied by initializing a binding from an existing
+  struct variable or constructor, for example `let q = p`.
+- Struct values cannot be printed, passed to functions, returned from
+  functions, declared as constants, or compared with `==`/`!=` yet.
+
 ## Explicit casts
 
 `as` can convert between numeric types, `bool`, and `char`:
@@ -53,5 +73,7 @@ let z = true as i64
 ## Planned
 
 - Generic type parameters.
-- Struct, enum, tuple, array, optional, and result types.
+- Structs with nested struct fields, struct parameters and return values, and
+  struct constants.
+- Enum, tuple, array, optional, and result types.
 - Traits and type constraints.

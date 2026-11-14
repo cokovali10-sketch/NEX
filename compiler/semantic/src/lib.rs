@@ -15,12 +15,25 @@ pub struct FnSig {
 }
 
 #[derive(Debug, Clone)]
+pub struct StructInfo {
+    pub name: String,
+    /// Interned copy of `name`, used by [`Type::Struct`].
+    pub name_static: &'static str,
+    pub fields: Vec<(String, Type)>,
+}
+
+#[derive(Debug, Clone)]
 pub struct Analysis {
+    pub structs: BTreeMap<String, StructInfo>,
     pub consts: BTreeMap<String, Type>,
     pub const_exprs: BTreeMap<String, Expr>,
     pub functions: BTreeMap<String, FnSig>,
     pub expr_types: HashMap<Span, Type>,
     pub decl_types: HashMap<Span, Type>,
+    /// Field reads keyed by expression span: (struct name, field index, field type).
+    pub field_reads: HashMap<Span, (&'static str, u32, Type)>,
+    /// Field writes keyed by statement span: (struct name, field index, field type).
+    pub field_writes: HashMap<Span, (&'static str, u32, Type)>,
     pub diagnostics: Vec<Diagnostic>,
 }
 
@@ -31,6 +44,18 @@ impl Analysis {
 
     pub fn function(&self, name: &str) -> Option<&FnSig> {
         self.functions.get(name)
+    }
+
+    pub fn struct_info(&self, name: &str) -> Option<&StructInfo> {
+        self.structs.get(name)
+    }
+
+    pub fn field_read(&self, span: Span) -> Option<(&'static str, u32, Type)> {
+        self.field_reads.get(&span).copied()
+    }
+
+    pub fn field_write(&self, span: Span) -> Option<(&'static str, u32, Type)> {
+        self.field_writes.get(&span).copied()
     }
 
     pub fn expr_type(&self, span: Span) -> Option<Type> {
@@ -67,17 +92,21 @@ impl<'a> Checker<'a> {
         let mut checker = Self {
             program,
             analysis: Analysis {
+                structs: BTreeMap::new(),
                 consts: BTreeMap::new(),
                 const_exprs: BTreeMap::new(),
                 functions: BTreeMap::new(),
                 expr_types: HashMap::new(),
                 decl_types: HashMap::new(),
+                field_reads: HashMap::new(),
+                field_writes: HashMap::new(),
                 diagnostics: Vec::new(),
             },
             scopes: Vec::new(),
             current_fn: None,
             loop_depth: 0,
         };
+        checker.collect_structs();
         checker.collect_consts();
         checker.collect_functions();
         checker.check_main();
@@ -109,6 +138,15 @@ impl<'a> Checker<'a> {
                 );
             }
 
+            if self.analysis.structs.contains_key(&function.name) {
+                self.error(
+                    "NXS003",
+                    format!("name `{}` is already declared as a struct", function.name),
+                    function.span,
+                );
+                continue;
+            }
+
             if self.analysis.functions.contains_key(&function.name) {
                 self.error(
                     "NXS003",
@@ -128,6 +166,16 @@ impl<'a> Checker<'a> {
                         param.ty.span,
                     );
                 }
+                if matches!(ty, Type::Struct(_)) {
+                    self.error(
+                        "NXS028",
+                        format!(
+                            "parameter `{}` has struct type `{ty}`; passing struct values to functions is planned for a later release",
+                            param.name
+                        ),
+                        param.ty.span,
+                    );
+                }
                 params.push(ty);
             }
 
@@ -137,6 +185,17 @@ impl<'a> Checker<'a> {
                 .map(|ty| self.resolve_type(ty))
                 .unwrap_or(Type::Void);
 
+            if matches!(ret, Type::Struct(_)) {
+                self.error(
+                    "NXS028",
+                    format!(
+                        "function `{}` returns struct type `{ret}`; returning struct values is planned for a later release",
+                        function.name
+                    ),
+                    function.span,
+                );
+            }
+
             self.analysis.functions.insert(
                 function.name.clone(),
                 FnSig {
@@ -144,6 +203,82 @@ impl<'a> Checker<'a> {
                     params,
                     ret,
                     span: function.span,
+                },
+            );
+        }
+    }
+
+    fn collect_structs(&mut self) {
+        for definition in &self.program.structs {
+            if self.analysis.structs.contains_key(&definition.name) {
+                self.error(
+                    "NXS003",
+                    format!("duplicate struct `{}`", definition.name),
+                    definition.span,
+                );
+                continue;
+            }
+
+            if definition.fields.is_empty() {
+                self.error(
+                    "NXS025",
+                    format!(
+                        "struct `{}` must declare at least one field",
+                        definition.name
+                    ),
+                    definition.span,
+                );
+                continue;
+            }
+
+            let mut fields = Vec::with_capacity(definition.fields.len());
+            let mut seen = std::collections::HashSet::new();
+            for field in &definition.fields {
+                if !seen.insert(field.name.clone()) {
+                    self.error(
+                        "NXS003",
+                        format!(
+                            "duplicate field `{}` in struct `{}`",
+                            field.name, definition.name
+                        ),
+                        field.span,
+                    );
+                    continue;
+                }
+
+                let ty = self.resolve_type(&field.ty);
+                if ty == Type::Error {
+                    continue;
+                }
+                if ty == Type::Void {
+                    self.error(
+                        "NXS002",
+                        format!("field `{}` cannot have type `void`", field.name),
+                        field.ty.span,
+                    );
+                    continue;
+                }
+                if matches!(ty, Type::Struct(_)) {
+                    self.error(
+                        "NXS025",
+                        format!(
+                            "field `{}` has struct type `{ty}`; nested struct fields are planned for a later release",
+                            field.name
+                        ),
+                        field.ty.span,
+                    );
+                    continue;
+                }
+                fields.push((field.name.clone(), ty));
+            }
+
+            let name_static: &'static str = Box::leak(definition.name.clone().into_boxed_str());
+            self.analysis.structs.insert(
+                definition.name.clone(),
+                StructInfo {
+                    name: definition.name.clone(),
+                    name_static,
+                    fields,
                 },
             );
         }
@@ -187,6 +322,18 @@ impl<'a> Checker<'a> {
                         constant.span,
                     );
                 }
+                continue;
+            }
+
+            if matches!(declared_ty, Type::Struct(_)) {
+                self.error(
+                    "NXS028",
+                    format!(
+                        "constant `{}` has struct type `{declared_ty}`; struct constants are planned for a later release",
+                        constant.name
+                    ),
+                    constant.span,
+                );
                 continue;
             }
 
@@ -381,6 +528,56 @@ impl<'a> Checker<'a> {
                 }
                 let var_ty = var.ty;
                 self.check_expected(value, var_ty);
+            }
+            StmtKind::AssignField { base, field, value } => {
+                let Some(var) = self.lookup(base) else {
+                    self.error(
+                        "NXS016",
+                        format!("cannot assign to a field of undeclared variable `{base}`"),
+                        statement.span,
+                    );
+                    self.infer(value);
+                    return;
+                };
+                if !var.mutable {
+                    self.error(
+                        "NXS007",
+                        format!(
+                            "cannot assign to a field of immutable variable `{base}`; declare it with `var`"
+                        ),
+                        statement.span,
+                    );
+                }
+                let var_ty = var.ty;
+                if let Type::Struct(struct_name) = var_ty {
+                    let info = self.analysis.structs.get(struct_name).cloned();
+                    if let Some(info) = info {
+                        if let Some(index) = info.fields.iter().position(|(name, _)| name == field)
+                        {
+                            let field_ty = info.fields[index].1;
+                            self.analysis
+                                .field_writes
+                                .insert(statement.span, (info.name_static, index as u32, field_ty));
+                            self.check_expected(value, field_ty);
+                        } else {
+                            self.error(
+                                "NXS027",
+                                format!("struct `{struct_name}` has no field `{field}`"),
+                                statement.span,
+                            );
+                            self.infer(value);
+                        }
+                    } else {
+                        self.infer(value);
+                    }
+                } else {
+                    self.error(
+                        "NXS027",
+                        format!("cannot assign field `{field}` on a value of type `{var_ty}`"),
+                        statement.span,
+                    );
+                    self.infer(value);
+                }
             }
             StmtKind::If {
                 branches,
@@ -652,6 +849,41 @@ impl<'a> Checker<'a> {
                 callee_span,
                 args,
             } => self.check_call(callee, *callee_span, args, expr.span),
+            ExprKind::Field {
+                base,
+                name,
+                name_span,
+            } => {
+                let base_ty = self.infer(base);
+                if base_ty == Type::Error {
+                    Type::Error
+                } else if let Type::Struct(struct_name) = base_ty {
+                    let info = self.analysis.structs.get(struct_name).cloned();
+                    if let Some(info) = info
+                        && let Some(index) = info.fields.iter().position(|(field, _)| field == name)
+                    {
+                        let field_ty = info.fields[index].1;
+                        self.analysis
+                            .field_reads
+                            .insert(expr.span, (info.name_static, index as u32, field_ty));
+                        field_ty
+                    } else {
+                        self.error(
+                            "NXS027",
+                            format!("struct `{struct_name}` has no field `{name}`"),
+                            *name_span,
+                        );
+                        Type::Error
+                    }
+                } else {
+                    self.error(
+                        "NXS027",
+                        format!("cannot access field `{name}` on a value of type `{base_ty}`"),
+                        *name_span,
+                    );
+                    Type::Error
+                }
+            }
             ExprKind::Cast { expr: inner, ty } => {
                 let source_ty = self.infer(inner);
                 let target_ty = self.resolve_type(ty);
@@ -701,6 +933,28 @@ impl<'a> Checker<'a> {
                 return Type::Error;
             }
             return Type::Void;
+        }
+
+        if let Some(info) = self.analysis.structs.get(callee).cloned() {
+            if args.len() != info.fields.len() {
+                self.error(
+                    "NXS004",
+                    format!(
+                        "struct `{callee}` expects {} field value(s), found {}",
+                        info.fields.len(),
+                        args.len()
+                    ),
+                    span,
+                );
+            }
+            for (index, arg) in args.iter().enumerate() {
+                if let Some((_, ty)) = info.fields.get(index) {
+                    self.check_expected(arg, *ty);
+                } else {
+                    self.infer(arg);
+                }
+            }
+            return Type::Struct(info.name_static);
         }
 
         let Some(sig) = self.analysis.functions.get(callee).cloned() else {
@@ -794,15 +1048,18 @@ impl<'a> Checker<'a> {
     }
 
     fn resolve_type(&mut self, ty: &nex_ast::TypeExpr) -> Type {
-        let Some(resolved) = Type::from_name(&ty.name) else {
-            self.error("NXS002", format!("unknown type `{}`", ty.name), ty.span);
-            return Type::Error;
-        };
-        if resolved == Type::Void {
-            // `void` is only valid as a function return type. Callers can still
-            // accept it; parameter/variable checks happen at the call site.
+        if let Some(resolved) = Type::from_name(&ty.name) {
+            if resolved == Type::Void {
+                // `void` is only valid as a function return type. Callers can still
+                // accept it; parameter/variable checks happen at the call site.
+            }
+            return resolved;
         }
-        resolved
+        if let Some(info) = self.analysis.structs.get(&ty.name) {
+            return Type::Struct(info.name_static);
+        }
+        self.error("NXS002", format!("unknown type `{}`", ty.name), ty.span);
+        Type::Error
     }
 
     fn declare(&mut self, name: &str, ty: Type, mutable: bool, span: Span) {

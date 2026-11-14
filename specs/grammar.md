@@ -4,7 +4,9 @@ This grammar describes the syntax implemented by the NEX 0.1 parser. Indentation
 tokens are produced by the lexer.
 
 ```ebnf
-program        := { const_decl | function } EOF
+program        := { struct_decl | const_decl | function } EOF
+struct_decl    := "struct" IDENT ":" NEWLINE INDENT field+ DEDENT
+field          := IDENT ":" type NEWLINE
 const_decl     := "const" IDENT [ ":" type ] "=" expression NEWLINE
 function       := "fn" IDENT "(" [ params ] ")" [ "->" type ] ":" block
 params         := param { "," param } [ "," ]
@@ -20,11 +22,13 @@ statement      := let_stmt
                | break_stmt
                | continue_stmt
                | assignment
+               | field_assignment
                | expr_stmt
 
 let_stmt       := "let" IDENT [ ":" type ] "=" expression NEWLINE
 var_stmt       := "var" IDENT [ ":" type ] "=" expression NEWLINE
 assignment     := IDENT ( "=" | "+=" | "-=" | "*=" | "/=" | "%=" ) expression NEWLINE
+field_assignment := IDENT "." IDENT ( "=" | "+=" | "-=" | "*=" | "/=" | "%=" ) expression NEWLINE
 if_stmt        := "if" expression ":" block
                   { "elif" expression ":" block }
                   [ "else" ":" block ]
@@ -44,7 +48,7 @@ additive       := multiplicative { ("+" | "-") multiplicative }
 multiplicative := cast { ("*" | "/" | "%") cast }
 cast           := unary { "as" type }
 unary          := "-" cast | postfix
-postfix        := primary { "(" [ arguments ] ")" }
+postfix        := primary { "(" [ arguments ] ")" | "." IDENT }
 arguments      := expression { "," expression } [ "," ]
 primary        := INT | FLOAT | STRING | CHAR | "true" | "false"
                | IDENT

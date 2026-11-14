@@ -5,8 +5,8 @@
 //! the compiler report more than one independent error per file.
 
 use nex_ast::{
-    BinOp, Block, ConstDecl, Expr, ExprKind, FnDecl, Param, Program, Stmt, StmtKind, TypeExpr,
-    UnaryOp,
+    BinOp, Block, ConstDecl, Expr, ExprKind, FieldDecl, FnDecl, Param, Program, Stmt, StmtKind,
+    StructDecl, TypeExpr, UnaryOp,
 };
 use nex_diagnostics::{Diagnostic, Span};
 use nex_lexer::{Token, TokenKind};
@@ -38,6 +38,7 @@ impl<'a> Parser<'a> {
 
     fn parse_program(mut self) -> ParseResult {
         let start = self.peek_token().span.start;
+        let mut structs = Vec::new();
         let mut consts = Vec::new();
         let mut functions = Vec::new();
 
@@ -46,7 +47,13 @@ impl<'a> Parser<'a> {
                 continue;
             }
 
-            if self.check(&TokenKind::Const) {
+            if self.check(&TokenKind::Struct) {
+                if let Some(definition) = self.parse_struct() {
+                    structs.push(definition);
+                } else {
+                    self.synchronize_item();
+                }
+            } else if self.check(&TokenKind::Const) {
                 if let Some(constant) = self.parse_const() {
                     consts.push(constant);
                 } else {
@@ -61,15 +68,13 @@ impl<'a> Parser<'a> {
             } else {
                 let token = self.peek_token().clone();
                 let message = match &token.kind {
-                    TokenKind::Struct
-                    | TokenKind::Enum
+                    TokenKind::Enum
                     | TokenKind::Impl
                     | TokenKind::Trait
                     | TokenKind::Import
                     | TokenKind::From
                     | TokenKind::Module
                     | TokenKind::Use
-                    | TokenKind::Const
                     | TokenKind::Extern => format!(
                         "`{}` declarations are not implemented in NEX 0.1",
                         token.kind.symbol()
@@ -87,6 +92,7 @@ impl<'a> Parser<'a> {
         let end = self.peek_token().span.end;
         ParseResult {
             program: Program {
+                structs,
                 consts,
                 functions,
                 span: Span::new(start, end),
@@ -147,6 +153,57 @@ impl<'a> Parser<'a> {
             ty,
             init,
             span,
+        })
+    }
+
+    fn parse_struct(&mut self) -> Option<StructDecl> {
+        let start = self.advance().span;
+        let (name, _name_span) = self.expect_ident("after `struct`")?;
+
+        if !self.expect(&TokenKind::Colon, "after struct name") {
+            self.synchronize_item();
+            return None;
+        }
+        self.expect_line_end();
+
+        if !self.eat(&TokenKind::Indent) {
+            let span = self.peek_token().span;
+            self.error("NXP002", "expected an indented struct body after `:`", span);
+            return None;
+        }
+
+        let mut fields = Vec::new();
+        while !self.check(&TokenKind::Dedent) && !self.check(&TokenKind::Eof) {
+            if self.eat(&TokenKind::Newline) {
+                continue;
+            }
+
+            let Some((field_name, field_span)) = self.expect_ident("in struct field") else {
+                self.recover_statement();
+                continue;
+            };
+
+            if !self.expect(&TokenKind::Colon, "after struct field name") {
+                self.recover_statement();
+                continue;
+            }
+
+            let ty = self.parse_type();
+            let span = field_span.merge(ty.span);
+            self.expect_line_end();
+            fields.push(FieldDecl {
+                name: field_name,
+                ty,
+                span,
+            });
+        }
+
+        let end = self.peek_token().span.end;
+        self.eat(&TokenKind::Dedent);
+        Some(StructDecl {
+            name,
+            fields,
+            span: Span::new(start.start, end),
         })
     }
 
@@ -474,6 +531,57 @@ impl<'a> Parser<'a> {
                     span,
                 };
             }
+
+            if next == TokenKind::Dot
+                && let TokenKind::Ident(field_name) = self.peek_kind(2)
+            {
+                let field_name = field_name.clone();
+                let after = self.peek_kind(3).clone();
+                let compound = compound_bin_op(&after);
+                if after == TokenKind::Eq || compound.is_some() {
+                    let start = self.advance().span;
+                    self.advance();
+                    let field_span = self.advance().span;
+                    self.advance();
+
+                    let field_expr = Expr {
+                        kind: ExprKind::Field {
+                            base: Box::new(Expr {
+                                kind: ExprKind::Ident(name.clone()),
+                                span: start,
+                            }),
+                            name: field_name.clone(),
+                            name_span: field_span,
+                        },
+                        span: start.merge(field_span),
+                    };
+
+                    let rhs = self.parse_expr();
+                    let span = start.merge(rhs.span);
+                    self.expect_line_end();
+
+                    let value = match compound {
+                        Some(op) => Expr {
+                            kind: ExprKind::Binary {
+                                op,
+                                left: Box::new(field_expr),
+                                right: Box::new(rhs),
+                            },
+                            span,
+                        },
+                        None => rhs,
+                    };
+
+                    return Stmt {
+                        kind: StmtKind::AssignField {
+                            base: name,
+                            field: field_name,
+                            value,
+                        },
+                        span,
+                    };
+                }
+            }
         }
 
         let expr = self.parse_expr();
@@ -612,27 +720,49 @@ impl<'a> Parser<'a> {
 
     fn parse_postfix(&mut self) -> Expr {
         let mut expr = self.parse_primary();
-        while self.check(&TokenKind::LParen) {
-            let ExprKind::Ident(callee) = &expr.kind else {
-                let span = self.peek_token().span;
-                self.error(
-                    "NXP004",
-                    "only named functions can be called in NEX 0.1",
+        loop {
+            if self.check(&TokenKind::LParen) {
+                let ExprKind::Ident(callee) = &expr.kind else {
+                    let span = self.peek_token().span;
+                    self.error(
+                        "NXP004",
+                        "only named functions can be called in NEX 0.1",
+                        span,
+                    );
+                    break;
+                };
+                let callee = callee.clone();
+                let callee_span = expr.span;
+                let (args, close_span) = self.parse_arguments();
+                expr = Expr {
+                    kind: ExprKind::Call {
+                        callee,
+                        callee_span,
+                        args,
+                    },
+                    span: callee_span.merge(close_span),
+                };
+                continue;
+            }
+
+            if self.check(&TokenKind::Dot) {
+                self.advance();
+                let Some((name, name_span)) = self.expect_ident("after `.`") else {
+                    break;
+                };
+                let span = expr.span.merge(name_span);
+                expr = Expr {
+                    kind: ExprKind::Field {
+                        base: Box::new(expr),
+                        name,
+                        name_span,
+                    },
                     span,
-                );
-                break;
-            };
-            let callee = callee.clone();
-            let callee_span = expr.span;
-            let (args, close_span) = self.parse_arguments();
-            expr = Expr {
-                kind: ExprKind::Call {
-                    callee,
-                    callee_span,
-                    args,
-                },
-                span: callee_span.merge(close_span),
-            };
+                };
+                continue;
+            }
+
+            break;
         }
         expr
     }
@@ -985,9 +1115,33 @@ mod tests {
     }
 
     #[test]
-    fn rejects_unimplemented_struct() {
-        let result = parse_source("struct Point:\n    x: i64\n");
-        assert!(result.diagnostics.iter().any(|d| d.code == "NXP010"));
+    fn parses_struct_declaration_and_field_access() {
+        let source = "struct Point:\n    x: i64\n    y: i64\n\nfn main():\n    var p = Point(1, 2)\n    p.x = p.y + 1\n";
+        let result = parse_source(source);
+        assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+        assert_eq!(result.program.structs.len(), 1);
+        assert_eq!(result.program.structs[0].name, "Point");
+        assert_eq!(result.program.structs[0].fields.len(), 2);
+        let StmtKind::AssignField { base, field, .. } =
+            &result.program.functions[0].body.stmts[1].kind
+        else {
+            panic!("expected field assignment");
+        };
+        assert_eq!(base, "p");
+        assert_eq!(field, "x");
+    }
+
+    #[test]
+    fn parses_field_of_expression() {
+        let result = parse_source("fn main():\n    var p = Point(1, 2)\n    print(p.x)\n");
+        assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+        let StmtKind::Expr(expr) = &result.program.functions[0].body.stmts[1].kind else {
+            panic!("expected expression statement");
+        };
+        let ExprKind::Call { args, .. } = &expr.kind else {
+            panic!("expected call");
+        };
+        assert!(matches!(args[0].kind, ExprKind::Field { .. }));
     }
 
     #[test]

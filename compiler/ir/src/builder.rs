@@ -4,8 +4,8 @@ use nex_ast::{Block, Expr, ExprKind, Program, Stmt, StmtKind};
 use nex_semantic::{Analysis, Type};
 
 use crate::types::{
-    BinOp, BlockId, CastKind, Const, Inst, IrFunction, IrModule, IrType, Operand, Terminator, UnOp,
-    ValueId,
+    BinOp, BlockId, CastKind, Const, Inst, IrFunction, IrModule, IrType, Operand, StructDef,
+    Terminator, UnOp, ValueId,
 };
 
 #[derive(Clone)]
@@ -98,7 +98,21 @@ impl FunctionBuilder {
 }
 
 pub fn build(program: &Program, analysis: &Analysis) -> Result<IrModule, String> {
+    let structs = analysis
+        .structs
+        .values()
+        .map(|info| StructDef {
+            name: info.name_static,
+            fields: info
+                .fields
+                .iter()
+                .map(|(_, ty)| IrType::from_type(*ty))
+                .collect(),
+        })
+        .collect();
+
     let mut module = IrModule {
+        structs,
         functions: Vec::new(),
     };
 
@@ -190,6 +204,9 @@ fn collect_locals(
             StmtKind::While { body, .. } => {
                 collect_locals(body, analysis, out);
             }
+            StmtKind::For { body, .. } => {
+                collect_locals(body, analysis, out);
+            }
             _ => {}
         }
     }
@@ -225,8 +242,13 @@ fn lower_statement(
                 .copied()
                 .ok_or_else(|| format!("missing storage for binding `{name}`"))?;
             let expected = analysis.decl_type(statement.span).unwrap_or(Type::Error);
-            let value = lower_expr(builder, init, scopes, storage, analysis, expected)?;
-            builder.emit(Inst::Store { ptr, value, ty });
+            if let Type::Struct(struct_name) = expected {
+                let source = lower_struct_place(builder, init, scopes, storage, analysis)?;
+                copy_struct(builder, ptr, source, struct_name, analysis)?;
+            } else {
+                let value = lower_expr(builder, init, scopes, storage, analysis, expected)?;
+                builder.emit(Inst::Store { ptr, value, ty });
+            }
             if let Some(scope) = scopes.last_mut() {
                 scope.insert(name.clone(), Slot::Local(ptr, ty));
             }
@@ -236,11 +258,14 @@ fn lower_statement(
             let slot = lookup_slot(scopes, name)
                 .ok_or_else(|| format!("unknown variable `{name}` during code generation"))?;
             match slot {
+                Slot::Local(ptr, IrType::Struct(struct_name)) => {
+                    let source = lower_struct_place(builder, value, scopes, storage, analysis)?;
+                    copy_struct(builder, ptr, source, struct_name, analysis)?;
+                    Ok(())
+                }
                 Slot::Local(ptr, ty) => {
                     let operand =
                         lower_expr(builder, value, scopes, storage, analysis, Type::Error)?;
-                    // Type information is already checked; use the storage type.
-                    let _ = ty;
                     builder.emit(Inst::Store {
                         ptr,
                         value: operand,
@@ -250,6 +275,34 @@ fn lower_statement(
                 }
                 Slot::Value(_) => Err(format!("cannot assign to immutable binding `{name}`")),
             }
+        }
+        StmtKind::AssignField { base, field, value } => {
+            let Some((struct_name, index, field_ty)) = analysis.field_write(statement.span) else {
+                return Err(format!(
+                    "missing field information for assignment to `{base}.{field}`"
+                ));
+            };
+            let field_ty = IrType::from_type(field_ty);
+            let slot = lookup_slot(scopes, base)
+                .ok_or_else(|| format!("unknown variable `{base}` during code generation"))?;
+            let Slot::Local(base_ptr, _) = slot else {
+                return Err(format!("cannot assign a field of `{base}` by value"));
+            };
+            let field_ptr = builder.new_value();
+            builder.emit(Inst::FieldPtr {
+                dst: field_ptr,
+                base: base_ptr,
+                struct_name,
+                index,
+                field_ty,
+            });
+            let operand = lower_expr(builder, value, scopes, storage, analysis, Type::Error)?;
+            builder.emit(Inst::Store {
+                ptr: field_ptr,
+                value: operand,
+                ty: field_ty,
+            });
+            Ok(())
         }
         StmtKind::If {
             branches,
@@ -488,6 +541,97 @@ fn lower_for(
     Ok(())
 }
 
+fn lower_struct_place(
+    builder: &mut FunctionBuilder,
+    expr: &Expr,
+    scopes: &mut Vec<HashMap<String, Slot>>,
+    storage: &HashMap<nex_diagnostics::Span, (ValueId, IrType)>,
+    analysis: &Analysis,
+) -> Result<ValueId, String> {
+    match &expr.kind {
+        ExprKind::Ident(name) => {
+            let slot = lookup_slot(scopes, name)
+                .ok_or_else(|| format!("unknown variable `{name}` during code generation"))?;
+            match slot {
+                Slot::Local(ptr, IrType::Struct(_)) => Ok(ptr),
+                Slot::Local(..) => Err(format!("variable `{name}` does not have a struct type")),
+                Slot::Value(_) => Err(format!("`{name}` is not a struct value")),
+            }
+        }
+        ExprKind::Call { callee, args, .. } => {
+            let Some(info) = analysis.struct_info(callee) else {
+                return Err(format!("`{callee}` is not a struct constructor"));
+            };
+            let ptr = builder.alloca_at_entry(IrType::Struct(info.name_static));
+            for (index, arg) in args.iter().enumerate() {
+                let Some((_, field_ty)) = info.fields.get(index) else {
+                    return Err(format!("too many values for struct `{callee}`"));
+                };
+                let ir_ty = IrType::from_type(*field_ty);
+                let value = lower_expr(builder, arg, scopes, storage, analysis, *field_ty)?;
+                let field_ptr = builder.new_value();
+                builder.emit(Inst::FieldPtr {
+                    dst: field_ptr,
+                    base: ptr,
+                    struct_name: info.name_static,
+                    index: index as u32,
+                    field_ty: ir_ty,
+                });
+                builder.emit(Inst::Store {
+                    ptr: field_ptr,
+                    value,
+                    ty: ir_ty,
+                });
+            }
+            Ok(ptr)
+        }
+        _ => Err("struct values must be variables or constructor calls".to_string()),
+    }
+}
+
+fn copy_struct(
+    builder: &mut FunctionBuilder,
+    dst: ValueId,
+    src: ValueId,
+    struct_name: &'static str,
+    analysis: &Analysis,
+) -> Result<(), String> {
+    let info = analysis
+        .struct_info(struct_name)
+        .ok_or_else(|| format!("unknown struct `{struct_name}` during code generation"))?;
+    for (index, (_, field_ty)) in info.fields.iter().enumerate() {
+        let ir_ty = IrType::from_type(*field_ty);
+        let dst_field = builder.new_value();
+        builder.emit(Inst::FieldPtr {
+            dst: dst_field,
+            base: dst,
+            struct_name,
+            index: index as u32,
+            field_ty: ir_ty,
+        });
+        let src_field = builder.new_value();
+        builder.emit(Inst::FieldPtr {
+            dst: src_field,
+            base: src,
+            struct_name,
+            index: index as u32,
+            field_ty: ir_ty,
+        });
+        let value = builder.new_value();
+        builder.emit(Inst::Load {
+            dst: value,
+            ptr: src_field,
+            ty: ir_ty,
+        });
+        builder.emit(Inst::Store {
+            ptr: dst_field,
+            value: Operand::Value(value),
+            ty: ir_ty,
+        });
+    }
+    Ok(())
+}
+
 fn lower_expr(
     builder: &mut FunctionBuilder,
     expr: &Expr,
@@ -661,6 +805,12 @@ fn lower_expr(
                 return Ok(Operand::Const(Const::Bool(false)));
             }
 
+            if analysis.struct_info(callee).is_some() {
+                return Err(format!(
+                    "struct constructor `{callee}` cannot be used as a scalar value"
+                ));
+            }
+
             let signature = analysis
                 .function(callee)
                 .ok_or_else(|| format!("unknown function `{callee}` during code generation"))?;
@@ -719,6 +869,28 @@ fn lower_expr(
                 from: IrType::from_type(source_ty),
                 to: IrType::from_type(target_ty),
                 operand: value,
+            });
+            Ok(Operand::Value(dst))
+        }
+        ExprKind::Field { base, .. } => {
+            let Some((struct_name, index, field_ty)) = analysis.field_read(expr.span) else {
+                return Err("missing field information during code generation".to_string());
+            };
+            let field_ty = IrType::from_type(field_ty);
+            let base_ptr = lower_struct_place(builder, base, scopes, storage, analysis)?;
+            let field_ptr = builder.new_value();
+            builder.emit(Inst::FieldPtr {
+                dst: field_ptr,
+                base: base_ptr,
+                struct_name,
+                index,
+                field_ty,
+            });
+            let dst = builder.new_value();
+            builder.emit(Inst::Load {
+                dst,
+                ptr: field_ptr,
+                ty: field_ty,
             });
             Ok(Operand::Value(dst))
         }

@@ -20,6 +20,9 @@ pub enum Type {
     F32,
     F64,
     String,
+    /// User-defined record type. The name is interned by semantic analysis and
+    /// lives for the duration of the compiler process.
+    Struct(&'static str),
     Void,
     Error,
 }
@@ -45,7 +48,7 @@ impl Type {
         })
     }
 
-    pub const fn name(self) -> &'static str {
+    pub fn name(&self) -> &'static str {
         match self {
             Self::Bool => "bool",
             Self::Char => "char",
@@ -60,6 +63,7 @@ impl Type {
             Self::F32 => "f32",
             Self::F64 => "f64",
             Self::String => "string",
+            Self::Struct(name) => name,
             Self::Void => "void",
             Self::Error => "<error>",
         }
