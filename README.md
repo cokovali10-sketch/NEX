@@ -2,6 +2,7 @@
 
 > **N**ative **E**xecution e**X**periment — a real, native-compiled programming language built from scratch in Rust.
 
+[![CI](https://github.com/cokovali10-sketch/NEX/actions/workflows/ci.yml/badge.svg)](https://github.com/cokovali10-sketch/NEX/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/Rust-1.99%2B-orange.svg)](https://www.rust-lang.org/)
 [![LLVM](https://img.shields.io/badge/Backend-LLVM%20IR-blue.svg)](https://llvm.org/)
