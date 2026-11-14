@@ -1,5 +1,14 @@
 # NEX
 
+> **N**ative **E**xecution e**X**periment — a real, native-compiled programming language built from scratch in Rust.
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Rust](https://img.shields.io/badge/Rust-1.99%2B-orange.svg)](https://www.rust-lang.org/)
+[![LLVM](https://img.shields.io/badge/Backend-LLVM%20IR-blue.svg)](https://llvm.org/)
+[![Platform](https://img.shields.io/badge/Platform-Windows%20x86--64-lightgrey.svg)](#status)
+[![Tests](https://img.shields.io/badge/Tests-31%20passing-brightgreen.svg)](#quick-start)
+[![Milestone](https://img.shields.io/badge/Milestone-0.2%20Semantic%20Core-purple.svg)](ROADMAP.md)
+
 NEX is an experimental native compiled programming language and developer ecosystem.
 The long-term goal is a readable, statically typed language with native performance,
 a safe memory model, an LLVM-based compiler, a standard library, universal
