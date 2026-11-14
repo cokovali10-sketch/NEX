@@ -30,9 +30,18 @@ pub struct EnumInfo {
 }
 
 #[derive(Debug, Clone)]
+pub struct ArrayInfo {
+    pub display: &'static str,
+    pub llvm: &'static str,
+    pub elem: Type,
+    pub len: usize,
+}
+
+#[derive(Debug, Clone)]
 pub struct Analysis {
     pub structs: BTreeMap<String, StructInfo>,
     pub enums: BTreeMap<String, EnumInfo>,
+    pub arrays: BTreeMap<String, ArrayInfo>,
     /// Variant name to the interned name of the enum that declares it.
     pub variant_map: HashMap<String, &'static str>,
     pub consts: BTreeMap<String, Type>,
@@ -64,6 +73,10 @@ impl Analysis {
 
     pub fn enum_info(&self, name: &str) -> Option<&EnumInfo> {
         self.enums.get(name)
+    }
+
+    pub fn array_info(&self, name: &str) -> Option<&ArrayInfo> {
+        self.arrays.get(name)
     }
 
     pub fn field_read(&self, span: Span) -> Option<(&'static str, u32, Type)> {
@@ -114,6 +127,7 @@ impl<'a> Checker<'a> {
             analysis: Analysis {
                 structs: BTreeMap::new(),
                 enums: BTreeMap::new(),
+                arrays: BTreeMap::new(),
                 variant_map: HashMap::new(),
                 consts: BTreeMap::new(),
                 const_exprs: BTreeMap::new(),
@@ -738,6 +752,53 @@ impl<'a> Checker<'a> {
                 self.scopes.pop();
                 self.loop_depth -= 1;
             }
+            StmtKind::AssignIndex { base, index, value } => {
+                let Some(var) = self.lookup(base) else {
+                    self.error(
+                        "NXS016",
+                        format!("cannot assign to an element of undeclared variable `{base}`"),
+                        statement.span,
+                    );
+                    self.infer(index);
+                    self.infer(value);
+                    return;
+                };
+                if !var.mutable {
+                    self.error(
+                        "NXS007",
+                        format!(
+                            "cannot assign to an element of immutable variable `{base}`; declare it with `var`"
+                        ),
+                        statement.span,
+                    );
+                }
+                let var_ty = var.ty;
+                if let Type::Array { display, .. } = var_ty {
+                    let info = self.analysis.arrays.get(display).cloned();
+                    if let Some(info) = info {
+                        let index_ty = self.infer(index);
+                        if index_ty != Type::Error && !index_ty.is_integer() {
+                            self.error(
+                                "NXS036",
+                                format!("array index must be an integer, found `{index_ty}`"),
+                                index.span,
+                            );
+                        }
+                        self.check_expected(value, info.elem);
+                    } else {
+                        self.infer(index);
+                        self.infer(value);
+                    }
+                } else {
+                    self.error(
+                        "NXS036",
+                        format!("cannot index a value of type `{var_ty}`"),
+                        statement.span,
+                    );
+                    self.infer(index);
+                    self.infer(value);
+                }
+            }
             StmtKind::Match { scrutinee, arms } => {
                 let scrut_ty = self.infer(scrutinee);
                 let enum_name = match scrut_ty {
@@ -1110,6 +1171,68 @@ impl<'a> Checker<'a> {
                     }
                 }
             }
+            ExprKind::Array(elements) => {
+                if elements.is_empty() {
+                    self.error(
+                        "NXS035",
+                        "empty array literals are not supported in NEX 0.2".to_string(),
+                        expr.span,
+                    );
+                    Type::Error
+                } else {
+                    let elem_ty = self.infer(&elements[0]);
+                    if elem_ty == Type::Error {
+                        for element in &elements[1..] {
+                            self.infer(element);
+                        }
+                        Type::Error
+                    } else {
+                        for element in &elements[1..] {
+                            self.check_expected(element, elem_ty);
+                        }
+                        let (display, llvm) = intern_array_type(elem_ty, elements.len());
+                        if !self.analysis.arrays.contains_key(display) {
+                            self.analysis.arrays.insert(
+                                display.to_string(),
+                                ArrayInfo {
+                                    display,
+                                    llvm,
+                                    elem: elem_ty,
+                                    len: elements.len(),
+                                },
+                            );
+                        }
+                        Type::Array { display, llvm }
+                    }
+                }
+            }
+            ExprKind::Index { base, index } => {
+                let base_ty = self.infer(base);
+                let index_ty = self.infer(index);
+                if index_ty != Type::Error && !index_ty.is_integer() {
+                    self.error(
+                        "NXS036",
+                        format!("array index must be an integer, found `{index_ty}`"),
+                        index.span,
+                    );
+                }
+                if base_ty == Type::Error {
+                    Type::Error
+                } else if let Type::Array { display, .. } = base_ty {
+                    self.analysis
+                        .arrays
+                        .get(display)
+                        .map(|info| info.elem)
+                        .unwrap_or(Type::Error)
+                } else {
+                    self.error(
+                        "NXS036",
+                        format!("cannot index a value of type `{base_ty}`"),
+                        base.span,
+                    );
+                    Type::Error
+                }
+            }
             ExprKind::Cast { expr: inner, ty } => {
                 let source_ty = self.infer(inner);
                 let target_ty = self.resolve_type(ty);
@@ -1350,5 +1473,29 @@ impl<'a> Checker<'a> {
         self.analysis
             .diagnostics
             .push(Diagnostic::warning(code, message, span));
+    }
+}
+
+fn intern_array_type(elem: Type, len: usize) -> (&'static str, &'static str) {
+    let display = Box::leak(format!("[{}; {}]", elem, len).into_boxed_str());
+    let llvm = Box::leak(format!("[{} x {}]", len, llvm_type_name(elem)).into_boxed_str());
+    (display, llvm)
+}
+
+fn llvm_type_name(ty: Type) -> String {
+    match ty {
+        Type::Bool => "i1".to_string(),
+        Type::Char => "i32".to_string(),
+        Type::I8 | Type::U8 => "i8".to_string(),
+        Type::I16 | Type::U16 => "i16".to_string(),
+        Type::I32 | Type::U32 => "i32".to_string(),
+        Type::I64 | Type::U64 => "i64".to_string(),
+        Type::F32 => "float".to_string(),
+        Type::F64 => "double".to_string(),
+        Type::String => "ptr".to_string(),
+        Type::Struct(name) => format!("%struct.{}", name),
+        Type::Enum(_) => "i32".to_string(),
+        Type::Array { llvm, .. } => llvm.to_string(),
+        _ => "void".to_string(),
     }
 }

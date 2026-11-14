@@ -651,99 +651,41 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_expression_or_assignment(&mut self) -> Stmt {
-        if let TokenKind::Ident(name) = self.peek() {
-            let name = name.clone();
-            let next = self.peek_kind(1).clone();
+        let expr = self.parse_expr();
 
-            if next == TokenKind::Eq {
-                let start = self.advance().span;
-                self.advance();
-                let value = self.parse_expr();
-                let span = start.merge(value.span);
-                self.expect_line_end();
-                return Stmt {
-                    kind: StmtKind::Assign { name, value },
-                    span,
-                };
-            }
+        let is_assignment = self.check(&TokenKind::Eq) || compound_bin_op(self.peek()).is_some();
 
-            if let Some(op) = compound_bin_op(&next) {
-                let start = self.advance().span;
-                self.advance();
-                let rhs = self.parse_expr();
-                let span = start.merge(rhs.span);
-                self.expect_line_end();
-                let target = Expr {
-                    kind: ExprKind::Ident(name.clone()),
-                    span: start,
-                };
-                let value = Expr {
+        if is_assignment {
+            let place = expr.clone();
+            let span = place.span;
+            let compound = if self.check(&TokenKind::Eq) {
+                None
+            } else {
+                compound_bin_op(self.peek())
+            };
+            self.advance(); // = or compound op
+
+            let rhs = self.parse_expr();
+            let span = span.merge(rhs.span);
+            self.expect_line_end();
+
+            let value = match compound {
+                Some(op) => Expr {
                     kind: ExprKind::Binary {
                         op,
-                        left: Box::new(target),
+                        left: Box::new(place.clone()),
                         right: Box::new(rhs),
                     },
                     span,
-                };
-                return Stmt {
-                    kind: StmtKind::Assign { name, value },
-                    span,
-                };
-            }
+                },
+                None => rhs,
+            };
 
-            if next == TokenKind::Dot
-                && let TokenKind::Ident(field_name) = self.peek_kind(2)
-            {
-                let field_name = field_name.clone();
-                let after = self.peek_kind(3).clone();
-                let compound = compound_bin_op(&after);
-                if after == TokenKind::Eq || compound.is_some() {
-                    let start = self.advance().span;
-                    self.advance();
-                    let field_span = self.advance().span;
-                    self.advance();
-
-                    let field_expr = Expr {
-                        kind: ExprKind::Field {
-                            base: Box::new(Expr {
-                                kind: ExprKind::Ident(name.clone()),
-                                span: start,
-                            }),
-                            name: field_name.clone(),
-                            name_span: field_span,
-                        },
-                        span: start.merge(field_span),
-                    };
-
-                    let rhs = self.parse_expr();
-                    let span = start.merge(rhs.span);
-                    self.expect_line_end();
-
-                    let value = match compound {
-                        Some(op) => Expr {
-                            kind: ExprKind::Binary {
-                                op,
-                                left: Box::new(field_expr),
-                                right: Box::new(rhs),
-                            },
-                            span,
-                        },
-                        None => rhs,
-                    };
-
-                    return Stmt {
-                        kind: StmtKind::AssignField {
-                            base: name,
-                            field: field_name,
-                            value,
-                        },
-                        span,
-                    };
-                }
+            if let Some(statement) = assignment_from_place(place, value, span) {
+                return statement;
             }
         }
 
-        let expr = self.parse_expr();
         let span = expr.span;
         self.expect_line_end();
         Stmt {
@@ -921,6 +863,23 @@ impl<'a> Parser<'a> {
                 continue;
             }
 
+            if self.check(&TokenKind::LBracket) {
+                let start = self.advance().span;
+                let index = self.parse_expr();
+                let close = self.peek_token().span;
+                self.expect(&TokenKind::RBracket, "after array index");
+                let span = expr.span.merge(close);
+                let _ = start;
+                expr = Expr {
+                    kind: ExprKind::Index {
+                        base: Box::new(expr),
+                        index: Box::new(index),
+                    },
+                    span,
+                };
+                continue;
+            }
+
             break;
         }
         expr
@@ -1001,6 +960,22 @@ impl<'a> Parser<'a> {
                 let expr = self.parse_expr();
                 self.expect(&TokenKind::RParen, "after expression");
                 expr
+            }
+            TokenKind::LBracket => {
+                let start = self.advance().span;
+                let mut elements = Vec::new();
+                while !self.check(&TokenKind::RBracket) && !self.check(&TokenKind::Eof) {
+                    elements.push(self.parse_expr());
+                    if !self.eat(&TokenKind::Comma) {
+                        break;
+                    }
+                }
+                let close = self.peek_token().span;
+                self.expect(&TokenKind::RBracket, "after array elements");
+                Expr {
+                    kind: ExprKind::Array(elements),
+                    span: start.merge(close),
+                }
             }
             _ => {
                 self.error(
@@ -1150,13 +1125,6 @@ impl<'a> Parser<'a> {
         &self.peek_token().kind
     }
 
-    fn peek_kind(&self, offset: usize) -> &TokenKind {
-        self.tokens
-            .get(self.pos + offset)
-            .map(|token| &token.kind)
-            .unwrap_or(&TokenKind::Eof)
-    }
-
     fn peek_token(&self) -> &Token {
         self.tokens.get(self.pos).unwrap_or_else(|| {
             self.tokens
@@ -1188,6 +1156,44 @@ fn compound_bin_op(kind: &TokenKind) -> Option<BinOp> {
         TokenKind::PercentEq => BinOp::Rem,
         _ => return None,
     })
+}
+
+fn assignment_from_place(place: Expr, value: Expr, span: Span) -> Option<Stmt> {
+    match place.kind {
+        ExprKind::Ident(name) => Some(Stmt {
+            kind: StmtKind::Assign { name, value },
+            span,
+        }),
+        ExprKind::Field { base, name, .. } => {
+            if let ExprKind::Ident(base_name) = base.kind {
+                Some(Stmt {
+                    kind: StmtKind::AssignField {
+                        base: base_name,
+                        field: name,
+                        value,
+                    },
+                    span,
+                })
+            } else {
+                None
+            }
+        }
+        ExprKind::Index { base, index } => {
+            if let ExprKind::Ident(base_name) = base.kind {
+                Some(Stmt {
+                    kind: StmtKind::AssignIndex {
+                        base: base_name,
+                        index: *index,
+                        value,
+                    },
+                    span,
+                })
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
 }
 
 fn binary(op: BinOp, left: Expr, right: Expr) -> Expr {

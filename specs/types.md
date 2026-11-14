@@ -11,6 +11,7 @@
 - `void` (function return only)
 - User-defined `struct` with scalar fields (see below)
 - User-defined `enum` (lowered to an `i32` tag)
+- Fixed-size arrays `[T; N]` (inferred from non-empty literals)
 
 ## Type inference
 
@@ -78,6 +79,24 @@ enum Color:
 - `match` over an enum value supports `case Variant:` arms and an optional
   trailing `else:` arm. A non-exhaustive match without `else` is a warning.
 - Enum values cannot be printed or cast.
+
+## Fixed-size arrays
+
+```nex
+let a = [1, 2, 3]
+print(a[0])
+a[1] = 9
+```
+
+- Array types are inferred from non-empty literals: `[1, 2, 3]` has type
+  `[i64; 3]`.
+- Elements must share one type.
+- Indexing requires an integer index and yields the element type.
+- `var` arrays support element assignment and compound assignment.
+- Array values can be copied by initializing a binding from an existing array
+  variable or literal.
+- Array types cannot be written in source yet, so arrays cannot be function
+  parameters, return values, constants, printed, or compared.
 
 ## Explicit casts
 

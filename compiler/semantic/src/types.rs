@@ -26,6 +26,12 @@ pub enum Type {
     /// User-defined enumeration, lowered to an `i32` tag. The name is interned
     /// by semantic analysis.
     Enum(&'static str),
+    /// Fixed-size array. `display` is the diagnostic spelling (`[i64; 4]`);
+    /// `llvm` is the LLVM type spelling (`[4 x i64]`).
+    Array {
+        display: &'static str,
+        llvm: &'static str,
+    },
     Void,
     Error,
 }
@@ -68,6 +74,7 @@ impl Type {
             Self::String => "string",
             Self::Struct(name) => name,
             Self::Enum(name) => name,
+            Self::Array { display, .. } => display,
             Self::Void => "void",
             Self::Error => "<error>",
         }

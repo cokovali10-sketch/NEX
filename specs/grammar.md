@@ -53,10 +53,11 @@ additive       := multiplicative { ("+" | "-") multiplicative }
 multiplicative := cast { ("*" | "/" | "%") cast }
 cast           := unary { "as" type }
 unary          := "-" cast | postfix
-postfix        := primary { "(" [ arguments ] ")" | "." IDENT }
+postfix        := primary { "(" [ arguments ] ")" | "." IDENT | "[" expression "]" }
 arguments      := expression { "," expression } [ "," ]
 primary        := INT | FLOAT | STRING | CHAR | "true" | "false"
                | IDENT
+               | "[" [ expression { "," expression } [ "," ] ] "]"
                | "(" expression ")"
 
 type           := IDENT

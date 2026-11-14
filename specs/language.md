@@ -28,6 +28,7 @@ planned and are not yet implemented.
 - Struct declarations with scalar fields, construction, field access, and
   field assignment (see `specs/types.md`).
 - Enum declarations and `match` over enum values.
+- Array literals and indexing reads/writes.
 - Explicit casts with `as`.
 - Top-level `const` declarations with compile-time constant initializers.
 
@@ -37,7 +38,7 @@ planned and are not yet implemented.
 - Traits and pattern matching beyond enums.
 - Structs with nested struct fields, struct function parameters/returns, and
   struct constants.
-- Arrays, tuples, and optional/result types.
+- Arrays with type annotations, array parameters/returns, and tuples.
 - Modules and imports.
 - Async/await and structured concurrency.
 - Macros and compile-time evaluation.

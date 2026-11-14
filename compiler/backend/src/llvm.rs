@@ -196,6 +196,19 @@ impl<'a> Emitter<'a> {
                     dst.0, struct_name, base.0, index
                 ));
             }
+            Inst::IndexPtr {
+                dst,
+                base,
+                array_type,
+                index,
+                elem_ty: _,
+            } => {
+                let index_str = format!("i64 {}", self.operand_str(index, IrType::I64)?);
+                body.push_str(&format!(
+                    "  %v{} = getelementptr inbounds {}, ptr %v{}, i64 0, {}\n",
+                    dst.0, array_type, base.0, index_str
+                ));
+            }
             Inst::Bin {
                 dst,
                 op,
@@ -438,6 +451,7 @@ fn llvm_type(ty: IrType) -> String {
         IrType::F64 => "double".to_string(),
         IrType::String => "ptr".to_string(),
         IrType::Struct(name) => format!("%struct.{name}"),
+        IrType::Array(llvm) => llvm.to_string(),
         IrType::Void => "void".to_string(),
     }
 }

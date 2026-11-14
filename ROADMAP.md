@@ -21,7 +21,8 @@
 - [x] Enums and `match` over enum values (case arms and `else` arm).
 - [ ] Traits and pattern matching beyond enums.
 - [ ] Nested struct fields and struct parameters/return values.
-- [ ] Arrays and tuples.
+- [x] Arrays: literals, indexing reads and writes.
+- [ ] Tuples.
 - [x] Explicit casts and conversions between numeric types, `bool`, and `char`.
 - [ ] Better control-flow analysis and definite-return checking.
 - [ ] Richer diagnostics with fixes and suggestions.

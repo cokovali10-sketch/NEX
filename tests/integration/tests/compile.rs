@@ -364,6 +364,57 @@ fn enum_errors_are_reported() {
 }
 
 #[test]
+fn arrays_work() {
+    let source = r#"
+fn main():
+    let a = [1, 2, 3]
+    print(a[0])
+    print(a[1])
+    print(a[2])
+
+    var b = [10, 20, 30]
+    b[1] = 99
+    print(b[0])
+    print(b[1])
+    print(b[2])
+
+    let c = b
+    b[0] = 7
+    print(c[0])
+    print(b[0])
+
+    print(a[0] + a[2])
+"#;
+    let (stdout, _stderr, code) = run_source(source);
+    assert_eq!(code, 0);
+    assert_eq!(stdout, "1231099301074");
+}
+
+#[test]
+fn array_errors_are_reported() {
+    let empty = compile("fn main():\n    let a = []\n");
+    assert!(
+        empty.diagnostics.iter().any(|d| d.code == "NXS035"),
+        "{:?}",
+        empty.diagnostics
+    );
+
+    let bad_index = compile("fn main():\n    let a = [1, 2, 3]\n    print(a[true])\n");
+    assert!(
+        bad_index.diagnostics.iter().any(|d| d.code == "NXS036"),
+        "{:?}",
+        bad_index.diagnostics
+    );
+
+    let immutable = compile("fn main():\n    let a = [1, 2, 3]\n    a[0] = 9\n");
+    assert!(
+        immutable.diagnostics.iter().any(|d| d.code == "NXS007"),
+        "{:?}",
+        immutable.diagnostics
+    );
+}
+
+#[test]
 fn if_elif_else() {
     let source = r#"
 fn classify(x: i64) -> i64:

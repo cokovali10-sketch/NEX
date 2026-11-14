@@ -250,6 +250,12 @@ fn lower_statement(
             if let Type::Struct(struct_name) = expected {
                 let source = lower_struct_place(builder, init, scopes, storage, analysis)?;
                 copy_struct(builder, ptr, source, struct_name, analysis)?;
+            } else if let Type::Array { display, .. } = expected {
+                let source = lower_array_place(builder, init, scopes, storage, analysis)?;
+                let info = analysis
+                    .array_info(display)
+                    .ok_or_else(|| "missing array type information".to_string())?;
+                copy_array(builder, ptr, source, info.llvm, info.elem, info.len)?;
             } else {
                 let value = lower_expr(builder, init, scopes, storage, analysis, expected)?;
                 builder.emit(Inst::Store { ptr, value, ty });
@@ -266,6 +272,21 @@ fn lower_statement(
                 Slot::Local(ptr, IrType::Struct(struct_name)) => {
                     let source = lower_struct_place(builder, value, scopes, storage, analysis)?;
                     copy_struct(builder, ptr, source, struct_name, analysis)?;
+                    Ok(())
+                }
+                Slot::Local(ptr, IrType::Array(array_type)) => {
+                    let source = lower_array_place(builder, value, scopes, storage, analysis)?;
+                    let src_ty = analysis.expr_type(value.span).unwrap_or(Type::Error);
+                    let (elem, len) = match src_ty {
+                        Type::Array { display, .. } => {
+                            let info = analysis
+                                .array_info(display)
+                                .ok_or_else(|| "missing array type information".to_string())?;
+                            (info.elem, info.len)
+                        }
+                        _ => return Err("array assignment requires an array value".to_string()),
+                    };
+                    copy_array(builder, ptr, source, array_type, elem, len)?;
                     Ok(())
                 }
                 Slot::Local(ptr, ty) => {
@@ -324,6 +345,36 @@ fn lower_statement(
         } => lower_for(builder, var, (start, end), body, scopes, storage, analysis),
         StmtKind::Match { scrutinee, arms } => {
             lower_match(builder, scrutinee, arms, scopes, storage, analysis)
+        }
+        StmtKind::AssignIndex { base, index, value } => {
+            let slot = lookup_slot(scopes, base)
+                .ok_or_else(|| format!("unknown variable `{base}` during code generation"))?;
+            let Slot::Local(base_ptr, IrType::Array(array_type)) = slot else {
+                return Err(format!("cannot assign to an element of `{base}` by value"));
+            };
+            let idx_value = lower_expr(builder, index, scopes, storage, analysis, Type::Error)?;
+            let elem = analysis
+                .arrays
+                .values()
+                .find(|info| info.llvm == array_type)
+                .map(|info| info.elem)
+                .unwrap_or(Type::Error);
+            let elem_ir = IrType::from_type(elem);
+            let dst_ptr = builder.new_value();
+            builder.emit(Inst::IndexPtr {
+                dst: dst_ptr,
+                base: base_ptr,
+                array_type,
+                index: idx_value,
+                elem_ty: elem_ir,
+            });
+            let operand = lower_expr(builder, value, scopes, storage, analysis, Type::Error)?;
+            builder.emit(Inst::Store {
+                ptr: dst_ptr,
+                value: operand,
+                ty: elem_ir,
+            });
+            Ok(())
         }
         StmtKind::Return(value) => {
             if let Some(value) = value {
@@ -767,6 +818,116 @@ fn lower_match(
     Ok(())
 }
 
+fn lower_array_place(
+    builder: &mut FunctionBuilder,
+    expr: &Expr,
+    scopes: &mut Vec<HashMap<String, Slot>>,
+    storage: &HashMap<nex_diagnostics::Span, (ValueId, IrType)>,
+    analysis: &Analysis,
+) -> Result<ValueId, String> {
+    match &expr.kind {
+        ExprKind::Ident(name) => {
+            let slot = lookup_slot(scopes, name)
+                .ok_or_else(|| format!("unknown variable `{name}` during code generation"))?;
+            match slot {
+                Slot::Local(ptr, _) => Ok(ptr),
+                Slot::Value(_) => Err(format!("`{name}` is not an array value")),
+            }
+        }
+        ExprKind::Field { base, .. } => {
+            let Some((struct_name, index, field_ty)) = analysis.field_read(expr.span) else {
+                return Err("missing field information during code generation".to_string());
+            };
+            let field_ty = IrType::from_type(field_ty);
+            let base_ptr = lower_array_place(builder, base, scopes, storage, analysis)?;
+            let field_ptr = builder.new_value();
+            builder.emit(Inst::FieldPtr {
+                dst: field_ptr,
+                base: base_ptr,
+                struct_name,
+                index,
+                field_ty,
+            });
+            Ok(field_ptr)
+        }
+        ExprKind::Array(elements) => {
+            let ty = analysis
+                .expr_type(expr.span)
+                .ok_or_else(|| "missing type information for array".to_string())?;
+            let Type::Array { llvm, display, .. } = ty else {
+                return Err("not an array value".to_string());
+            };
+            let elem = analysis
+                .array_info(display)
+                .map(|info| info.elem)
+                .unwrap_or(Type::Error);
+            let elem_ir = IrType::from_type(elem);
+            let ptr = builder.alloca_at_entry(IrType::Array(llvm));
+            for (index, element) in elements.iter().enumerate() {
+                let idx = Operand::Const(Const::Int(index as i64));
+                let elem_ptr = builder.new_value();
+                builder.emit(Inst::IndexPtr {
+                    dst: elem_ptr,
+                    base: ptr,
+                    array_type: llvm,
+                    index: idx,
+                    elem_ty: elem_ir,
+                });
+                let value = lower_expr(builder, element, scopes, storage, analysis, elem)?;
+                builder.emit(Inst::Store {
+                    ptr: elem_ptr,
+                    value,
+                    ty: elem_ir,
+                });
+            }
+            Ok(ptr)
+        }
+        _ => Err("array values must be variables or array literals".to_string()),
+    }
+}
+
+fn copy_array(
+    builder: &mut FunctionBuilder,
+    dst: ValueId,
+    src: ValueId,
+    array_type: &'static str,
+    elem: Type,
+    len: usize,
+) -> Result<(), String> {
+    let elem_ir = IrType::from_type(elem);
+    for index in 0..len {
+        let idx = Operand::Const(Const::Int(index as i64));
+        let dst_field = builder.new_value();
+        builder.emit(Inst::IndexPtr {
+            dst: dst_field,
+            base: dst,
+            array_type,
+            index: idx.clone(),
+            elem_ty: elem_ir,
+        });
+        let src_field = builder.new_value();
+        builder.emit(Inst::IndexPtr {
+            dst: src_field,
+            base: src,
+            array_type,
+            index: idx,
+            elem_ty: elem_ir,
+        });
+        let value = builder.new_value();
+        builder.emit(Inst::Load {
+            dst: value,
+            ptr: src_field,
+            ty: elem_ir,
+        });
+        builder.emit(Inst::Store {
+            ptr: dst_field,
+            value: Operand::Value(value),
+            ty: elem_ir,
+        });
+    }
+    Ok(())
+}
+
 fn lower_expr(
     builder: &mut FunctionBuilder,
     expr: &Expr,
@@ -1059,6 +1220,38 @@ fn lower_expr(
                 ty: field_ty,
             });
             Ok(Operand::Value(dst))
+        }
+        ExprKind::Array(elements) => {
+            let source = lower_array_place(builder, expr, scopes, storage, analysis)?;
+            let _ = elements;
+            Ok(Operand::Value(source))
+        }
+        ExprKind::Index { base, index } => {
+            let base_ty = analysis.expr_type(base.span).unwrap_or(Type::Error);
+            let elem_ty = analysis.expr_type(expr.span).unwrap_or(Type::Error);
+            let elem_ir = IrType::from_type(elem_ty);
+            let base_ptr = lower_array_place(builder, base, scopes, storage, analysis)?;
+            // base_ptr may come from struct place for arrays stored in struct fields (not supported); fallback above rarely used
+            let idx_value = lower_expr(builder, index, scopes, storage, analysis, Type::Error)?;
+            let array_type = match base_ty {
+                Type::Array { llvm, .. } => llvm,
+                _ => return Err("cannot index a non-array value".to_string()),
+            };
+            let dst = builder.new_value();
+            builder.emit(Inst::IndexPtr {
+                dst,
+                base: base_ptr,
+                array_type,
+                index: idx_value,
+                elem_ty: elem_ir,
+            });
+            let loaded = builder.new_value();
+            builder.emit(Inst::Load {
+                dst: loaded,
+                ptr: dst,
+                ty: elem_ir,
+            });
+            Ok(Operand::Value(loaded))
         }
         ExprKind::Error => Err("invalid expression reached code generation".to_string()),
     }

@@ -101,6 +101,11 @@ pub enum StmtKind {
         field: String,
         value: Expr,
     },
+    AssignIndex {
+        base: String,
+        index: Expr,
+        value: Expr,
+    },
     If {
         branches: Vec<(Expr, Block)>,
         else_branch: Option<Block>,
@@ -164,6 +169,11 @@ pub enum ExprKind {
     Cast {
         expr: Box<Expr>,
         ty: TypeExpr,
+    },
+    Array(Vec<Expr>),
+    Index {
+        base: Box<Expr>,
+        index: Box<Expr>,
     },
     Field {
         base: Box<Expr>,

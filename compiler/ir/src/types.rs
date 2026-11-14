@@ -18,6 +18,8 @@ pub enum IrType {
     String,
     /// User-defined record type, emitted as `%struct.<name>` in LLVM IR.
     Struct(&'static str),
+    /// Fixed-size array, spelled as its LLVM type (`[4 x i64]`).
+    Array(&'static str),
     Void,
 }
 
@@ -38,6 +40,7 @@ impl IrType {
             Type::F64 => Self::F64,
             Type::String => Self::String,
             Type::Struct(name) => Self::Struct(name),
+            Type::Array { llvm, .. } => Self::Array(llvm),
             Type::Enum(_) => Self::I32,
             Type::Void => Self::Void,
             Type::Error => Self::Void,
@@ -198,6 +201,15 @@ pub enum Inst {
         struct_name: &'static str,
         index: u32,
         field_ty: IrType,
+    },
+    /// Compute a pointer to an array element: `getelementptr inbounds [N x T],
+    /// ptr %base, i64 0, i64 %index`.
+    IndexPtr {
+        dst: ValueId,
+        base: ValueId,
+        array_type: &'static str,
+        index: Operand,
+        elem_ty: IrType,
     },
 }
 
