@@ -590,6 +590,34 @@ fn lower_expr(
                 return Ok(Operand::Value(dst));
             }
 
+            if operand_ty == IrType::String && matches!(bin_op, BinOp::Eq | BinOp::Ne) {
+                let lhs = lower_expr(builder, left, scopes, storage, analysis, Type::Error)?;
+                let rhs = lower_expr(builder, right, scopes, storage, analysis, Type::Error)?;
+                let call_dst = builder.new_value();
+                builder.emit(Inst::Call {
+                    dst: Some(call_dst),
+                    name: "nex_rt_str_eq".to_string(),
+                    args: vec![lhs, rhs],
+                    ret: IrType::I32,
+                });
+                // `nex_rt_str_eq` returns 1 for equal strings. Compare the
+                // result with zero to produce the requested boolean.
+                let cmp_op = if bin_op == BinOp::Eq {
+                    BinOp::Ne
+                } else {
+                    BinOp::Eq
+                };
+                let dst = builder.new_value();
+                builder.emit(Inst::Bin {
+                    dst,
+                    op: cmp_op,
+                    ty: IrType::I32,
+                    lhs: Operand::Value(call_dst),
+                    rhs: Operand::Const(Const::Int(0)),
+                });
+                return Ok(Operand::Value(dst));
+            }
+
             let lhs = lower_expr(builder, left, scopes, storage, analysis, Type::Error)?;
             let rhs = lower_expr(builder, right, scopes, storage, analysis, Type::Error)?;
             let dst = builder.new_value();

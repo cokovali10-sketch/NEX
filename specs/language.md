@@ -24,6 +24,7 @@ planned and are not yet implemented.
 - `return`, `break`, `continue`.
 - Function calls.
 - Built-in `print` and `println`.
+- String equality (`==`, `!=`) comparing contents.
 - Explicit casts with `as`.
 - Top-level `const` declarations with compile-time constant initializers.
 

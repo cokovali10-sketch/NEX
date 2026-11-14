@@ -118,6 +118,25 @@ fn main():
 }
 
 #[test]
+fn string_equality() {
+    let source = r#"
+fn main():
+    let a = "nex"
+    let b = "nex"
+    let c = "other"
+    print(a == b)
+    print(a != b)
+    print(a == c)
+    print(a != c)
+    if a == "nex":
+        print("-ok")
+"#;
+    let (stdout, _stderr, code) = run_source(source);
+    assert_eq!(code, 0);
+    assert_eq!(stdout, "truefalsefalsetrue-ok");
+}
+
+#[test]
 fn if_elif_else() {
     let source = r#"
 fn classify(x: i64) -> i64:

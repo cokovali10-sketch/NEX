@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <string.h>
 
 static void nex_rt_write_utf8(unsigned int codepoint) {
     unsigned char buffer[4];
@@ -87,6 +88,13 @@ void nex_rt_print_char(int value) {
 void nex_rt_println_char(int value) {
     nex_rt_print_char(value);
     fputc('\n', stdout);
+}
+
+int nex_rt_str_eq(const char *left, const char *right) {
+    if (left == NULL || right == NULL) {
+        return left == right;
+    }
+    return strcmp(left, right) == 0;
 }
 
 void nex_rt_panic(const char *message) {

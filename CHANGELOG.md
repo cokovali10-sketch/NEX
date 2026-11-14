@@ -4,6 +4,7 @@
 
 ### Added
 
+- String equality and inequality (`==`, `!=`) with content comparison.
 - Compound assignment operators `+=`, `-=`, `*=`, `/=`, `%=`.
 - Explicit `as` casts between numeric types, `bool`, and `char`.
 - Top-level `const` declarations with compile-time constant initializers.

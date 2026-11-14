@@ -34,6 +34,8 @@ requires an explicit conversion.
 
 - Arithmetic requires both operands to have the same numeric type.
 - Comparisons require both operands to have the same type.
+- `==` and `!=` are defined for `bool`, `char`, numeric types, and `string`
+  (string equality compares contents, not pointers).
 - `and` and `or` require `bool`.
 - `not` requires `bool`.
 - Unary `-` requires a signed integer or floating point type.
@@ -53,4 +55,3 @@ let z = true as i64
 - Generic type parameters.
 - Struct, enum, tuple, array, optional, and result types.
 - Traits and type constraints.
-- Explicit cast syntax.
