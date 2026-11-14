@@ -1,0 +1,8 @@
+[package]
+name = "enums"
+version = "0.1.0"
+edition = "2026"
+description = "Enums and match example"
+
+[build]
+entry = "src/main.nex"

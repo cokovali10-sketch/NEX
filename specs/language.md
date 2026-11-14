@@ -27,13 +27,14 @@ planned and are not yet implemented.
 - String comparison (`==`, `!=`, `<`, `<=`, `>`, `>=`) comparing contents.
 - Struct declarations with scalar fields, construction, field access, and
   field assignment (see `specs/types.md`).
+- Enum declarations and `match` over enum values.
 - Explicit casts with `as`.
 - Top-level `const` declarations with compile-time constant initializers.
 
 ## Planned
 
 - Generics and type constraints.
-- Enums, traits, and pattern matching.
+- Traits and pattern matching beyond enums.
 - Structs with nested struct fields, struct function parameters/returns, and
   struct constants.
 - Arrays, tuples, and optional/result types.

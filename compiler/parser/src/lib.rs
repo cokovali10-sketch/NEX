@@ -5,8 +5,8 @@
 //! the compiler report more than one independent error per file.
 
 use nex_ast::{
-    BinOp, Block, ConstDecl, Expr, ExprKind, FieldDecl, FnDecl, Param, Program, Stmt, StmtKind,
-    StructDecl, TypeExpr, UnaryOp,
+    BinOp, Block, ConstDecl, EnumDecl, Expr, ExprKind, FieldDecl, FnDecl, MatchArm, Param, Program,
+    Stmt, StmtKind, StructDecl, TypeExpr, UnaryOp, VariantDecl,
 };
 use nex_diagnostics::{Diagnostic, Span};
 use nex_lexer::{Token, TokenKind};
@@ -39,6 +39,7 @@ impl<'a> Parser<'a> {
     fn parse_program(mut self) -> ParseResult {
         let start = self.peek_token().span.start;
         let mut structs = Vec::new();
+        let mut enums = Vec::new();
         let mut consts = Vec::new();
         let mut functions = Vec::new();
 
@@ -50,6 +51,12 @@ impl<'a> Parser<'a> {
             if self.check(&TokenKind::Struct) {
                 if let Some(definition) = self.parse_struct() {
                     structs.push(definition);
+                } else {
+                    self.synchronize_item();
+                }
+            } else if self.check(&TokenKind::Enum) {
+                if let Some(definition) = self.parse_enum() {
+                    enums.push(definition);
                 } else {
                     self.synchronize_item();
                 }
@@ -68,8 +75,7 @@ impl<'a> Parser<'a> {
             } else {
                 let token = self.peek_token().clone();
                 let message = match &token.kind {
-                    TokenKind::Enum
-                    | TokenKind::Impl
+                    TokenKind::Impl
                     | TokenKind::Trait
                     | TokenKind::Import
                     | TokenKind::From
@@ -93,6 +99,7 @@ impl<'a> Parser<'a> {
         ParseResult {
             program: Program {
                 structs,
+                enums,
                 consts,
                 functions,
                 span: Span::new(start, end),
@@ -207,6 +214,157 @@ impl<'a> Parser<'a> {
         })
     }
 
+    fn parse_enum(&mut self) -> Option<EnumDecl> {
+        let start = self.advance().span;
+        let (name, _name_span) = self.expect_ident("after `enum`")?;
+
+        if !self.expect(&TokenKind::Colon, "after enum name") {
+            self.synchronize_item();
+            return None;
+        }
+        self.expect_line_end();
+
+        if !self.eat(&TokenKind::Indent) {
+            let span = self.peek_token().span;
+            self.error("NXP002", "expected an indented enum body after `:`", span);
+            return None;
+        }
+
+        let mut variants = Vec::new();
+        while !self.check(&TokenKind::Dedent) && !self.check(&TokenKind::Eof) {
+            if self.eat(&TokenKind::Newline) {
+                continue;
+            }
+            let Some((variant, variant_span)) = self.expect_ident("in enum variant list") else {
+                self.recover_statement();
+                continue;
+            };
+            self.expect_line_end();
+            variants.push(VariantDecl {
+                name: variant,
+                span: variant_span,
+            });
+        }
+
+        let end = self.peek_token().span.end;
+        self.eat(&TokenKind::Dedent);
+        Some(EnumDecl {
+            name,
+            variants,
+            span: Span::new(start.start, end),
+        })
+    }
+
+    fn parse_match(&mut self) -> Stmt {
+        let start = self.advance().span;
+        let scrutinee = self.parse_expr();
+        let head_span = start.merge(scrutinee.span);
+
+        if !self.expect(&TokenKind::Colon, "after `match` expression") {
+            self.recover_statement();
+            return Stmt {
+                kind: StmtKind::Match {
+                    scrutinee,
+                    arms: Vec::new(),
+                },
+                span: head_span,
+            };
+        }
+        self.expect_line_end();
+
+        if !self.eat(&TokenKind::Indent) {
+            let span = self.peek_token().span;
+            self.error("NXP002", "expected an indented match body after `:`", span);
+            return Stmt {
+                kind: StmtKind::Match {
+                    scrutinee,
+                    arms: Vec::new(),
+                },
+                span: head_span,
+            };
+        }
+
+        let mut arms = Vec::new();
+        while !self.check(&TokenKind::Dedent) && !self.check(&TokenKind::Eof) {
+            if self.eat(&TokenKind::Newline) {
+                continue;
+            }
+
+            let arm_start = self.peek_token().span;
+            let pattern = if self.eat(&TokenKind::Case) {
+                let Some((variant, _variant_span)) = self.expect_ident("after `case`") else {
+                    self.recover_statement();
+                    continue;
+                };
+                Some(variant)
+            } else if self.eat(&TokenKind::Else) {
+                None
+            } else {
+                let span = self.peek_token().span;
+                self.error("NXP013", "expected `case` or `else` in a match body", span);
+                self.recover_statement();
+                continue;
+            };
+
+            let body = self.parse_arm_body();
+            let span = arm_start.merge(body.span);
+            arms.push(MatchArm {
+                pattern,
+                body,
+                span,
+            });
+        }
+
+        let end = self.peek_token().span.end;
+        self.eat(&TokenKind::Dedent);
+        Stmt {
+            kind: StmtKind::Match { scrutinee, arms },
+            span: head_span.merge(Span::new(end, end)),
+        }
+    }
+
+    fn parse_arm_body(&mut self) -> Block {
+        let start = self.peek_token().span.start;
+        self.expect(&TokenKind::Colon, "after a match arm pattern");
+        self.expect_line_end();
+
+        if !self.eat(&TokenKind::Indent) {
+            let span = self.peek_token().span;
+            self.error(
+                "NXP002",
+                "expected an indented match arm body after `:`",
+                span,
+            );
+            return Block {
+                stmts: Vec::new(),
+                span: Span::new(start, span.end),
+            };
+        }
+
+        let mut stmts = Vec::new();
+        while !self.check(&TokenKind::Dedent) && !self.check(&TokenKind::Eof) {
+            if self.eat(&TokenKind::Newline) {
+                continue;
+            }
+            let before = self.pos;
+            if let Some(statement) = self.parse_statement() {
+                stmts.push(statement);
+            } else if self.pos == before {
+                self.recover_statement();
+            }
+            if self.pos == before {
+                self.advance();
+            }
+        }
+
+        let end = self.peek_token().span.end;
+        self.eat(&TokenKind::Dedent);
+        Block {
+            stmts,
+            span: Span::new(start, end),
+        }
+    }
+
     fn parse_params(&mut self) -> Vec<Param> {
         let mut params = Vec::new();
         while !self.check(&TokenKind::RParen) && !self.check(&TokenKind::Eof) {
@@ -299,6 +457,7 @@ impl<'a> Parser<'a> {
             TokenKind::If => Some(self.parse_if()),
             TokenKind::While => Some(self.parse_while()),
             TokenKind::For => Some(self.parse_for()),
+            TokenKind::Match => Some(self.parse_match()),
             TokenKind::Return => Some(self.parse_return()),
             TokenKind::Break => {
                 let start = self.advance().span;

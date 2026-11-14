@@ -23,6 +23,9 @@ pub enum Type {
     /// User-defined record type. The name is interned by semantic analysis and
     /// lives for the duration of the compiler process.
     Struct(&'static str),
+    /// User-defined enumeration, lowered to an `i32` tag. The name is interned
+    /// by semantic analysis.
+    Enum(&'static str),
     Void,
     Error,
 }
@@ -64,6 +67,7 @@ impl Type {
             Self::F64 => "f64",
             Self::String => "string",
             Self::Struct(name) => name,
+            Self::Enum(name) => name,
             Self::Void => "void",
             Self::Error => "<error>",
         }

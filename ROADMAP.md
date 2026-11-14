@@ -18,7 +18,8 @@
 - [ ] Modules and imports.
 - [x] Structs: declarations with scalar fields, construction, field access,
       field assignment, and struct copies by binding initialization.
-- [ ] Enums and pattern matching.
+- [x] Enums and `match` over enum values (case arms and `else` arm).
+- [ ] Traits and pattern matching beyond enums.
 - [ ] Nested struct fields and struct parameters/return values.
 - [ ] Arrays and tuples.
 - [x] Explicit casts and conversions between numeric types, `bool`, and `char`.

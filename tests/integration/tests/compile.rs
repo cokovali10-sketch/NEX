@@ -248,6 +248,122 @@ fn main():
 }
 
 #[test]
+fn enums_and_match_work() {
+    let source = r#"
+enum Color:
+    Red
+    Green
+    Blue
+
+fn name(c: Color) -> string:
+    match c:
+        case Red:
+            return "red"
+        case Green:
+            return "green"
+        case Blue:
+            return "blue"
+
+fn main():
+    print(name(Color.Red))
+    print(" ")
+    print(name(Green))
+    print(" ")
+    print(Color.Red == Red)
+    print(Color.Red != Green)
+"#;
+    let (stdout, _stderr, code) = run_source(source);
+    assert_eq!(code, 0);
+    assert_eq!(stdout, "red green truetrue");
+}
+
+#[test]
+fn match_fallthrough_and_else_work() {
+    let source = r#"
+enum Color:
+    Red
+    Green
+    Blue
+
+fn main():
+    let c = Red
+    match c:
+        case Red:
+            print("red")
+        case Green:
+            print("green")
+    print("-done")
+
+    let d = Blue
+    match d:
+        case Red:
+            print("red")
+        else:
+            print("-other")
+"#;
+    let (stdout, _stderr, code) = run_source(source);
+    assert_eq!(code, 0);
+    assert_eq!(stdout, "red-done-other");
+}
+
+#[test]
+fn enum_errors_are_reported() {
+    let unknown_variant = compile("enum Color:\n    Red\n\nfn main():\n    let c = Color.Blue\n");
+    assert!(
+        unknown_variant
+            .diagnostics
+            .iter()
+            .any(|d| d.code == "NXS030"),
+        "{:?}",
+        unknown_variant.diagnostics
+    );
+
+    let duplicate_variant =
+        compile("enum A:\n    Red\n\nenum B:\n    Red\n\nfn main():\n    print(1)\n");
+    assert!(
+        duplicate_variant
+            .diagnostics
+            .iter()
+            .any(|d| d.code == "NXS029"),
+        "{:?}",
+        duplicate_variant.diagnostics
+    );
+
+    let non_enum_match = compile(
+        "fn main():\n    let x = 1\n    match x:\n        case 1:\n            print(\"one\")\n",
+    );
+    assert!(
+        non_enum_match
+            .diagnostics
+            .iter()
+            .any(|d| d.code == "NXS031"),
+        "{:?}",
+        non_enum_match.diagnostics
+    );
+
+    let duplicate_arm = compile(
+        "enum Color:\n    Red\n    Green\n\nfn main():\n    let c = Red\n    match c:\n        case Red:\n            print(\"r\")\n        case Red:\n            print(\"r2\")\n",
+    );
+    assert!(
+        duplicate_arm.diagnostics.iter().any(|d| d.code == "NXS032"),
+        "{:?}",
+        duplicate_arm.diagnostics
+    );
+
+    let case_after_else = compile(
+        "enum Color:\n    Red\n    Green\n\nfn main():\n    let c = Red\n    match c:\n        else:\n            print(\"e\")\n        case Red:\n            print(\"r\")\n",
+    );
+    assert!(
+        case_after_else
+            .diagnostics
+            .iter()
+            .any(|d| d.code == "NXS034"),
+        "{:?}",
+        case_after_else.diagnostics
+    );
+}
+
+#[test]
 fn if_elif_else() {
     let source = r#"
 fn classify(x: i64) -> i64:

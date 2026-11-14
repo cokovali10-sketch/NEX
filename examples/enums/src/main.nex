@@ -1,0 +1,22 @@
+enum Status:
+    Ok
+    Warning
+    Error
+
+fn describe(s: Status) -> string:
+    match s:
+        case Ok:
+            return "ok"
+        case Warning:
+            return "warning"
+        case Error:
+            return "error"
+
+fn main():
+    print(describe(Status.Ok))
+    print(" ")
+    print(describe(Warning))
+    print(" ")
+    print(Status.Ok == Ok)
+    print(" ")
+    print(Status.Ok != Warning)

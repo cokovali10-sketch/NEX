@@ -207,6 +207,11 @@ fn collect_locals(
             StmtKind::For { body, .. } => {
                 collect_locals(body, analysis, out);
             }
+            StmtKind::Match { arms, .. } => {
+                for arm in arms {
+                    collect_locals(&arm.body, analysis, out);
+                }
+            }
             _ => {}
         }
     }
@@ -317,6 +322,9 @@ fn lower_statement(
             end,
             body,
         } => lower_for(builder, var, (start, end), body, scopes, storage, analysis),
+        StmtKind::Match { scrutinee, arms } => {
+            lower_match(builder, scrutinee, arms, scopes, storage, analysis)
+        }
         StmtKind::Return(value) => {
             if let Some(value) = value {
                 let operand = lower_expr(builder, value, scopes, storage, analysis, Type::Error)?;
@@ -632,6 +640,133 @@ fn copy_struct(
     Ok(())
 }
 
+fn lower_match(
+    builder: &mut FunctionBuilder,
+    scrutinee: &Expr,
+    arms: &[nex_ast::MatchArm],
+    scopes: &mut Vec<HashMap<String, Slot>>,
+    storage: &HashMap<nex_diagnostics::Span, (ValueId, IrType)>,
+    analysis: &Analysis,
+) -> Result<(), String> {
+    let scrut = lower_expr(builder, scrutinee, scopes, storage, analysis, Type::Error)?;
+    let merge_bb = builder.new_block();
+    let mut merge_reachable = false;
+    let mut exhaustive = false;
+    let mut pending: Option<BlockId> = Some(builder.new_block());
+    let pending_bb = pending.unwrap();
+    builder.terminate(Terminator::Br(pending_bb));
+    builder.current = pending_bb;
+
+    for arm in arms {
+        let body_bb = builder.new_block();
+        match &arm.pattern {
+            Some(variant) => {
+                let tag = if let Some(Type::Enum(enum_name)) = analysis.expr_type(scrutinee.span) {
+                    analysis
+                        .enum_info(enum_name)
+                        .and_then(|info| info.variants.iter().position(|value| value == variant))
+                        .unwrap_or(0) as i64
+                } else {
+                    0
+                };
+
+                let cmp_dst = builder.new_value();
+                builder.emit(Inst::Bin {
+                    dst: cmp_dst,
+                    op: BinOp::Eq,
+                    ty: IrType::I32,
+                    lhs: scrut.clone(),
+                    rhs: Operand::Const(Const::Int(tag)),
+                });
+                let next_bb = builder.new_block();
+                builder.terminate(Terminator::CondBr {
+                    cond: Operand::Value(cmp_dst),
+                    then_bb: body_bb,
+                    else_bb: next_bb,
+                });
+
+                builder.current = body_bb;
+                scopes.push(HashMap::new());
+                lower_stmts(builder, &arm.body.stmts, scopes, storage, analysis)?;
+                scopes.pop();
+                if !builder.current_terminated() {
+                    merge_reachable = true;
+                    builder.terminate(Terminator::Br(merge_bb));
+                }
+
+                pending = Some(next_bb);
+                builder.current = next_bb;
+            }
+            None => {
+                builder.terminate(Terminator::Br(body_bb));
+                builder.current = body_bb;
+                scopes.push(HashMap::new());
+                lower_stmts(builder, &arm.body.stmts, scopes, storage, analysis)?;
+                scopes.pop();
+                if !builder.current_terminated() {
+                    merge_reachable = true;
+                    builder.terminate(Terminator::Br(merge_bb));
+                }
+                pending = None;
+            }
+        }
+    }
+
+    if let Some(enum_name) = analysis.expr_type(scrutinee.span).and_then(|ty| match ty {
+        Type::Enum(name) => Some(name),
+        _ => None,
+    }) {
+        if let Some(info) = analysis.enum_info(enum_name) {
+            let mut seen = std::collections::HashSet::new();
+            let mut else_seen = false;
+            for arm in arms {
+                match &arm.pattern {
+                    Some(variant) => {
+                        seen.insert(variant.clone());
+                    }
+                    None => {
+                        else_seen = true;
+                    }
+                }
+            }
+            exhaustive = else_seen || seen.len() == info.variants.len();
+        }
+    }
+
+    if let Some(pending_bb) = pending {
+        if exhaustive {
+            if !builder
+                .func
+                .blocks
+                .get(pending_bb.0 as usize)
+                .and_then(|block| block.terminator.as_ref())
+                .is_some()
+            {
+                builder.current = pending_bb;
+                builder.terminate(Terminator::Unreachable);
+            }
+        } else {
+            merge_reachable = true;
+            if !builder
+                .func
+                .blocks
+                .get(pending_bb.0 as usize)
+                .and_then(|block| block.terminator.as_ref())
+                .is_some()
+            {
+                builder.current = pending_bb;
+                builder.terminate(Terminator::Br(merge_bb));
+            }
+        }
+    }
+
+    builder.current = merge_bb;
+    if !merge_reachable {
+        builder.terminate(Terminator::Unreachable);
+    }
+    Ok(())
+}
+
 fn lower_expr(
     builder: &mut FunctionBuilder,
     expr: &Expr,
@@ -650,6 +785,9 @@ fn lower_expr(
         ExprKind::Char(value) => Ok(Operand::Const(crate::types::Const::Char(*value))),
         ExprKind::Bool(value) => Ok(Operand::Const(crate::types::Const::Bool(*value))),
         ExprKind::Ident(name) => {
+            if let Some((_, index)) = analysis.variant_value(expr.span) {
+                return Ok(Operand::Const(Const::Int(index as i64)));
+            }
             if let Some(init) = analysis.const_exprs.get(name) {
                 return lower_expr(builder, init, scopes, storage, analysis, Type::Error);
             }
@@ -898,6 +1036,9 @@ fn lower_expr(
             Ok(Operand::Value(dst))
         }
         ExprKind::Field { base, .. } => {
+            if let Some((_, index)) = analysis.variant_value(expr.span) {
+                return Ok(Operand::Const(Const::Int(index as i64)));
+            }
             let Some((struct_name, index, field_ty)) = analysis.field_read(expr.span) else {
                 return Err("missing field information during code generation".to_string());
             };

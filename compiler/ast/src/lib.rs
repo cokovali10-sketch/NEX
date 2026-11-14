@@ -9,6 +9,7 @@ use nex_diagnostics::Span;
 #[derive(Debug, Clone)]
 pub struct Program {
     pub structs: Vec<StructDecl>,
+    pub enums: Vec<EnumDecl>,
     pub consts: Vec<ConstDecl>,
     pub functions: Vec<FnDecl>,
     pub span: Span,
@@ -25,6 +26,19 @@ pub struct StructDecl {
 pub struct FieldDecl {
     pub name: String,
     pub ty: TypeExpr,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct EnumDecl {
+    pub name: String,
+    pub variants: Vec<VariantDecl>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct VariantDecl {
+    pub name: String,
     pub span: Span,
 }
 
@@ -102,9 +116,21 @@ pub enum StmtKind {
         body: Block,
     },
     Return(Option<Expr>),
+    Match {
+        scrutinee: Expr,
+        arms: Vec<MatchArm>,
+    },
     Break,
     Continue,
     Expr(Expr),
+}
+
+#[derive(Debug, Clone)]
+pub struct MatchArm {
+    /// `None` is the fallback (`else`) arm.
+    pub pattern: Option<String>,
+    pub body: Block,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone)]

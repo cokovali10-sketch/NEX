@@ -38,6 +38,7 @@ impl IrType {
             Type::F64 => Self::F64,
             Type::String => Self::String,
             Type::Struct(name) => Self::Struct(name),
+            Type::Enum(_) => Self::I32,
             Type::Void => Self::Void,
             Type::Error => Self::Void,
         }

@@ -10,6 +10,7 @@
 - `string`
 - `void` (function return only)
 - User-defined `struct` with scalar fields (see below)
+- User-defined `enum` (lowered to an `i32` tag)
 
 ## Type inference
 
@@ -62,6 +63,22 @@ struct Point:
 - Struct values cannot be printed, passed to functions, returned from
   functions, declared as constants, or compared with `==`/`!=` yet.
 
+## User-defined enums
+
+```nex
+enum Color:
+    Red
+    Green
+    Blue
+```
+
+- Variant names must be unique across all enums in a program.
+- An enum value is written `Color.Red` or, when unambiguous, `Red`.
+- Enums are lowered to `i32` tags, so equality (`==`, `!=`) works.
+- `match` over an enum value supports `case Variant:` arms and an optional
+  trailing `else:` arm. A non-exhaustive match without `else` is a warning.
+- Enum values cannot be printed or cast.
+
 ## Explicit casts
 
 `as` can convert between numeric types, `bool`, and `char`:
@@ -77,5 +94,5 @@ let z = true as i64
 - Generic type parameters.
 - Structs with nested struct fields, struct parameters and return values, and
   struct constants.
-- Enum, tuple, array, optional, and result types.
+- Tuple, array, optional, and result types.
 - Traits and type constraints.

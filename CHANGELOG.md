@@ -4,6 +4,7 @@
 
 ### Added
 
+- Enum declarations and `match` over enum values.
 - Struct declarations with scalar fields, construction, field access, and
   field assignment.
 - String equality and inequality (`==`, `!=`) with content comparison.

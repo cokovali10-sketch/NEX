@@ -4,7 +4,9 @@ This grammar describes the syntax implemented by the NEX 0.1 parser. Indentation
 tokens are produced by the lexer.
 
 ```ebnf
-program        := { struct_decl | const_decl | function } EOF
+program        := { enum_decl | struct_decl | const_decl | function } EOF
+enum_decl      := "enum" IDENT ":" NEWLINE INDENT variant+ DEDENT
+variant        := IDENT NEWLINE
 struct_decl    := "struct" IDENT ":" NEWLINE INDENT field+ DEDENT
 field          := IDENT ":" type NEWLINE
 const_decl     := "const" IDENT [ ":" type ] "=" expression NEWLINE
@@ -18,6 +20,7 @@ statement      := let_stmt
                | if_stmt
                | while_stmt
                | for_stmt
+               | match_stmt
                | return_stmt
                | break_stmt
                | continue_stmt
@@ -34,7 +37,9 @@ if_stmt        := "if" expression ":" block
                   [ "else" ":" block ]
 while_stmt     := "while" expression ":" block
 for_stmt       := "for" IDENT "in" expression ".." expression ":" block
-return_stmt    := "return" [ expression ] NEWLINE
+match_stmt     := "match" expression ":" NEWLINE INDENT match_arm+ DEDENT
+match_arm      := "case" IDENT ":" block
+               | "else" ":" block
 break_stmt     := "break" NEWLINE
 continue_stmt  := "continue" NEWLINE
 expr_stmt      := expression NEWLINE
@@ -57,6 +62,5 @@ primary        := INT | FLOAT | STRING | CHAR | "true" | "false"
 type           := IDENT
 ```
 
-Reserved keywords for planned features include `struct`, `enum`, `trait`,
-`impl`, `import`, `module`, `use`, `const`, `extern`, `unsafe`, `async`,
-`await`, `match`, `for`, and `in`.
+Reserved keywords for planned features include `trait`, `impl`, `import`,
+`module`, `use`, `extern`, `unsafe`, `async`, and `await`.

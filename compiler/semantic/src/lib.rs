@@ -23,8 +23,18 @@ pub struct StructInfo {
 }
 
 #[derive(Debug, Clone)]
+pub struct EnumInfo {
+    pub name: String,
+    pub name_static: &'static str,
+    pub variants: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
 pub struct Analysis {
     pub structs: BTreeMap<String, StructInfo>,
+    pub enums: BTreeMap<String, EnumInfo>,
+    /// Variant name to the interned name of the enum that declares it.
+    pub variant_map: HashMap<String, &'static str>,
     pub consts: BTreeMap<String, Type>,
     pub const_exprs: BTreeMap<String, Expr>,
     pub functions: BTreeMap<String, FnSig>,
@@ -34,6 +44,8 @@ pub struct Analysis {
     pub field_reads: HashMap<Span, (&'static str, u32, Type)>,
     /// Field writes keyed by statement span: (struct name, field index, field type).
     pub field_writes: HashMap<Span, (&'static str, u32, Type)>,
+    /// Enum variant values keyed by expression span: (enum name, variant index).
+    pub variant_values: HashMap<Span, (&'static str, u32)>,
     pub diagnostics: Vec<Diagnostic>,
 }
 
@@ -50,12 +62,20 @@ impl Analysis {
         self.structs.get(name)
     }
 
+    pub fn enum_info(&self, name: &str) -> Option<&EnumInfo> {
+        self.enums.get(name)
+    }
+
     pub fn field_read(&self, span: Span) -> Option<(&'static str, u32, Type)> {
         self.field_reads.get(&span).copied()
     }
 
     pub fn field_write(&self, span: Span) -> Option<(&'static str, u32, Type)> {
         self.field_writes.get(&span).copied()
+    }
+
+    pub fn variant_value(&self, span: Span) -> Option<(&'static str, u32)> {
+        self.variant_values.get(&span).copied()
     }
 
     pub fn expr_type(&self, span: Span) -> Option<Type> {
@@ -93,6 +113,8 @@ impl<'a> Checker<'a> {
             program,
             analysis: Analysis {
                 structs: BTreeMap::new(),
+                enums: BTreeMap::new(),
+                variant_map: HashMap::new(),
                 consts: BTreeMap::new(),
                 const_exprs: BTreeMap::new(),
                 functions: BTreeMap::new(),
@@ -100,6 +122,7 @@ impl<'a> Checker<'a> {
                 decl_types: HashMap::new(),
                 field_reads: HashMap::new(),
                 field_writes: HashMap::new(),
+                variant_values: HashMap::new(),
                 diagnostics: Vec::new(),
             },
             scopes: Vec::new(),
@@ -107,6 +130,7 @@ impl<'a> Checker<'a> {
             loop_depth: 0,
         };
         checker.collect_structs();
+        checker.collect_enums();
         checker.collect_consts();
         checker.collect_functions();
         checker.check_main();
@@ -203,6 +227,86 @@ impl<'a> Checker<'a> {
                     params,
                     ret,
                     span: function.span,
+                },
+            );
+        }
+    }
+
+    fn collect_enums(&mut self) {
+        for definition in &self.program.enums {
+            if self.analysis.enums.contains_key(&definition.name) {
+                self.error(
+                    "NXS003",
+                    format!("duplicate enum `{}`", definition.name),
+                    definition.span,
+                );
+                continue;
+            }
+
+            if definition.variants.is_empty() {
+                self.error(
+                    "NXS029",
+                    format!(
+                        "enum `{}` must declare at least one variant",
+                        definition.name
+                    ),
+                    definition.span,
+                );
+                continue;
+            }
+
+            let mut variants = Vec::with_capacity(definition.variants.len());
+            let mut seen = std::collections::HashSet::new();
+            for variant in &definition.variants {
+                if !seen.insert(variant.name.clone()) {
+                    self.error(
+                        "NXS003",
+                        format!(
+                            "duplicate variant `{}` in enum `{}`",
+                            variant.name, definition.name
+                        ),
+                        variant.span,
+                    );
+                    continue;
+                }
+                if self.analysis.variant_map.contains_key(&variant.name) {
+                    self.error(
+                        "NXS029",
+                        format!(
+                            "variant name `{}` is already used by another enum",
+                            variant.name
+                        ),
+                        variant.span,
+                    );
+                    continue;
+                }
+                variants.push(variant.name.clone());
+            }
+
+            if variants.is_empty() {
+                self.error(
+                    "NXS029",
+                    format!(
+                        "enum `{}` must declare at least one variant",
+                        definition.name
+                    ),
+                    definition.span,
+                );
+                continue;
+            }
+
+            let name_static: &'static str = Box::leak(definition.name.clone().into_boxed_str());
+            for variant in &variants {
+                self.analysis
+                    .variant_map
+                    .insert(variant.clone(), name_static);
+            }
+            self.analysis.enums.insert(
+                definition.name.clone(),
+                EnumInfo {
+                    name: definition.name.clone(),
+                    name_static,
+                    variants,
                 },
             );
         }
@@ -634,6 +738,91 @@ impl<'a> Checker<'a> {
                 self.scopes.pop();
                 self.loop_depth -= 1;
             }
+            StmtKind::Match { scrutinee, arms } => {
+                let scrut_ty = self.infer(scrutinee);
+                let enum_name = match scrut_ty {
+                    Type::Enum(name) => Some(name),
+                    Type::Error => None,
+                    other => {
+                        self.error(
+                            "NXS031",
+                            format!("match scrutinee must have an enum type, found `{other}`"),
+                            statement.span,
+                        );
+                        None
+                    }
+                };
+
+                if let Some(enum_name) = enum_name {
+                    let info = self.analysis.enums.get(enum_name).cloned();
+                    if let Some(info) = info {
+                        let mut seen = std::collections::HashSet::new();
+                        let mut else_seen = false;
+                        let mut else_not_last = false;
+                        for (index, arm) in arms.iter().enumerate() {
+                            match &arm.pattern {
+                                Some(variant) => {
+                                    if else_seen {
+                                        self.error(
+                                            "NXS034",
+                                            "case arm cannot follow an `else` arm".to_string(),
+                                            arm.span,
+                                        );
+                                    }
+                                    if !seen.insert(variant.clone()) {
+                                        self.error(
+                                            "NXS032",
+                                            format!("duplicate match arm for variant `{variant}`"),
+                                            arm.span,
+                                        );
+                                    }
+                                    if !info.variants.iter().any(|value| value == variant) {
+                                        self.error(
+                                            "NXS030",
+                                            format!(
+                                                "enum `{enum_name}` has no variant `{variant}`"
+                                            ),
+                                            arm.span,
+                                        );
+                                    }
+                                }
+                                None => {
+                                    if else_seen {
+                                        self.error(
+                                            "NXS034",
+                                            "only one `else` arm is allowed".to_string(),
+                                            arm.span,
+                                        );
+                                    }
+                                    else_seen = true;
+                                    if index + 1 != arms.len() {
+                                        else_not_last = true;
+                                    }
+                                }
+                            }
+                            self.check_block(&arm.body, false);
+                        }
+                        if else_not_last {
+                            self.error(
+                                "NXS034",
+                                "`else` arm must be the last match arm".to_string(),
+                                statement.span,
+                            );
+                        }
+                        if !else_seen && seen.len() < info.variants.len() {
+                            self.warning(
+                                "NXS033",
+                                format!("match does not cover all variants of enum `{enum_name}`"),
+                                statement.span,
+                            );
+                        }
+                    }
+                } else {
+                    for arm in arms {
+                        self.check_block(&arm.body, false);
+                    }
+                }
+            }
             StmtKind::Return(value) => {
                 let Some(sig) = self.current_fn.clone() else {
                     return;
@@ -738,6 +927,17 @@ impl<'a> Checker<'a> {
                     var.ty
                 } else if let Some(ty) = self.analysis.consts.get(name).copied() {
                     ty
+                } else if let Some(enum_name) = self.analysis.variant_map.get(name).copied() {
+                    let info = self.analysis.enum_info(enum_name);
+                    let index = info
+                        .and_then(|info| info.variants.iter().position(|variant| variant == name))
+                        .map(|index| index as u32);
+                    if let Some(index) = index {
+                        self.analysis
+                            .variant_values
+                            .insert(expr.span, (enum_name, index));
+                    }
+                    Type::Enum(enum_name)
                 } else {
                     self.error("NXS001", format!("unknown variable `{name}`"), expr.span);
                     Type::Error
@@ -815,6 +1015,7 @@ impl<'a> Checker<'a> {
                         if ty == Type::Bool
                             || ty == Type::Char
                             || ty == Type::String
+                            || matches!(ty, Type::Enum(_))
                             || ty.is_numeric()
                         {
                             Type::Bool
@@ -858,34 +1059,55 @@ impl<'a> Checker<'a> {
                 name,
                 name_span,
             } => {
-                let base_ty = self.infer(base);
-                if base_ty == Type::Error {
-                    Type::Error
-                } else if let Type::Struct(struct_name) = base_ty {
-                    let info = self.analysis.structs.get(struct_name).cloned();
-                    if let Some(info) = info
-                        && let Some(index) = info.fields.iter().position(|(field, _)| field == name)
-                    {
-                        let field_ty = info.fields[index].1;
+                if let ExprKind::Ident(base_name) = &base.kind
+                    && self.lookup(base_name).is_none()
+                    && self.analysis.enum_info(base_name).is_some()
+                {
+                    let info = self.analysis.enum_info(base_name).cloned().unwrap();
+                    if let Some(index) = info.variants.iter().position(|variant| variant == name) {
                         self.analysis
-                            .field_reads
-                            .insert(expr.span, (info.name_static, index as u32, field_ty));
-                        field_ty
+                            .variant_values
+                            .insert(expr.span, (info.name_static, index as u32));
+                        Type::Enum(info.name_static)
                     } else {
                         self.error(
-                            "NXS027",
-                            format!("struct `{struct_name}` has no field `{name}`"),
+                            "NXS030",
+                            format!("enum `{base_name}` has no variant `{name}`"),
                             *name_span,
                         );
                         Type::Error
                     }
                 } else {
-                    self.error(
-                        "NXS027",
-                        format!("cannot access field `{name}` on a value of type `{base_ty}`"),
-                        *name_span,
-                    );
-                    Type::Error
+                    let base_ty = self.infer(base);
+                    if base_ty == Type::Error {
+                        Type::Error
+                    } else if let Type::Struct(struct_name) = base_ty {
+                        let info = self.analysis.structs.get(struct_name).cloned();
+                        if let Some(info) = info
+                            && let Some(index) =
+                                info.fields.iter().position(|(field, _)| field == name)
+                        {
+                            let field_ty = info.fields[index].1;
+                            self.analysis
+                                .field_reads
+                                .insert(expr.span, (info.name_static, index as u32, field_ty));
+                            field_ty
+                        } else {
+                            self.error(
+                                "NXS027",
+                                format!("struct `{struct_name}` has no field `{name}`"),
+                                *name_span,
+                            );
+                            Type::Error
+                        }
+                    } else {
+                        self.error(
+                            "NXS027",
+                            format!("cannot access field `{name}` on a value of type `{base_ty}`"),
+                            *name_span,
+                        );
+                        Type::Error
+                    }
                 }
             }
             ExprKind::Cast { expr: inner, ty } => {
@@ -1062,6 +1284,9 @@ impl<'a> Checker<'a> {
         if let Some(info) = self.analysis.structs.get(&ty.name) {
             return Type::Struct(info.name_static);
         }
+        if let Some(info) = self.analysis.enums.get(&ty.name) {
+            return Type::Enum(info.name_static);
+        }
         self.error("NXS002", format!("unknown type `{}`", ty.name), ty.span);
         Type::Error
     }
@@ -1100,6 +1325,9 @@ impl<'a> Checker<'a> {
     fn stmt_returns(&self, statement: &Stmt) -> bool {
         match &statement.kind {
             StmtKind::Return(_) => true,
+            StmtKind::Match { arms, .. } => {
+                !arms.is_empty() && arms.iter().all(|arm| self.block_returns(&arm.body))
+            }
             StmtKind::If {
                 branches,
                 else_branch: Some(else_block),
