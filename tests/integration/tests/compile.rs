@@ -229,6 +229,25 @@ fn struct_errors_are_reported() {
 }
 
 #[test]
+fn string_ordering() {
+    let source = r#"
+fn main():
+    let a = "apple"
+    let b = "banana"
+    print(a < b)
+    print(a > b)
+    print(a <= "apple")
+    print(a >= "apple")
+    print(b < a)
+    if a < b:
+        print("-less")
+"#;
+    let (stdout, _stderr, code) = run_source(source);
+    assert_eq!(code, 0);
+    assert_eq!(stdout, "truefalsetruetruefalse-less");
+}
+
+#[test]
 fn if_elif_else() {
     let source = r#"
 fn classify(x: i64) -> i64:

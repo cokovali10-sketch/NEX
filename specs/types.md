@@ -37,6 +37,8 @@ requires an explicit conversion.
 - Comparisons require both operands to have the same type.
 - `==` and `!=` are defined for `bool`, `char`, numeric types, and `string`
   (string equality compares contents, not pointers).
+- `<`, `<=`, `>`, and `>=` are defined for `bool`, `char`, numeric types, and
+  `string` (lexicographic ordering by UTF-8 bytes).
 - `and` and `or` require `bool`.
 - `not` requires `bool`.
 - Unary `-` requires a signed integer or floating point type.

@@ -24,7 +24,7 @@ planned and are not yet implemented.
 - `return`, `break`, `continue`.
 - Function calls.
 - Built-in `print` and `println`.
-- String equality (`==`, `!=`) comparing contents.
+- String comparison (`==`, `!=`, `<`, `<=`, `>`, `>=`) comparing contents.
 - Struct declarations with scalar fields, construction, field access, and
   field assignment (see `specs/types.md`).
 - Explicit casts with `as`.

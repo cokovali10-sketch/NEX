@@ -831,7 +831,11 @@ impl<'a> Checker<'a> {
                         let Some(ty) = self.unify_operands(left, right) else {
                             return Type::Error;
                         };
-                        if ty == Type::Bool || ty == Type::Char || ty.is_numeric() {
+                        if ty == Type::Bool
+                            || ty == Type::Char
+                            || ty == Type::String
+                            || ty.is_numeric()
+                        {
                             Type::Bool
                         } else {
                             self.error(

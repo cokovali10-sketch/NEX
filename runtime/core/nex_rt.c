@@ -97,6 +97,16 @@ int nex_rt_str_eq(const char *left, const char *right) {
     return strcmp(left, right) == 0;
 }
 
+int nex_rt_str_cmp(const char *left, const char *right) {
+    if (left == NULL || right == NULL) {
+        if (left == right) {
+            return 0;
+        }
+        return left == NULL ? -1 : 1;
+    }
+    return strcmp(left, right);
+}
+
 void nex_rt_panic(const char *message) {
     if (message != NULL) {
         fprintf(stderr, "NEX runtime error: %s\n", message);
