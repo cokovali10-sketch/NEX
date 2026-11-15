@@ -63,7 +63,7 @@ struct Point:
   struct fields are not supported.
 - A struct value can be copied by initializing a binding from an existing
   struct variable or constructor, for example `let q = p`.
-- Struct values cannot be compared with `==`/`!=` yet.
+- Struct values support `==` and `!=`, comparing all fields.
 
 ## User-defined enums
 
@@ -98,7 +98,7 @@ a[1] = 9
   variable or literal.
 - Array types can be written in source as `[T; N]`, so arrays can be used in
   type annotations, function parameters, and return values.
-- Array values still cannot be compared.
+- Array values support `==` and `!=`, comparing all elements.
 
 ## Tuples
 
@@ -113,7 +113,7 @@ print(t.0)
 - Tuple values can be copied by initializing a binding.
 - Tuple types can be written in source as `(T, U, ...)`, so tuples can be used
   in type annotations, function parameters, and return values.
-- Tuple values still cannot be compared.
+- Tuple values support `==` and `!=`, comparing all elements.
 
 ## Explicit casts
 

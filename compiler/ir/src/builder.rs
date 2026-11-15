@@ -922,6 +922,165 @@ fn lower_print_aggregate(
     Ok(())
 }
 
+fn lower_scalar_place_equality(
+    builder: &mut FunctionBuilder,
+    lhs: ValueId,
+    rhs: ValueId,
+    ty: Type,
+) -> Result<Operand, String> {
+    match ty {
+        Type::String => {
+            let lhs_value = builder.new_value();
+            builder.emit(Inst::Load {
+                dst: lhs_value,
+                ptr: lhs,
+                ty: IrType::String,
+            });
+            let rhs_value = builder.new_value();
+            builder.emit(Inst::Load {
+                dst: rhs_value,
+                ptr: rhs,
+                ty: IrType::String,
+            });
+            let call_dst = builder.new_value();
+            builder.emit(Inst::Call {
+                dst: Some(call_dst),
+                name: "nex_rt_str_eq".to_string(),
+                args: vec![Operand::Value(lhs_value), Operand::Value(rhs_value)],
+                ret: IrType::I32,
+            });
+            let dst = builder.new_value();
+            builder.emit(Inst::Bin {
+                dst,
+                op: BinOp::Ne,
+                ty: IrType::I32,
+                lhs: Operand::Value(call_dst),
+                rhs: Operand::Const(Const::Int(0)),
+            });
+            Ok(Operand::Value(dst))
+        }
+        _ => {
+            let ir_ty = IrType::from_type(ty);
+            let lhs_value = builder.new_value();
+            builder.emit(Inst::Load {
+                dst: lhs_value,
+                ptr: lhs,
+                ty: ir_ty,
+            });
+            let rhs_value = builder.new_value();
+            builder.emit(Inst::Load {
+                dst: rhs_value,
+                ptr: rhs,
+                ty: ir_ty,
+            });
+            let dst = builder.new_value();
+            builder.emit(Inst::Bin {
+                dst,
+                op: BinOp::Eq,
+                ty: ir_ty,
+                lhs: Operand::Value(lhs_value),
+                rhs: Operand::Value(rhs_value),
+            });
+            Ok(Operand::Value(dst))
+        }
+    }
+}
+
+fn lower_place_equality(
+    builder: &mut FunctionBuilder,
+    lhs: ValueId,
+    rhs: ValueId,
+    ty: Type,
+    analysis: &Analysis,
+) -> Result<Operand, String> {
+    match ty {
+        Type::Struct(name) => {
+            let Some(info) = analysis.struct_info(name) else {
+                return Err(format!("unknown struct `{name}` during code generation"));
+            };
+            let mut result: Option<Operand> = None;
+            for (index, (_, field_ty)) in info.fields.iter().enumerate() {
+                let lhs_field = builder.new_value();
+                builder.emit(Inst::FieldPtr {
+                    dst: lhs_field,
+                    base: lhs,
+                    struct_name: name,
+                    index: index as u32,
+                    field_ty: IrType::from_type(*field_ty),
+                });
+                let rhs_field = builder.new_value();
+                builder.emit(Inst::FieldPtr {
+                    dst: rhs_field,
+                    base: rhs,
+                    struct_name: name,
+                    index: index as u32,
+                    field_ty: IrType::from_type(*field_ty),
+                });
+                let cmp = lower_place_equality(builder, lhs_field, rhs_field, *field_ty, analysis)?;
+                result = Some(match result {
+                    None => cmp,
+                    Some(previous) => {
+                        let dst = builder.new_value();
+                        builder.emit(Inst::Bin {
+                            dst,
+                            op: BinOp::Mul,
+                            ty: IrType::Bool,
+                            lhs: previous,
+                            rhs: cmp,
+                        });
+                        Operand::Value(dst)
+                    }
+                });
+            }
+            Ok(result.unwrap_or(Operand::Const(Const::Bool(true))))
+        }
+        Type::Array { display, .. } => {
+            let Some(info) = analysis.array_info(display) else {
+                return Err("missing array type information".to_string());
+            };
+            let elem_ty = info.elem;
+            let elem_ir = IrType::from_type(elem_ty);
+            let mut result: Option<Operand> = None;
+            for index in 0..info.len {
+                let idx = Operand::Const(Const::Int(index as i64));
+                let lhs_elem = builder.new_value();
+                builder.emit(Inst::IndexPtr {
+                    dst: lhs_elem,
+                    base: lhs,
+                    array_type: info.llvm,
+                    index: idx.clone(),
+                    elem_ty: elem_ir,
+                });
+                let rhs_elem = builder.new_value();
+                builder.emit(Inst::IndexPtr {
+                    dst: rhs_elem,
+                    base: rhs,
+                    array_type: info.llvm,
+                    index: idx,
+                    elem_ty: elem_ir,
+                });
+                let cmp = lower_place_equality(builder, lhs_elem, rhs_elem, elem_ty, analysis)?;
+                result = Some(match result {
+                    None => cmp,
+                    Some(previous) => {
+                        let dst = builder.new_value();
+                        builder.emit(Inst::Bin {
+                            dst,
+                            op: BinOp::Mul,
+                            ty: IrType::Bool,
+                            lhs: previous,
+                            rhs: cmp,
+                        });
+                        Operand::Value(dst)
+                    }
+                });
+            }
+            Ok(result.unwrap_or(Operand::Const(Const::Bool(true))))
+        }
+        _ => lower_scalar_place_equality(builder, lhs, rhs, ty),
+    }
+}
+
 fn lower_match(
     builder: &mut FunctionBuilder,
     scrutinee: &Expr,
@@ -1261,8 +1420,35 @@ fn lower_expr(
 
             let bin_op = BinOp::from_ast(*op)
                 .ok_or_else(|| "logical operators must be lowered separately".to_string())?;
-            let operand_ty =
-                IrType::from_type(analysis.expr_type(left.span).unwrap_or(Type::Error));
+            let ty = analysis.expr_type(left.span).unwrap_or(Type::Error);
+            let operand_ty = IrType::from_type(ty);
+
+            if matches!(bin_op, BinOp::Eq | BinOp::Ne)
+                && matches!(ty, Type::Struct(_) | Type::Array { .. })
+            {
+                let lhs_place = if let Type::Struct(_) = ty {
+                    lower_struct_place(builder, left, scopes, storage, analysis)?
+                } else {
+                    lower_array_place(builder, left, scopes, storage, analysis)?
+                };
+                let rhs_place = if let Type::Struct(_) = ty {
+                    lower_struct_place(builder, right, scopes, storage, analysis)?
+                } else {
+                    lower_array_place(builder, right, scopes, storage, analysis)?
+                };
+                let equal = lower_place_equality(builder, lhs_place, rhs_place, ty, analysis)?;
+                if bin_op == BinOp::Ne {
+                    let dst = builder.new_value();
+                    builder.emit(Inst::Un {
+                        dst,
+                        op: UnOp::Not,
+                        ty: IrType::Bool,
+                        operand: equal,
+                    });
+                    return Ok(Operand::Value(dst));
+                }
+                return Ok(equal);
+            }
 
             if (bin_op == BinOp::Div || bin_op == BinOp::Rem) && operand_ty.is_integer() {
                 let lhs = lower_expr(builder, left, scopes, storage, analysis, Type::Error)?;

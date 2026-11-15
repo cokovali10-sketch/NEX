@@ -603,6 +603,40 @@ fn main():
 }
 
 #[test]
+fn aggregate_equality() {
+    let source = r#"
+struct Point:
+    x: i64
+    y: i64
+
+fn main():
+    let p = Point(3, 4)
+    let q = Point(3, 4)
+    let r = Point(1, 2)
+    print(p == q)
+    print(" ")
+    print(p != r)
+    print(" ")
+    let a: [i64; 3] = [1, 2, 3]
+    let b: [i64; 3] = [1, 2, 3]
+    let c: [i64; 3] = [1, 2, 4]
+    print(a == b)
+    print(" ")
+    print(a != c)
+    print(" ")
+    let t = (7, 8)
+    let u = (7, 8)
+    let v = (7, 9)
+    print(t == u)
+    print(" ")
+    print(t != v)
+"#;
+    let (stdout, _stderr, code) = run_source(source);
+    assert_eq!(code, 0);
+    assert_eq!(stdout, "true true true true true true");
+}
+
+#[test]
 fn aggregate_constants() {
     let source = r#"
 struct Point:

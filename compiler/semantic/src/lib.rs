@@ -1188,6 +1188,7 @@ impl<'a> Checker<'a> {
                             || ty == Type::String
                             || matches!(ty, Type::Enum(_))
                             || ty.is_numeric()
+                            || matches!(ty, Type::Struct(_) | Type::Array { .. })
                         {
                             Type::Bool
                         } else {
