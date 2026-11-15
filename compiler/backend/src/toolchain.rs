@@ -245,6 +245,9 @@ impl Clang {
         }
         if cfg!(windows) {
             args.push("-static".to_string());
+        } else {
+            // The runtime uses sqrt/pow from libm; link it explicitly on Unix.
+            args.push("-lm".to_string());
         }
         self.run_with_args(&args)
     }
