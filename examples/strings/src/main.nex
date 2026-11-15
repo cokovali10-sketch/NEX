@@ -1,4 +1,4 @@
-﻿fn main():
+fn main():
     var text = "Hello NEX World"
     print("contains: ")
     println(str_contains(text, "NEX"))

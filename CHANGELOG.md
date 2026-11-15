@@ -10,6 +10,10 @@
 - `examples/strings` demonstrating the string builtins.
 - `docs/standard-library.md` documenting every implemented builtin.
 
+- `nex fmt` formats NEX sources from the AST, with `--check` and `--write`
+  modes. Compound assignments are preserved; comments are dropped (the lexer
+  discards them) and the command warns before overwriting such a file.
+
 ### Fixed
 
 - The lexer now skips a leading UTF-8 BOM instead of reporting `unexpected character`.
@@ -72,5 +76,7 @@
 - Arrays and tuples cannot yet be used as parameter or return types.
 - No ownership or lifetime checking yet.
 - `pub` declarations are parsed but visibility is not enforced yet.
-- `nex fmt`, `nex lint`, `nex add`, and `nex benchmark` are not implemented.
+- `nex lint`, `nex add`, `nex benchmark`, `nex debug`, and `nex profile` are
+  not implemented yet.
+- `nex fmt` drops comments, because the lexer discards them.
 - `nex` arithmetic is limited to numeric types, `bool`, `char`, and `string`.

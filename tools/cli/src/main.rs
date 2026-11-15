@@ -42,7 +42,8 @@ fn main() -> ExitCode {
             print_help();
             ExitCode::SUCCESS
         }
-        "fmt" | "lint" | "add" | "benchmark" | "debug" | "profile" => {
+        "fmt" => cmd_fmt(&args[1..]),
+        "lint" | "add" | "benchmark" | "debug" | "profile" => {
             eprintln!(
                 "nex: `{}` is planned for a later NEX release; see ROADMAP.md",
                 args[0]
@@ -57,6 +58,88 @@ fn main() -> ExitCode {
     }
 }
 
+fn cmd_fmt(args: &[String]) -> ExitCode {
+    let mut write = false;
+    let mut check = false;
+    let mut paths: Vec<String> = Vec::new();
+
+    for arg in args {
+        match arg.as_str() {
+            "--write" | "-w" => write = true,
+            "--check" => check = true,
+            "--help" | "-h" => {
+                println!("usage: nex fmt [--check | --write] <file.nex>...");
+                println!();
+                println!("  --check   exit 1 when a file is not formatted");
+                println!("  --write   rewrite the file in place");
+                println!();
+                println!("With no flag the formatted source is printed to stdout.");
+                println!("Comments are dropped: NEX comments are not preserved yet.");
+                return ExitCode::SUCCESS;
+            }
+            other => paths.push(other.to_string()),
+        }
+    }
+
+    if paths.is_empty() {
+        eprintln!("nex: `fmt` requires at least one .nex file");
+        return ExitCode::from(2);
+    }
+
+    let mut status = ExitCode::SUCCESS;
+    for path in paths {
+        let source = match fs::read_to_string(&path) {
+            Ok(source) => source,
+            Err(error) => {
+                eprintln!("nex: cannot read `{path}`: {error}");
+                status = ExitCode::from(2);
+                continue;
+            }
+        };
+
+        let result = nex_fmt::format_source(&source);
+        if result.has_errors() {
+            eprintln!("nex: `{path}` is not valid NEX; it was left untouched");
+            for _diagnostic in &result.diagnostics {
+                let file = nex_diagnostics::SourceFile::new(path.clone(), source.clone());
+                eprintln!("{}", render_all(&file, &result.diagnostics));
+            }
+            status = ExitCode::from(1);
+            continue;
+        }
+
+        if let Some(reason) = &result.unsupported {
+            eprintln!("nex: `{path}` was left untouched: {reason}");
+            status = ExitCode::from(1);
+            continue;
+        }
+
+        if result.had_comments {
+            eprintln!("nex: warning: comments in `{path}` are dropped by `fmt`");
+        }
+
+        let changed = result.source != source;
+        if check {
+            if changed {
+                println!("{path}: would reformat");
+                status = ExitCode::from(1);
+            } else {
+                println!("{path}: already formatted");
+            }
+        } else if write {
+            if changed {
+                if let Err(error) = fs::write(&path, &result.source) {
+                    eprintln!("nex: cannot write `{path}`: {error}");
+                    status = ExitCode::from(2);
+                }
+            }
+        } else {
+            print!("{}", result.source);
+        }
+    }
+
+    status
+}
 fn cmd_new(args: &[String]) -> ExitCode {
     if args.is_empty() {
         eprintln!("nex: `new` requires a project name");

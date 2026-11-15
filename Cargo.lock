@@ -27,6 +27,7 @@ dependencies = [
  "nex-backend",
  "nex-diagnostics",
  "nex-driver",
+ "nex-fmt",
  "nex-lexer",
  "nex-parser",
  "nex-semantic",
@@ -47,6 +48,16 @@ dependencies = [
  "nex-lexer",
  "nex-parser",
  "nex-semantic",
+]
+
+[[package]]
+name = "nex-fmt"
+version = "0.1.0"
+dependencies = [
+ "nex-ast",
+ "nex-diagnostics",
+ "nex-lexer",
+ "nex-parser",
 ]
 
 [[package]]

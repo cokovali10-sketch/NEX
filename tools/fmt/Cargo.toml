@@ -1,0 +1,15 @@
+[package]
+name = "nex-fmt"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "NEX source formatter"
+
+[dependencies]
+nex-ast = { workspace = true }
+nex-diagnostics = { workspace = true }
+nex-lexer = { workspace = true }
+nex-parser = { workspace = true }

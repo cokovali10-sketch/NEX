@@ -18,3 +18,4 @@ nex-lexer.workspace = true
 nex-parser.workspace = true
 nex-ast.workspace = true
 nex-semantic.workspace = true
+nex-fmt.workspace = true
