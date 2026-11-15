@@ -783,6 +783,128 @@ fn copy_struct(
     Ok(())
 }
 
+fn emit_print_str(builder: &mut FunctionBuilder, value: &str) {
+    builder.emit(Inst::Call {
+        dst: None,
+        name: "nex_rt_print_str".to_string(),
+        args: vec![Operand::Const(Const::Str(value.to_string()))],
+        ret: IrType::Void,
+    });
+}
+
+fn lower_print_scalar_place(
+    builder: &mut FunctionBuilder,
+    place: ValueId,
+    ty: Type,
+) -> Result<(), String> {
+    let ir_ty = IrType::from_type(ty);
+    let dst = builder.new_value();
+    builder.emit(Inst::Load {
+        dst,
+        ptr: place,
+        ty: ir_ty,
+    });
+    let (runtime_name, cast) = runtime_print_name("print", ty)?;
+    let arg = if let Some((kind, from, to)) = cast {
+        let cast_dst = builder.new_value();
+        builder.emit(Inst::Cast {
+            dst: cast_dst,
+            kind,
+            from,
+            to,
+            operand: Operand::Value(dst),
+        });
+        Operand::Value(cast_dst)
+    } else {
+        Operand::Value(dst)
+    };
+    builder.emit(Inst::Call {
+        dst: None,
+        name: runtime_name,
+        args: vec![arg],
+        ret: IrType::Void,
+    });
+    Ok(())
+}
+
+fn lower_print_value_place(
+    builder: &mut FunctionBuilder,
+    place: ValueId,
+    ty: Type,
+    analysis: &Analysis,
+) -> Result<(), String> {
+    match ty {
+        Type::Struct(name) => {
+            let tuple = name.starts_with("tuple_");
+            if tuple {
+                emit_print_str(builder, "(");
+            } else {
+                emit_print_str(builder, "{");
+            }
+            if let Some(info) = analysis.struct_info(name) {
+                for (index, (_, field_ty)) in info.fields.iter().enumerate() {
+                    if index > 0 {
+                        emit_print_str(builder, ", ");
+                    }
+                    let field_ptr = builder.new_value();
+                    builder.emit(Inst::FieldPtr {
+                        dst: field_ptr,
+                        base: place,
+                        struct_name: name,
+                        index: index as u32,
+                        field_ty: IrType::from_type(*field_ty),
+                    });
+                    lower_print_value_place(builder, field_ptr, *field_ty, analysis)?;
+                }
+            }
+            if name.starts_with("tuple_") {
+                emit_print_str(builder, ")");
+            } else {
+                emit_print_str(builder, "}");
+            }
+        }
+        Type::Array { display, .. } => {
+            if let Some(info) = analysis.array_info(display) {
+                let elem_ty = info.elem;
+                let elem_ir = IrType::from_type(elem_ty);
+                emit_print_str(builder, "[");
+                for index in 0..info.len {
+                    if index > 0 {
+                        emit_print_str(builder, ", ");
+                    }
+                    let idx = Operand::Const(Const::Int(index as i64));
+                    let elem_ptr = builder.new_value();
+                    builder.emit(Inst::IndexPtr {
+                        dst: elem_ptr,
+                        base: place,
+                        array_type: info.llvm,
+                        index: idx,
+                        elem_ty: elem_ir,
+                    });
+                    lower_print_value_place(builder, elem_ptr, elem_ty, analysis)?;
+                }
+                emit_print_str(builder, "]");
+            }
+        }
+        _ => lower_print_scalar_place(builder, place, ty)?,
+    }
+    Ok(())
+}
+
+fn lower_print_aggregate(
+    builder: &mut FunctionBuilder,
+    place: ValueId,
+    ty: Type,
+    newline: bool,
+    analysis: &Analysis,
+) -> Result<(), String> {
+    lower_print_value_place(builder, place, ty, analysis)?;
+    if newline {
+        emit_print_str(builder, "\n");
+    }
+    Ok(())
+}
+
 fn lower_match(
     builder: &mut FunctionBuilder,
     scrutinee: &Expr,
@@ -1226,6 +1348,15 @@ fn lower_expr(
                     return Err(format!("`{callee}` expects exactly one argument"));
                 }
                 let arg_ty = analysis.expr_type(args[0].span).unwrap_or(Type::Error);
+                if matches!(arg_ty, Type::Struct(_) | Type::Array { .. }) {
+                    let place = if let Type::Struct(_) = arg_ty {
+                        lower_struct_place(builder, &args[0], scopes, storage, analysis)?
+                    } else {
+                        lower_array_place(builder, &args[0], scopes, storage, analysis)?
+                    };
+                    lower_print_aggregate(builder, place, arg_ty, callee == "println", analysis)?;
+                    return Ok(Operand::Const(Const::Bool(false)));
+                }
                 let arg_value =
                     lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
                 let (runtime_name, cast) = runtime_print_name(callee, arg_ty)?;

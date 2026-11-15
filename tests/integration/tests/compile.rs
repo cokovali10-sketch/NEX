@@ -227,7 +227,7 @@ fn struct_errors_are_reported() {
     );
 
     let printed =
-        compile("struct Point:\n    x: i64\n\nfn main():\n    let p = Point(1)\n    print(p)\n");
+        compile("enum Color:\n    Red\n\nfn main():\n    let c = Color.Red\n    print(c)\n");
     assert!(
         printed
             .diagnostics
@@ -602,6 +602,25 @@ fn main():
     let (stdout, _stderr, code) = run_source(source);
     assert_eq!(code, 0);
     assert_eq!(stdout, "7 4 1 2");
+}
+
+#[test]
+fn prints_aggregate_values() {
+    let source = r#"
+struct Point:
+    x: i64
+    y: i64
+
+fn main():
+    print(Point(3, 4))
+    print(" ")
+    print([1, 2, 3])
+    print(" ")
+    print((7, 8))
+"#;
+    let (stdout, _stderr, code) = run_source(source);
+    assert_eq!(code, 0);
+    assert_eq!(stdout, "{3, 4} [1, 2, 3] (7, 8)");
 }
 
 #[test]

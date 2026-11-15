@@ -126,6 +126,8 @@ impl Type {
                 | Self::F32
                 | Self::F64
                 | Self::String
+                | Self::Struct(_)
+                | Self::Array { .. }
         )
     }
 

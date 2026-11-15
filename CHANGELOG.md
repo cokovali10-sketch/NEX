@@ -12,6 +12,7 @@
 - Enum declarations and `match` over enum values.
 - Struct declarations with scalar fields, construction, field access, and
   field assignment.
+- Printing for struct, array, and tuple values.
 - Nested struct fields, including reads, copies, and assignment.
 - Struct parameters and return values by value.
 - String equality and inequality (`==`, `!=`) with content comparison.
