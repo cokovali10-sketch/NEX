@@ -1913,6 +1913,32 @@ fn lower_expr(
                 return Ok(Operand::Const(Const::Bool(false)));
             }
 
+            if callee == "concat" {
+                let left = lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
+                let right = lower_expr(builder, &args[1], scopes, storage, analysis, Type::Error)?;
+                let dst = builder.new_value();
+                builder.emit(Inst::Call {
+                    dst: Some(dst),
+                    name: "nex_rt_str_concat".to_string(),
+                    args: vec![left, right],
+                    ret: IrType::String,
+                });
+                return Ok(Operand::Value(dst));
+            }
+
+            if callee == "to_string" {
+                let arg_value =
+                    lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
+                let dst = builder.new_value();
+                builder.emit(Inst::Call {
+                    dst: Some(dst),
+                    name: "nex_rt_i64_to_string".to_string(),
+                    args: vec![arg_value],
+                    ret: IrType::String,
+                });
+                return Ok(Operand::Value(dst));
+            }
+
             let signature = analysis
                 .function(callee)
                 .ok_or_else(|| format!("unknown function `{callee}` during code generation"))?;

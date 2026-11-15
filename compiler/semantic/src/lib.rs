@@ -1817,6 +1817,62 @@ impl<'a> Checker<'a> {
             return Type::Void;
         }
 
+        if callee == "concat" {
+            if args.len() != 2 {
+                self.error(
+                    "NXS004",
+                    format!("`concat` expects 2 arguments, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let left_ty = self.infer(&args[0]);
+            let right_ty = self.infer(&args[1]);
+            if (left_ty != Type::String || right_ty != Type::String)
+                && (left_ty != Type::Error && right_ty != Type::Error)
+            {
+                self.error(
+                    "NXS004",
+                    format!("`concat` expects `string` arguments, found `{left_ty}` and `{right_ty}`"),
+                    span,
+                );
+                return Type::Error;
+            }
+            if left_ty == Type::Error || right_ty == Type::Error {
+                return Type::Error;
+            }
+            return Type::String;
+        }
+
+        if callee == "to_string" {
+            if args.len() != 1 {
+                self.error(
+                    "NXS004",
+                    format!("`to_string` expects 1 argument, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let arg_ty = self.infer(&args[0]);
+            if arg_ty == Type::I64 {
+                return Type::String;
+            }
+            if arg_ty != Type::Error {
+                self.error(
+                    "NXS004",
+                    format!("`to_string` expects `i64`, found `{arg_ty}`"),
+                    args[0].span,
+                );
+            }
+            return Type::Error;
+        }
+
         if let Some(info) = self.analysis.structs.get(callee).cloned() {
             if callee.contains('.') && !info.public {
                 self.error(

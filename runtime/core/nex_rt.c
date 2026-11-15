@@ -153,3 +153,33 @@ void nex_rt_free(long long ptr) {
 long long nex_rt_peek_i64(long long ptr) { return *(long long *)ptr; }
 void nex_rt_poke_i64(long long ptr, long long value) { *(long long *)ptr = value; }
 
+char *nex_rt_str_concat(const char *a, const char *b) {
+    size_t la = a ? strlen(a) : 0;
+    size_t lb = b ? strlen(b) : 0;
+    char *result = (char *)malloc(la + lb + 1);
+    if (result == NULL) {
+        return NULL;
+    }
+    if (a) {
+        memcpy(result, a, la);
+    }
+    if (b) {
+        memcpy(result + la, b, lb);
+    }
+    result[la + lb] = '\0';
+    return result;
+}
+
+char *nex_rt_i64_to_string(long long value) {
+    char buffer[32];
+    int length = snprintf(buffer, sizeof(buffer), "%lld", value);
+    if (length < 0) {
+        return NULL;
+    }
+    char *result = (char *)malloc((size_t)length + 1);
+    if (result == NULL) {
+        return NULL;
+    }
+    memcpy(result, buffer, (size_t)length + 1);
+    return result;
+}

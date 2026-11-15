@@ -53,7 +53,7 @@ runtime (`runtime/core/nex_rt.c`) — not a hidden language runtime.
   type annotations and function parameters and returns, printing,
   constants, equality for aggregate values, external C calls, and
   `len`/`abs`/`min`/`max`/`sqrt`/`pow`/`assert`/`panic`/`alloc`/`free`/
-  `peek`/`poke` built-ins, tuples, and modules with `use`
+  `peek`/`poke`/`concat`/`to_string` built-ins, tuples, and modules with `use`
   aliases.
 - Not implemented yet: generics, traits, the full standard library, package
   manager, debugger, profiler, and NEX Studio.

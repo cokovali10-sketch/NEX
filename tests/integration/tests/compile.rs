@@ -603,6 +603,20 @@ fn main():
 }
 
 #[test]
+fn builtins_concat_and_to_string() {
+    let source = r#"
+fn main():
+    print(concat("hello", " "))
+    print(concat("world", "!"))
+    print(" ")
+    print(to_string(42))
+"#;
+    let (stdout, _stderr, code) = run_source(source);
+    assert_eq!(code, 0);
+    assert_eq!(stdout, "hello world! 42");
+}
+
+#[test]
 fn builtins_peek_and_poke() {
     let source = r#"
 fn main():
