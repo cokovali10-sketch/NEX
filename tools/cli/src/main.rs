@@ -150,10 +150,20 @@ fn cmd_build(args: &[String]) -> ExitCode {
                 });
                 let _ = fs::create_dir_all(&manifest_dir);
                 let manifest_path = manifest_dir.join("build.json");
+                let target = if cfg!(target_os = "windows") {
+                    "windows-x86_64"
+                } else if cfg!(target_os = "linux") {
+                    "linux-x86_64"
+                } else if cfg!(target_os = "macos") {
+                    "macos-aarch64"
+                } else {
+                    "unknown"
+                };
                 let manifest = format!(
-                    "{{\"version\":\"0.2.0\",\"profile\":\"{:?}\",\"entry\":\"{}\",\"target\":\"windows-x86_64\"}}\n",
+                    "{{\"version\":\"0.2.0\",\"profile\":\"{:?}\",\"entry\":\"{}\",\"target\":\"{}\"}}\n",
                     profile,
-                    project.entry.display()
+                    project.entry.display(),
+                    target
                 );
                 let _ = fs::write(&manifest_path, manifest);
                 ExitCode::SUCCESS
