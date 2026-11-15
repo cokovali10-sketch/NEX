@@ -23,6 +23,9 @@
 
 - `str_starts_with`, `str_ends_with`, `str_repeat`, and `str_replace`.
 
+- `str_reverse` and `parse_i64`. `abs` now accepts `f64`, and `to_string`
+  accepts `f64` and `bool`.
+
 ### Fixed
 
 - The lexer now skips a leading UTF-8 BOM instead of reporting `unexpected character`.

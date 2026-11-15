@@ -1567,13 +1567,13 @@ impl<'a> Checker<'a> {
                 return Type::Error;
             }
             let arg_ty = self.infer(&args[0]);
-            if arg_ty == Type::I64 {
-                return Type::I64;
+            if arg_ty == Type::I64 || arg_ty == Type::F64 {
+                return arg_ty;
             }
             if arg_ty != Type::Error {
                 self.error(
                     "NXS004",
-                    format!("`abs` expects `i64`, found `{arg_ty}`"),
+                    format!("`abs` expects `i64` or `f64`, found `{arg_ty}`"),
                     args[0].span,
                 );
             }
@@ -1942,6 +1942,54 @@ impl<'a> Checker<'a> {
             return value_ty;
         }
 
+        if callee == "str_reverse" {
+            if args.len() != 1 {
+                self.error(
+                    "NXS004",
+                    format!("`str_reverse` expects 1 argument, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let value_ty = self.infer(&args[0]);
+            if value_ty != Type::String && value_ty != Type::Error {
+                self.error(
+                    "NXS004",
+                    format!("`str_reverse` expects a `string`, found `{value_ty}`"),
+                    span,
+                );
+                return Type::Error;
+            }
+            return value_ty;
+        }
+
+        if callee == "parse_i64" {
+            if args.len() != 1 {
+                self.error(
+                    "NXS004",
+                    format!("`parse_i64` expects 1 argument, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let value_ty = self.infer(&args[0]);
+            if value_ty != Type::String && value_ty != Type::Error {
+                self.error(
+                    "NXS004",
+                    format!("`parse_i64` expects a `string`, found `{value_ty}`"),
+                    span,
+                );
+                return Type::Error;
+            }
+            return Type::I64;
+        }
+
         if callee == "str_starts_with" || callee == "str_ends_with" {
             if args.len() != 2 {
                 self.error(
@@ -2054,13 +2102,13 @@ impl<'a> Checker<'a> {
                 return Type::Error;
             }
             let arg_ty = self.infer(&args[0]);
-            if arg_ty == Type::I64 {
+            if arg_ty == Type::I64 || arg_ty == Type::F64 || arg_ty == Type::Bool {
                 return Type::String;
             }
             if arg_ty != Type::Error {
                 self.error(
                     "NXS004",
-                    format!("`to_string` expects `i64`, found `{arg_ty}`"),
+                    format!("`to_string` expects `i64`, `f64` or `bool`, found `{arg_ty}`"),
                     args[0].span,
                 );
             }

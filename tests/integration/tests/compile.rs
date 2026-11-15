@@ -1083,3 +1083,11 @@ fn str_repeat_with_zero_returns_empty_string() {
     assert_eq!(code, 0, "stderr: {stderr}");
     assert_eq!(stdout, "[]\n");
 }
+
+#[test]
+fn string_helpers_parse_and_reverse() {
+    let source = "fn main():\n    println(str_reverse(\"abc\"))\n    println(parse_i64(\"42\"))\n    println(abs(-2.5))\n    println(abs(-7))\n    println(to_string(2.5))\n    println(to_string(true))\n";
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "cba\n42\n2.5\n7\n2.5\ntrue\n");
+}

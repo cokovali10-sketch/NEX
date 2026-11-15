@@ -1760,14 +1760,20 @@ fn lower_expr(
             }
 
             if callee == "abs" {
+                let arg_ty = analysis.expr_type(args[0].span).unwrap_or(Type::Error);
                 let arg_value =
                     lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
                 let dst = builder.new_value();
+                let (name, ret) = if arg_ty == Type::F64 {
+                    ("nex_rt_abs_f64", IrType::F64)
+                } else {
+                    ("nex_rt_abs", IrType::I64)
+                };
                 builder.emit(Inst::Call {
                     dst: Some(dst),
-                    name: "nex_rt_abs".to_string(),
+                    name: name.to_string(),
                     args: vec![arg_value],
-                    ret: IrType::I64,
+                    ret,
                 });
                 return Ok(Operand::Value(dst));
             }
@@ -1989,6 +1995,30 @@ fn lower_expr(
                 return Ok(Operand::Value(dst));
             }
 
+            if callee == "str_reverse" {
+                let value = lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
+                let dst = builder.new_value();
+                builder.emit(Inst::Call {
+                    dst: Some(dst),
+                    name: "nex_rt_str_reverse".to_string(),
+                    args: vec![value],
+                    ret: IrType::String,
+                });
+                return Ok(Operand::Value(dst));
+            }
+
+            if callee == "parse_i64" {
+                let value = lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
+                let dst = builder.new_value();
+                builder.emit(Inst::Call {
+                    dst: Some(dst),
+                    name: "nex_rt_parse_i64".to_string(),
+                    args: vec![value],
+                    ret: IrType::I64,
+                });
+                return Ok(Operand::Value(dst));
+            }
+
             if callee == "str_starts_with" || callee == "str_ends_with" {
                 let value = lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
                 let other = lower_expr(builder, &args[1], scopes, storage, analysis, Type::Error)?;
@@ -2043,12 +2073,35 @@ fn lower_expr(
             }
 
             if callee == "to_string" {
+                let arg_ty = analysis.expr_type(args[0].span).unwrap_or(Type::Error);
                 let arg_value =
                     lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
                 let dst = builder.new_value();
+                if arg_ty == Type::Bool {
+                    // The runtime takes a C int; widen the NEX bool first.
+                    let wide = builder.new_value();
+                    builder.emit(Inst::Cast {
+                        dst: wide,
+                        kind: CastKind::ZeroExtend,
+                        from: IrType::Bool,
+                        to: IrType::I32,
+                        operand: arg_value,
+                    });
+                    builder.emit(Inst::Call {
+                        dst: Some(dst),
+                        name: "nex_rt_bool_to_string".to_string(),
+                        args: vec![Operand::Value(wide)],
+                        ret: IrType::String,
+                    });
+                    return Ok(Operand::Value(dst));
+                }
+                let name = match arg_ty {
+                    Type::F64 => "nex_rt_f64_to_string",
+                    _ => "nex_rt_i64_to_string",
+                };
                 builder.emit(Inst::Call {
                     dst: Some(dst),
-                    name: "nex_rt_i64_to_string".to_string(),
+                    name: name.to_string(),
                     args: vec![arg_value],
                     ret: IrType::String,
                 });

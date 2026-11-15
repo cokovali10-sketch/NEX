@@ -383,3 +383,60 @@ char *nex_rt_str_replace(const char *value, const char *from, const char *to) {
     result[written] = '\0';
     return result;
 }
+
+double nex_rt_abs_f64(double value) {
+    return value < 0 ? -value : value;
+}
+
+char *nex_rt_f64_to_string(double value) {
+    char buffer[64];
+    int length = snprintf(buffer, sizeof(buffer), "%g", value);
+    if (length < 0) {
+        return NULL;
+    }
+    char *result = (char *)malloc((size_t)length + 1);
+    if (result == NULL) {
+        return NULL;
+    }
+    memcpy(result, buffer, (size_t)length + 1);
+    return result;
+}
+
+char *nex_rt_bool_to_string(int value) {
+    const char *text = value ? "true" : "false";
+    size_t length = strlen(text);
+    char *result = (char *)malloc(length + 1);
+    if (result == NULL) {
+        return NULL;
+    }
+    memcpy(result, text, length + 1);
+    return result;
+}
+
+char *nex_rt_str_reverse(const char *value) {
+    if (value == NULL) {
+        return NULL;
+    }
+    size_t length = strlen(value);
+    char *result = (char *)malloc(length + 1);
+    if (result == NULL) {
+        return NULL;
+    }
+    for (size_t i = 0; i < length; i++) {
+        result[i] = value[length - 1 - i];
+    }
+    result[length] = '\0';
+    return result;
+}
+
+long long nex_rt_parse_i64(const char *value) {
+    if (value == NULL || *value == '\0') {
+        return 0;
+    }
+    char *end = NULL;
+    long long parsed = strtoll(value, &end, 10);
+    if (end == value) {
+        return 0;
+    }
+    return parsed;
+}

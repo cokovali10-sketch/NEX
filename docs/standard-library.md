@@ -37,7 +37,9 @@ These are global functions, not methods, so no imports are required.
 | `str_ends_with` | `(value: string, suffix: string) -> bool` | Suffix test. |
 | `str_repeat` | `(value: string, count: i64) -> string` | Repeats `count` times; `0` or less gives an empty string. |
 | `str_replace` | `(value: string, from: string, to: string) -> string` | Replaces every occurrence; an empty `from` returns a copy. |
-| `to_string` | `(value: i64) -> string` | Decimal representation. |
+| `to_string` | `(value: i64 or f64 or bool) -> string` | Decimal representation, `%g` for floats, `true`/`false`. |
+| `parse_i64` | `(value: string) -> i64` | Decimal parse; returns `0` when the text is not a number. |
+| `str_reverse` | `(value: string) -> string` | Byte-wise reverse. |
 
 String builtins that return a string allocate with `malloc`; NEX does not free
 them yet because there is no ownership model (see `docs/memory-model.md`).
@@ -46,7 +48,7 @@ them yet because there is no ownership model (see `docs/memory-model.md`).
 
 | Function | Signature | Notes |
 |---|---|---|
-| `abs` | `(value: i64) -> i64` | Absolute value. |
+| `abs` | `(value: i64 or f64) -> i64 or f64` | Absolute value, same type in and out. |
 | `min` / `max` | `(a, b) -> i64 or f64` | Same-type operands only. |
 | `sqrt` | `(value: f64) -> f64` | `libm` |
 | `pow` | `(base: f64, exponent: f64) -> f64` | `libm` |
