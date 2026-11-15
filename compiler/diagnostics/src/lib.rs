@@ -248,7 +248,57 @@ pub fn render(source: &SourceFile, diagnostic: &Diagnostic) -> String {
     for note in &diagnostic.notes {
         let _ = writeln!(out, "  = note: {note}");
     }
+    if let Some(help) = help_for_code(&diagnostic.code) {
+        let _ = writeln!(out, "  = help: {help}");
+    }
     out
+}
+
+/// Return a short, actionable suggestion for a known diagnostic code.
+pub fn help_for_code(code: &str) -> Option<&'static str> {
+    match code {
+        "NXL004" => Some("use four spaces for each indentation level; tabs are not allowed"),
+        "NXP004" => Some("call a declared function or struct constructor by name"),
+        "NXP010" => Some("declare a function, constant, struct, enum, or module at this level"),
+        "NXS002" => Some(
+            "use a concrete value type such as `i64`, `f64`, `bool`, `char`, `string`, or a declared struct/enum",
+        ),
+        "NXS003" => Some("choose a unique name for this declaration"),
+        "NXS004" => Some("check the function name, argument count, and argument types"),
+        "NXS006" => Some("convert the value explicitly with `as` or change the expected type"),
+        "NXS007" => Some("declare the binding with `var` when it must be mutated"),
+        "NXS008" => Some("make both operands the same type; NEX does not apply implicit widening"),
+        "NXS009" => Some("remove the returned value or declare a return type"),
+        "NXS010" => {
+            Some("add a `return` on every control-flow path, or change the return type to `void`")
+        }
+        "NXS011" => Some("`main` must take no parameters and return `void` or `i32`"),
+        "NXS015" => {
+            Some("print scalar fields individually, or print an aggregate value as a whole")
+        }
+        "NXS016" => Some("declare the variable before assigning to its field or element"),
+        "NXS017" => Some("remove the unreachable statement or restructure the control flow"),
+        "NXS018" => Some("rename the duplicate parameter"),
+        "NXS019" => Some("choose a different function name; `print` and `println` are built in"),
+        "NXS020" => Some("avoid the reserved `nex_rt_` prefix"),
+        "NXS021" => Some("use a literal that fits in the target integer type"),
+        "NXS023" => Some("initialize the constant with a compile-time constant expression"),
+        "NXS025" => {
+            Some("ensure the struct has at least one field and avoid recursive field types")
+        }
+        "NXS027" => Some("check the field or element name and the value's type"),
+        "NXS028" => Some("use a scalar type for this constant"),
+        "NXS029" => Some("declare at least one variant in the enum"),
+        "NXS030" => Some("check the enum name and variant name"),
+        "NXS033" => Some("add the missing `case` arms or a trailing `else:` arm"),
+        "NXS035" => Some("provide at least one array element or type argument"),
+        "NXS036" => Some("use an integer expression as the array index"),
+        "NXS037" => Some("provide at least one tuple element"),
+        "NXS038" => Some("declare the item with `pub` if it should be visible outside its module"),
+        "NXC001" => Some("check the generated IR by running `nex check` and fixing earlier errors"),
+        "NXC002" => Some("install Clang/LLVM and run `nex doctor`"),
+        _ => None,
+    }
 }
 
 pub fn render_all(source: &SourceFile, diagnostics: &[Diagnostic]) -> String {

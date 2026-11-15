@@ -34,6 +34,7 @@
 - `nex` project CLI and `nexc` compiler driver.
 - End-to-end tests for compilation and execution.
 - Initial language, grammar, type, memory, compiler, and diagnostics specifications.
+- Help suggestions in diagnostic output for common errors.
 
 ### Known limitations
 

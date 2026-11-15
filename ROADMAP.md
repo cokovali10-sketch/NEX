@@ -27,7 +27,7 @@
 - [x] Array and tuple type annotations, parameters, and return values.
 - [ ] Traits and pattern matching beyond enums.
 - [x] Better control-flow analysis and definite-return checking for constant conditions.
-- [ ] Richer diagnostics with fixes and suggestions.
+- [x] Richer diagnostics with help suggestions.
 
 ## NEX 0.3 - Native Compiler
 
