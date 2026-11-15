@@ -20,6 +20,7 @@ pub struct Program {
 #[derive(Debug, Clone)]
 pub struct UseDecl {
     pub path: Vec<String>,
+    pub file: Option<String>,
     pub span: Span,
 }
 

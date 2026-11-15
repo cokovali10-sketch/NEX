@@ -1836,7 +1836,9 @@ impl<'a> Checker<'a> {
             {
                 self.error(
                     "NXS004",
-                    format!("`concat` expects `string` arguments, found `{left_ty}` and `{right_ty}`"),
+                    format!(
+                        "`concat` expects `string` arguments, found `{left_ty}` and `{right_ty}`"
+                    ),
                     span,
                 );
                 return Type::Error;

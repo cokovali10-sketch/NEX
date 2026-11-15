@@ -3,6 +3,7 @@ use nex_diagnostics::{Diagnostic, SourceFile};
 use nex_lexer::Lexer;
 use nex_parser::parse;
 use nex_semantic::{Analysis, analyze};
+use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
