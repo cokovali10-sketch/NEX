@@ -603,6 +603,30 @@ fn main():
 }
 
 #[test]
+fn builtins_assert_and_panic() {
+    let source = r#"
+fn main():
+    assert(true)
+    print("ok")
+"#;
+    let (stdout, _stderr, code) = run_source(source);
+    assert_eq!(code, 0);
+    assert_eq!(stdout, "ok");
+
+    let panicking = compile("fn main():\n    panic(\"boom\")\n");
+    assert!(!panicking.has_errors());
+    let executable = panicking
+        .artifacts
+        .as_ref()
+        .and_then(|artifacts| artifacts.executable.clone())
+        .expect("executable should be produced");
+    let output = std::process::Command::new(&executable)
+        .output()
+        .expect("failed to run executable");
+    assert!(!output.status.success());
+}
+
+#[test]
 fn builtins_math() {
     let source = r#"
 fn main():

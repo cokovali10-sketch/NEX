@@ -1829,6 +1829,40 @@ fn lower_expr(
                 return Ok(Operand::Value(dst));
             }
 
+            if callee == "assert" {
+                let cond = lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
+                let ok_bb = builder.new_block();
+                let panic_bb = builder.new_block();
+                builder.terminate(Terminator::CondBr {
+                    cond,
+                    then_bb: ok_bb,
+                    else_bb: panic_bb,
+                });
+                builder.current = panic_bb;
+                builder.emit(Inst::Call {
+                    dst: None,
+                    name: "nex_rt_panic".to_string(),
+                    args: vec![Operand::Const(Const::Str("assertion failed".to_string()))],
+                    ret: IrType::Void,
+                });
+                builder.terminate(Terminator::Unreachable);
+                builder.current = ok_bb;
+                return Ok(Operand::Const(Const::Bool(false)));
+            }
+
+            if callee == "panic" {
+                let message =
+                    lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
+                builder.emit(Inst::Call {
+                    dst: None,
+                    name: "nex_rt_panic".to_string(),
+                    args: vec![message],
+                    ret: IrType::Void,
+                });
+                builder.terminate(Terminator::Unreachable);
+                return Ok(Operand::Const(Const::Bool(false)));
+            }
+
             let signature = analysis
                 .function(callee)
                 .ok_or_else(|| format!("unknown function `{callee}` during code generation"))?;

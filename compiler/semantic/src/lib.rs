@@ -1668,6 +1668,52 @@ impl<'a> Checker<'a> {
             return Type::F64;
         }
 
+        if callee == "assert" {
+            if args.len() != 1 {
+                self.error(
+                    "NXS004",
+                    format!("`assert` expects 1 argument, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let arg_ty = self.infer(&args[0]);
+            if arg_ty != Type::Bool && arg_ty != Type::Error {
+                self.error(
+                    "NXS004",
+                    format!("`assert` expects `bool`, found `{arg_ty}`"),
+                    args[0].span,
+                );
+            }
+            return Type::Void;
+        }
+
+        if callee == "panic" {
+            if args.len() != 1 {
+                self.error(
+                    "NXS004",
+                    format!("`panic` expects 1 argument, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let arg_ty = self.infer(&args[0]);
+            if arg_ty != Type::String && arg_ty != Type::Error {
+                self.error(
+                    "NXS004",
+                    format!("`panic` expects `string`, found `{arg_ty}`"),
+                    args[0].span,
+                );
+            }
+            return Type::Void;
+        }
+
         if let Some(info) = self.analysis.structs.get(callee).cloned() {
             if callee.contains('.') && !info.public {
                 self.error(

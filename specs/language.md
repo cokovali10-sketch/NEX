@@ -27,6 +27,7 @@ planned and are not yet implemented.
 - Built-in `print` and `println`.
 - Built-in `len` for strings and arrays, `abs` for `i64`, `min`/`max` for
   `i64` and `f64`, and `sqrt`/`pow` for `f64`.
+- Built-in `assert` and `panic`.
 - String comparison (`==`, `!=`, `<`, `<=`, `>`, `>=`) comparing contents.
 - Struct declarations with scalar fields, construction, field access, and
   field assignment (see `specs/types.md`).
