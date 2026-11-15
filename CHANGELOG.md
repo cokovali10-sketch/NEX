@@ -33,6 +33,7 @@
 - Native executable generation through Clang.
 - `nex` project CLI and `nexc` compiler driver.
 - External C function declarations and calls.
+- Built-in `len` and `abs`.
 - End-to-end tests for compilation and execution.
 - Initial language, grammar, type, memory, compiler, and diagnostics specifications.
 - Help suggestions in diagnostic output for common errors.

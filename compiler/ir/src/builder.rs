@@ -1694,6 +1694,38 @@ fn lower_expr(
                 return Ok(Operand::Value(dst));
             }
 
+            if callee == "len" {
+                let arg_ty = analysis.expr_type(args[0].span).unwrap_or(Type::Error);
+                if let Type::Array { display, .. } = arg_ty {
+                    if let Some(info) = analysis.array_info(display) {
+                        return Ok(Operand::Const(Const::Int(info.len as i64)));
+                    }
+                }
+                let arg_value =
+                    lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
+                let dst = builder.new_value();
+                builder.emit(Inst::Call {
+                    dst: Some(dst),
+                    name: "nex_rt_len".to_string(),
+                    args: vec![arg_value],
+                    ret: IrType::I64,
+                });
+                return Ok(Operand::Value(dst));
+            }
+
+            if callee == "abs" {
+                let arg_value =
+                    lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
+                let dst = builder.new_value();
+                builder.emit(Inst::Call {
+                    dst: Some(dst),
+                    name: "nex_rt_abs".to_string(),
+                    args: vec![arg_value],
+                    ret: IrType::I64,
+                });
+                return Ok(Operand::Value(dst));
+            }
+
             let signature = analysis
                 .function(callee)
                 .ok_or_else(|| format!("unknown function `{callee}` during code generation"))?;

@@ -19,6 +19,8 @@ const RUNTIME_DECLS: &[&str] = &[
     "declare void @nex_rt_println_char(i32)",
     "declare i32 @nex_rt_str_eq(ptr, ptr)",
     "declare i32 @nex_rt_str_cmp(ptr, ptr)",
+    "declare i64 @nex_rt_len(ptr)",
+    "declare i64 @nex_rt_abs(i64)",
     "declare void @nex_rt_panic(ptr) noreturn",
 ];
 
@@ -533,6 +535,8 @@ fn runtime_signature(name: &str) -> (Vec<IrType>, IrType) {
         "nex_rt_print_char" | "nex_rt_println_char" => (vec![i32], void),
         "nex_rt_str_eq" => (vec![ptr, ptr], i32),
         "nex_rt_str_cmp" => (vec![ptr, ptr], i32),
+        "nex_rt_len" => (vec![ptr], i64),
+        "nex_rt_abs" => (vec![i64], i64),
         "nex_rt_panic" => (vec![ptr], void),
         _ => (vec![], void),
     }

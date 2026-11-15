@@ -1526,6 +1526,59 @@ impl<'a> Checker<'a> {
             return Type::Void;
         }
 
+        if callee == "len" {
+            if args.len() != 1 {
+                self.error(
+                    "NXS004",
+                    format!("`len` expects 1 argument, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let arg_ty = self.infer(&args[0]);
+            if arg_ty == Type::Error {
+                return Type::Error;
+            }
+            if arg_ty == Type::String || matches!(arg_ty, Type::Array { .. }) {
+                return Type::I64;
+            }
+            self.error(
+                "NXS004",
+                format!("`len` expects a `string` or array, found `{arg_ty}`"),
+                args[0].span,
+            );
+            return Type::Error;
+        }
+
+        if callee == "abs" {
+            if args.len() != 1 {
+                self.error(
+                    "NXS004",
+                    format!("`abs` expects 1 argument, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let arg_ty = self.infer(&args[0]);
+            if arg_ty == Type::I64 {
+                return Type::I64;
+            }
+            if arg_ty != Type::Error {
+                self.error(
+                    "NXS004",
+                    format!("`abs` expects `i64`, found `{arg_ty}`"),
+                    args[0].span,
+                );
+            }
+            return Type::Error;
+        }
+
         if let Some(info) = self.analysis.structs.get(callee).cloned() {
             if callee.contains('.') && !info.public {
                 self.error(

@@ -116,3 +116,15 @@ void nex_rt_panic(const char *message) {
     fflush(stderr);
     exit(1);
 }
+
+long long nex_rt_len(const char *value) {
+    if (value == NULL) {
+        return 0;
+    }
+    return (long long)strlen(value);
+}
+
+long long nex_rt_abs(long long value) {
+    return value < 0 ? -value : value;
+}
+

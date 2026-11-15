@@ -603,6 +603,24 @@ fn main():
 }
 
 #[test]
+fn builtins_len_and_abs() {
+    let source = r#"
+fn main():
+    print(len("hello"))
+    print(" ")
+    let a: [i64; 4] = [10, 20, 30, 40]
+    print(len(a))
+    print(" ")
+    print(abs(-7))
+    print(" ")
+    print(abs(5))
+"#;
+    let (stdout, _stderr, code) = run_source(source);
+    assert_eq!(code, 0);
+    assert_eq!(stdout, "5 4 7 5");
+}
+
+#[test]
 fn external_c_function() {
     let source = r#"
 extern "C" fn puts(s: string) -> i32
