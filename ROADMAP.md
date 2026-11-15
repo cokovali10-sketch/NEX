@@ -26,7 +26,7 @@
 - [x] Enforce `pub` visibility across modules.
 - [x] Array and tuple type annotations, parameters, and return values.
 - [ ] Traits and pattern matching beyond enums.
-- [ ] Better control-flow analysis and definite-return checking.
+- [x] Better control-flow analysis and definite-return checking for constant conditions.
 - [ ] Richer diagnostics with fixes and suggestions.
 
 ## NEX 0.3 - Native Compiler

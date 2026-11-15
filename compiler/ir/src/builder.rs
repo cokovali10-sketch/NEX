@@ -442,10 +442,12 @@ fn lower_if(
 ) -> Result<(), String> {
     let merge = builder.new_block();
     let mut merge_reachable = else_branch.is_none();
+    let mut const_true_single_return = false;
 
     for (cond, body) in branches {
         let body_bb = builder.new_block();
         let next_bb = builder.new_block();
+        let cond_is_true = matches!(cond.kind, ExprKind::Bool(true));
         let cond_value = lower_expr(builder, cond, scopes, storage, analysis, Type::Error)?;
         builder.terminate(Terminator::CondBr {
             cond: cond_value,
@@ -460,6 +462,9 @@ fn lower_if(
         if !builder.current_terminated() {
             merge_reachable = true;
             builder.terminate(Terminator::Br(merge));
+        } else if cond_is_true && else_branch.is_none() && branches.len() == 1 {
+            const_true_single_return = true;
+            merge_reachable = false;
         }
 
         builder.current = next_bb;
@@ -473,6 +478,8 @@ fn lower_if(
             merge_reachable = true;
             builder.terminate(Terminator::Br(merge));
         }
+    } else if const_true_single_return {
+        builder.terminate(Terminator::Unreachable);
     } else if !builder.current_terminated() {
         merge_reachable = true;
         builder.terminate(Terminator::Br(merge));
@@ -517,6 +524,9 @@ fn lower_while(
     }
 
     builder.current = exit_bb;
+    if matches!(cond.kind, ExprKind::Bool(true)) {
+        builder.terminate(Terminator::Unreachable);
+    }
     Ok(())
 }
 

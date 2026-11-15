@@ -1780,7 +1780,36 @@ impl<'a> Checker<'a> {
                     && branches.iter().all(|(_, block)| self.block_returns(block))
                     && self.block_returns(else_block)
             }
+            StmtKind::If {
+                branches,
+                else_branch: None,
+            } => {
+                branches.len() == 1
+                    && self.const_bool(&branches[0].0).unwrap_or(false)
+                    && self.block_returns(&branches[0].1)
+            }
+            StmtKind::While { cond, body } => {
+                self.const_bool(cond) == Some(true) && self.block_returns(body)
+            }
             _ => false,
+        }
+    }
+
+    fn const_bool(&self, expr: &Expr) -> Option<bool> {
+        match &expr.kind {
+            ExprKind::Bool(value) => Some(*value),
+            ExprKind::Unary {
+                op: nex_ast::UnaryOp::Not,
+                operand,
+            } => self.const_bool(operand).map(|value| !value),
+            ExprKind::Binary { op, left, right } => match op {
+                nex_ast::BinOp::And => Some(self.const_bool(left)? && self.const_bool(right)?),
+                nex_ast::BinOp::Or => Some(self.const_bool(left)? || self.const_bool(right)?),
+                nex_ast::BinOp::Eq => Some(self.const_bool(left)? == self.const_bool(right)?),
+                nex_ast::BinOp::Ne => Some(self.const_bool(left)? != self.const_bool(right)?),
+                _ => None,
+            },
+            _ => None,
         }
     }
 

@@ -24,6 +24,7 @@
 - Explicit `as` casts between numeric types, `bool`, and `char`.
 - Top-level `const` declarations with compile-time constant initializers.
 - `for ... in ... .. ...` loops.
+- Definite-return checking for `while true` and constant `if` conditions.
 - Initial NEX workspace and repository governance files.
 - Indentation-aware lexer with diagnostics.
 - Recursive-descent parser for functions, bindings, control flow, and expressions.
