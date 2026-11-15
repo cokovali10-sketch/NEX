@@ -34,7 +34,7 @@
 - [x] Constant folding in NEX IR.
 - [ ] Debug information.
 - [ ] Cross-platform targets.
-- [ ] Reproducible build metadata.
+- [x] Reproducible build metadata (build.json).
 
 ## NEX 0.4 - Memory and Safety
 

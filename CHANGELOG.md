@@ -33,6 +33,7 @@
 - Native executable generation through Clang.
 - `nex` project CLI and `nexc` compiler driver.
 - External C function declarations and calls.
+- Reproducible build metadata in `build.json`.
 - Built-in `len` and `abs`.
 - Built-in `min`, `max`, `sqrt`, and `pow`.
 - Constant folding for compile-time constant expressions.

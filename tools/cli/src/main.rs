@@ -143,6 +143,19 @@ fn cmd_build(args: &[String]) -> ExitCode {
                         println!("built: {}", artifacts.llvm_ir.display());
                     }
                 }
+                let manifest_dir = project.root.join("build").join(match profile {
+                    Profile::Debug => "debug",
+                    Profile::Release => "release",
+                    Profile::Max => "max",
+                });
+                let _ = fs::create_dir_all(&manifest_dir);
+                let manifest_path = manifest_dir.join("build.json");
+                let manifest = format!(
+                    "{{\"version\":\"0.2.0\",\"profile\":\"{:?}\",\"entry\":\"{}\",\"target\":\"windows-x86_64\"}}\n",
+                    profile,
+                    project.entry.display()
+                );
+                let _ = fs::write(&manifest_path, manifest);
                 ExitCode::SUCCESS
             }
         }
