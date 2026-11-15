@@ -1115,3 +1115,33 @@ fn missing_file_reports_failure() {
     assert_eq!(code, 0, "stderr: {stderr}");
     assert_eq!(stdout, "false\n-1\n");
 }
+
+#[test]
+fn tcp_client_reaches_a_local_listener() {
+    use std::io::Read;
+    use std::net::TcpListener;
+
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind local listener");
+    let port = listener.local_addr().expect("local addr").port();
+
+    let source = format!(
+        "fn main():\n    var fd = tcp_connect(\"127.0.0.1\", {port})\n    println(fd > 0)\n    println(tcp_write(fd, \"ping\", 4) == 4)\n    println(tcp_close(fd))\n"
+    );
+
+    let (stdout, stderr, code) = run_source(&source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "true\ntrue\ntrue\n");
+
+    let (mut stream, _) = listener.accept().expect("accept");
+    let mut buffer = [0u8; 8];
+    let read = stream.read(&mut buffer).expect("read");
+    assert_eq!(&buffer[..read], b"ping");
+}
+
+#[test]
+fn tcp_connect_to_a_closed_port_returns_negative() {
+    let source = "fn main():\n    println(tcp_connect(\"127.0.0.1\", 1) < 0)\n";
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "true\n");
+}

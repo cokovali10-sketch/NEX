@@ -57,6 +57,24 @@ There is no streaming API yet: `read_file` loads the whole file, so it is not
 suitable for very large inputs. Paths are interpreted by the host operating
 system, so use `/` on Windows too.
 
+### Networking
+
+Blocking TCP sockets. Handles are `i64` file descriptors; `-1` means failure.
+
+| Function | Signature | Notes |
+|---|---|---|
+| `tcp_listen` | `(port: i64, backlog: i64) -> i64` | Returns a listening handle, or `-1`. |
+| `tcp_accept` | `(server: i64) -> i64` | Blocks until a client connects. |
+| `tcp_connect` | `(host: string, port: i64) -> i64` | Connects to a host; `-1` on failure. |
+| `tcp_write` | `(fd: i64, data: string, length: i64) -> i64` | Bytes sent, or `-1`. |
+| `tcp_read` | `(fd: i64, max_bytes: i64) -> string` | One read, capped at 256 KB; `""` on EOF or error. |
+| `tcp_close` | `(fd: i64) -> bool` | Closes the handle. |
+
+All calls block. There is no async runtime yet, so a server built from these
+primitives serves one connection at a time and needs `threads` (not implemented)
+for concurrency. `tcp_read` returns whatever a single `recv` produced, so an
+HTTP server must loop until it sees the full request.
+
 ### Numeric
 
 | Function | Signature | Notes |

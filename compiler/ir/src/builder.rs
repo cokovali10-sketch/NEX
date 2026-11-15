@@ -1995,6 +1995,53 @@ fn lower_expr(
                 return Ok(Operand::Value(dst));
             }
 
+            if callee == "tcp_connect"
+                || callee == "tcp_listen"
+                || callee == "tcp_accept"
+                || callee == "tcp_close"
+                || callee == "tcp_write"
+                || callee == "tcp_read"
+            {
+                let mut call_args = Vec::new();
+                for arg in args {
+                    call_args.push(lower_expr(
+                        builder,
+                        arg,
+                        scopes,
+                        storage,
+                        analysis,
+                        Type::Error,
+                    )?);
+                }
+                let (name, ret, cast_to_bool) = match callee {
+                    "tcp_connect" => ("nex_rt_tcp_connect", IrType::I64, false),
+                    "tcp_listen" => ("nex_rt_tcp_listen", IrType::I64, false),
+                    "tcp_accept" => ("nex_rt_tcp_accept", IrType::I64, false),
+                    "tcp_write" => ("nex_rt_tcp_write", IrType::I64, false),
+                    "tcp_read" => ("nex_rt_tcp_read", IrType::String, false),
+                    _ => ("nex_rt_tcp_close", IrType::I32, true),
+                };
+                let raw = builder.new_value();
+                builder.emit(Inst::Call {
+                    dst: Some(raw),
+                    name: name.to_string(),
+                    args: call_args,
+                    ret,
+                });
+                if cast_to_bool {
+                    let dst = builder.new_value();
+                    builder.emit(Inst::Cast {
+                        dst,
+                        kind: CastKind::Truncate,
+                        from: IrType::I32,
+                        to: IrType::Bool,
+                        operand: Operand::Value(raw),
+                    });
+                    return Ok(Operand::Value(dst));
+                }
+                return Ok(Operand::Value(raw));
+            }
+
             if callee == "read_file" || callee == "file_exists" || callee == "file_size" {
                 let path = lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
                 let dst = builder.new_value();

@@ -245,6 +245,8 @@ impl Clang {
         }
         if cfg!(windows) {
             args.push("-static".to_string());
+            // The runtime's socket helpers live in ws2_32 on Windows.
+            args.push("-lws2_32".to_string());
         } else {
             // The runtime uses sqrt/pow from libm; link it explicitly on Unix.
             args.push("-lm".to_string());

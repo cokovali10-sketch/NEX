@@ -28,6 +28,9 @@
 
 - `read_file`, `write_file`, `file_exists`, and `file_size`.
 
+- Blocking TCP sockets: `tcp_listen`, `tcp_accept`, `tcp_connect`,
+  `tcp_write`, `tcp_read`, `tcp_close` (Windows and POSIX).
+
 ### Fixed
 
 - The lexer now skips a leading UTF-8 BOM instead of reporting `unexpected character`.

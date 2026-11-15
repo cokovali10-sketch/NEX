@@ -512,3 +512,185 @@ long long nex_rt_file_size(const char *path) {
     fclose(file);
     return (long long)length;
 }
+
+/* ------------------------------------------------------------------------- */
+/* Minimal TCP sockets: blocking, string-oriented. No async runtime yet.      */
+/* ------------------------------------------------------------------------- */
+
+#ifdef _WIN32
+#ifndef _WIN32_WINNT
+#define _WIN32_WINNT 0x0601
+#endif
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#pragma comment(lib, "ws2_32.lib")
+typedef SOCKET nex_socket;
+#define NEX_INVALID_SOCKET INVALID_SOCKET
+#define NEX_CLOSE_SOCKET(s) closesocket(s)
+static int nex_net_startup(void) {
+    WSADATA data;
+    return WSAStartup(MAKEWORD(2, 2), &data) == 0;
+}
+static void nex_net_shutdown(void) {
+    WSACleanup();
+}
+#else
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
+#include <arpa/inet.h>
+#include <netdb.h>
+#include <unistd.h>
+typedef int nex_socket;
+#define NEX_INVALID_SOCKET (-1)
+#define NEX_CLOSE_SOCKET(s) close(s)
+static int nex_net_startup(void) {
+    return 1;
+}
+static void nex_net_shutdown(void) {
+}
+#endif
+
+static int nex_net_ready = 0;
+
+static int nex_net_ensure(void) {
+    if (nex_net_ready) {
+        return 1;
+    }
+    if (nex_net_startup()) {
+        nex_net_ready = 1;
+        return 1;
+    }
+    return 0;
+}
+
+long long nex_rt_tcp_connect(const char *host, long long port) {
+    if (host == NULL || port <= 0 || port > 65535) {
+        return -1;
+    }
+    if (!nex_net_ensure()) {
+        return -1;
+    }
+
+    struct addrinfo hints;
+    struct addrinfo *result = NULL;
+    char service[16];
+    snprintf(service, sizeof(service), "%lld", port);
+
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+
+    if (getaddrinfo(host, service, &hints, &result) != 0) {
+        return -1;
+    }
+
+    nex_socket fd = NEX_INVALID_SOCKET;
+    for (struct addrinfo *entry = result; entry != NULL; entry = entry->ai_next) {
+        fd = socket(entry->ai_family, entry->ai_socktype, entry->ai_protocol);
+        if (fd == NEX_INVALID_SOCKET) {
+            continue;
+        }
+        if (connect(fd, entry->ai_addr, (int)entry->ai_addrlen) == 0) {
+            break;
+        }
+        NEX_CLOSE_SOCKET(fd);
+        fd = NEX_INVALID_SOCKET;
+    }
+    freeaddrinfo(result);
+
+    if (fd == NEX_INVALID_SOCKET) {
+        return -1;
+    }
+    return (long long)fd;
+}
+
+long long nex_rt_tcp_listen(long long port, long long backlog) {
+    if (port <= 0 || port > 65535) {
+        return -1;
+    }
+    if (!nex_net_ensure()) {
+        return -1;
+    }
+
+    nex_socket server = socket(AF_INET, SOCK_STREAM, 0);
+    if (server == NEX_INVALID_SOCKET) {
+        return -1;
+    }
+
+    int yes = 1;
+    setsockopt(server, SOL_SOCKET, SO_REUSEADDR, (const char *)&yes, sizeof(yes));
+
+    struct sockaddr_in address;
+    memset(&address, 0, sizeof(address));
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = htonl(INADDR_ANY);
+    address.sin_port = htons((unsigned short)port);
+
+    if (bind(server, (struct sockaddr *)&address, sizeof(address)) != 0) {
+        NEX_CLOSE_SOCKET(server);
+        return -1;
+    }
+    int queue = backlog > 0 ? (int)backlog : 16;
+    if (listen(server, queue) != 0) {
+        NEX_CLOSE_SOCKET(server);
+        return -1;
+    }
+    return (long long)server;
+}
+
+long long nex_rt_tcp_accept(long long server) {
+    if (server < 0 || !nex_net_ensure()) {
+        return -1;
+    }
+    nex_socket client = accept((nex_socket)server, NULL, NULL);
+    if (client == NEX_INVALID_SOCKET) {
+        return -1;
+    }
+    return (long long)client;
+}
+
+long long nex_rt_tcp_write(long long socket, const char *data, long long length) {
+    if (socket < 0 || data == NULL || length < 0) {
+        return -1;
+    }
+    long long sent = 0;
+    while (sent < length) {
+        int chunk = send((nex_socket)socket, data + sent, (int)(length - sent), 0);
+        if (chunk <= 0) {
+            return -1;
+        }
+        sent += chunk;
+    }
+    return sent;
+}
+
+char *nex_rt_tcp_read(long long socket, long long max_bytes) {
+    if (socket < 0 || max_bytes <= 0) {
+        return NULL;
+    }
+    long long limit = max_bytes > 262144 ? 262144 : max_bytes;
+    char *buffer = (char *)malloc((size_t)limit + 1);
+    if (buffer == NULL) {
+        return NULL;
+    }
+    int received = recv((nex_socket)socket, buffer, (int)limit, 0);
+    if (received <= 0) {
+        free(buffer);
+        char *empty = (char *)malloc(1);
+        if (empty != NULL) {
+            empty[0] = '\0';
+        }
+        return empty;
+    }
+    buffer[received] = '\0';
+    return buffer;
+}
+
+int nex_rt_tcp_close(long long socket) {
+    if (socket < 0) {
+        return 0;
+    }
+    NEX_CLOSE_SOCKET((nex_socket)socket);
+    return 1;
+}

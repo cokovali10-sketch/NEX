@@ -1942,6 +1942,127 @@ impl<'a> Checker<'a> {
             return value_ty;
         }
 
+        if callee == "tcp_connect" {
+            if args.len() != 2 {
+                self.error(
+                    "NXS004",
+                    format!("`tcp_connect` expects 2 arguments, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let host_ty = self.infer(&args[0]);
+            let port_ty = self.infer(&args[1]);
+            if (host_ty != Type::String || port_ty != Type::I64)
+                && (host_ty != Type::Error && port_ty != Type::Error)
+            {
+                self.error("NXS004", "`tcp_connect` expects `(string, i64)`", span);
+                return Type::Error;
+            }
+            return Type::I64;
+        }
+
+        if callee == "tcp_listen" {
+            if args.len() != 2 {
+                self.error(
+                    "NXS004",
+                    format!("`tcp_listen` expects 2 arguments, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let port_ty = self.infer(&args[0]);
+            let backlog_ty = self.infer(&args[1]);
+            if (port_ty != Type::I64 || backlog_ty != Type::I64)
+                && (port_ty != Type::Error && backlog_ty != Type::Error)
+            {
+                self.error("NXS004", "`tcp_listen` expects `(i64, i64)`", span);
+                return Type::Error;
+            }
+            return Type::I64;
+        }
+
+        if callee == "tcp_accept" || callee == "tcp_close" {
+            if args.len() != 1 {
+                self.error(
+                    "NXS004",
+                    format!("`{callee}` expects 1 argument, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let fd_ty = self.infer(&args[0]);
+            if fd_ty != Type::I64 && fd_ty != Type::Error {
+                self.error(
+                    "NXS004",
+                    format!("`{callee}` expects an `i64` handle, found `{fd_ty}`"),
+                    span,
+                );
+                return Type::Error;
+            }
+            return if callee == "tcp_accept" {
+                Type::I64
+            } else {
+                Type::Bool
+            };
+        }
+
+        if callee == "tcp_write" {
+            if args.len() != 3 {
+                self.error(
+                    "NXS004",
+                    format!("`tcp_write` expects 3 arguments, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let fd_ty = self.infer(&args[0]);
+            let data_ty = self.infer(&args[1]);
+            let length_ty = self.infer(&args[2]);
+            if (fd_ty != Type::I64 || data_ty != Type::String || length_ty != Type::I64)
+                && (fd_ty != Type::Error && data_ty != Type::Error && length_ty != Type::Error)
+            {
+                self.error("NXS004", "`tcp_write` expects `(i64, string, i64)`", span);
+                return Type::Error;
+            }
+            return Type::I64;
+        }
+
+        if callee == "tcp_read" {
+            if args.len() != 2 {
+                self.error(
+                    "NXS004",
+                    format!("`tcp_read` expects 2 arguments, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let fd_ty = self.infer(&args[0]);
+            let max_ty = self.infer(&args[1]);
+            if (fd_ty != Type::I64 || max_ty != Type::I64)
+                && (fd_ty != Type::Error && max_ty != Type::Error)
+            {
+                self.error("NXS004", "`tcp_read` expects `(i64, i64)`", span);
+                return Type::Error;
+            }
+            return Type::String;
+        }
+
         if callee == "read_file" || callee == "file_exists" || callee == "file_size" {
             if args.len() != 1 {
                 self.error(
