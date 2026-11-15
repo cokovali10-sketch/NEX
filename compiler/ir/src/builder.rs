@@ -371,12 +371,16 @@ fn lower_statement(
                 return Err(format!("cannot assign to an element of `{base}` by value"));
             };
             let idx_value = lower_expr(builder, index, scopes, storage, analysis, Type::Error)?;
-            let elem = analysis
+            let index_ty = analysis.expr_type(index.span).unwrap_or(Type::I64);
+            let info = analysis
                 .arrays
                 .values()
-                .find(|info| info.llvm == array_type)
-                .map(|info| info.elem)
-                .unwrap_or(Type::Error);
+                .find(|candidate| candidate.llvm == array_type)
+                .cloned();
+            if let Some(found) = &info {
+                lower_bounds_check(builder, idx_value.clone(), index_ty, found.len);
+            }
+            let elem = info.map(|found| found.elem).unwrap_or(Type::Error);
             let elem_ir = IrType::from_type(elem);
             let dst_ptr = builder.new_value();
             builder.emit(Inst::IndexPtr {
@@ -1081,6 +1085,55 @@ fn lower_place_equality(
     }
 }
 
+fn lower_bounds_check(builder: &mut FunctionBuilder, index: Operand, index_ty: Type, len: usize) {
+    let ir_ty = IrType::from_type(index_ty);
+    let ge_zero = builder.new_value();
+    builder.emit(Inst::Bin {
+        dst: ge_zero,
+        op: BinOp::Ge,
+        ty: ir_ty,
+        lhs: index.clone(),
+        rhs: Operand::Const(Const::Int(0)),
+    });
+    let lt_len = builder.new_value();
+    builder.emit(Inst::Bin {
+        dst: lt_len,
+        op: BinOp::Lt,
+        ty: ir_ty,
+        lhs: index,
+        rhs: Operand::Const(Const::Int(len as i64)),
+    });
+    let ok = builder.new_value();
+    builder.emit(Inst::Bin {
+        dst: ok,
+        op: BinOp::Mul,
+        ty: IrType::Bool,
+        lhs: Operand::Value(ge_zero),
+        rhs: Operand::Value(lt_len),
+    });
+
+    let ok_bb = builder.new_block();
+    let panic_bb = builder.new_block();
+    builder.terminate(Terminator::CondBr {
+        cond: Operand::Value(ok),
+        then_bb: ok_bb,
+        else_bb: panic_bb,
+    });
+
+    builder.current = panic_bb;
+    builder.emit(Inst::Call {
+        dst: None,
+        name: "nex_rt_panic".to_string(),
+        args: vec![Operand::Const(Const::Str(
+            "array index out of bounds".to_string(),
+        ))],
+        ret: IrType::Void,
+    });
+    builder.terminate(Terminator::Unreachable);
+
+    builder.current = ok_bb;
+}
+
 fn lower_match(
     builder: &mut FunctionBuilder,
     scrutinee: &Expr,
@@ -1720,8 +1773,14 @@ fn lower_expr(
             let base_ptr = lower_array_place(builder, base, scopes, storage, analysis)?;
             // base_ptr may come from struct place for arrays stored in struct fields (not supported); fallback above rarely used
             let idx_value = lower_expr(builder, index, scopes, storage, analysis, Type::Error)?;
+            let index_ty = analysis.expr_type(index.span).unwrap_or(Type::I64);
             let array_type = match base_ty {
-                Type::Array { llvm, .. } => llvm,
+                Type::Array { llvm, display, .. } => {
+                    if let Some(info) = analysis.array_info(display) {
+                        lower_bounds_check(builder, idx_value.clone(), index_ty, info.len);
+                    }
+                    llvm
+                }
                 _ => return Err("cannot index a non-array value".to_string()),
             };
             let dst = builder.new_value();

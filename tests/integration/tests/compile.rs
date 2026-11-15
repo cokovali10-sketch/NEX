@@ -857,6 +857,25 @@ fn private_module_item_is_reported() {
 }
 
 #[test]
+fn array_bounds_are_checked() {
+    let result = compile("fn main():\n    let a: [i64; 3] = [1, 2, 3]\n    print(a[5])\n");
+    assert!(!result.has_errors(), "{:?}", result.diagnostics);
+    let executable = result
+        .artifacts
+        .as_ref()
+        .and_then(|artifacts| artifacts.executable.clone())
+        .expect("executable should be produced");
+    let output = std::process::Command::new(&executable)
+        .output()
+        .expect("failed to run executable");
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("out of bounds")
+            || String::from_utf8_lossy(&output.stdout).contains("out of bounds")
+    );
+}
+
+#[test]
 fn literal_range_check() {
     let result = compile("fn main():\n    let x: u8 = 300\n");
     assert!(result.has_errors());

@@ -8,6 +8,7 @@
 - `pub` visibility for module items, enforced on access and `use`.
 - Tuple literals and positional field access.
 - Array literals and indexing reads/writes.
+- Runtime bounds checking for array indexing.
 - Array and tuple type annotations, parameters, and return values.
 - Enum declarations and `match` over enum values.
 - Struct declarations with scalar fields, construction, field access, and

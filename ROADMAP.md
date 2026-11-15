@@ -41,7 +41,7 @@
 - [ ] Ownership and borrowing model.
 - [ ] Lifetime analysis.
 - [ ] Allocators and arenas.
-- [ ] Bounds checking.
+- [x] Bounds checking for array indexing.
 - [ ] Unsafe blocks and sanitizer integration.
 
 ## NEX 0.5 - Standard Library
