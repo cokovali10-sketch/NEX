@@ -5,6 +5,7 @@
 ### Added
 
 - Nested modules (`module name:`) and `use` aliases.
+- `pub` visibility for module items, enforced on access and `use`.
 - Tuple literals and positional field access.
 - Array literals and indexing reads/writes.
 - Enum declarations and `match` over enum values.

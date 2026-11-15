@@ -11,6 +11,7 @@ pub struct FnSig {
     pub name: String,
     pub params: Vec<Type>,
     pub ret: Type,
+    pub public: bool,
     pub span: Span,
 }
 
@@ -20,6 +21,7 @@ pub struct StructInfo {
     /// Interned copy of `name`, used by [`Type::Struct`].
     pub name_static: &'static str,
     pub fields: Vec<(String, Type)>,
+    pub public: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -27,6 +29,7 @@ pub struct EnumInfo {
     pub name: String,
     pub name_static: &'static str,
     pub variants: Vec<String>,
+    pub public: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -44,6 +47,7 @@ pub struct Analysis {
     pub arrays: BTreeMap<String, ArrayInfo>,
     pub modules: std::collections::HashSet<String>,
     pub aliases: std::collections::HashMap<String, String>,
+    pub public_consts: std::collections::HashSet<String>,
     /// Variant name to the interned name of the enum that declares it.
     pub variant_map: HashMap<String, &'static str>,
     pub consts: BTreeMap<String, Type>,
@@ -132,6 +136,7 @@ impl<'a> Checker<'a> {
                 arrays: BTreeMap::new(),
                 modules: std::collections::HashSet::new(),
                 aliases: std::collections::HashMap::new(),
+                public_consts: std::collections::HashSet::new(),
                 variant_map: HashMap::new(),
                 consts: BTreeMap::new(),
                 const_exprs: BTreeMap::new(),
@@ -152,6 +157,7 @@ impl<'a> Checker<'a> {
         checker.collect_enums();
         checker.collect_consts();
         checker.collect_functions();
+        checker.check_uses();
         checker.check_main();
         checker.check_functions();
         checker.analysis
@@ -224,6 +230,7 @@ impl<'a> Checker<'a> {
                     name: function.name.clone(),
                     params,
                     ret,
+                    public: function.public,
                     span: function.span,
                 },
             );
@@ -305,6 +312,7 @@ impl<'a> Checker<'a> {
                     name: definition.name.clone(),
                     name_static,
                     variants,
+                    public: definition.public,
                 },
             );
         }
@@ -323,6 +331,47 @@ impl<'a> Checker<'a> {
                 let qualified = use_decl.path.join(".");
                 let short = use_decl.path.last().cloned().unwrap();
                 self.analysis.aliases.insert(short, qualified);
+            }
+        }
+    }
+
+    fn check_uses(&mut self) {
+        for use_decl in &self.program.uses.clone() {
+            if use_decl.path.len() < 2 {
+                continue;
+            }
+            let qualified = use_decl.path.join(".");
+            // Validate existence and visibility.
+            let mut found = false;
+            let mut public = true;
+            if let Some(ty) = self.analysis.consts.get(&qualified).copied() {
+                let _ = ty;
+                found = true;
+                public = self.analysis.public_consts.contains(&qualified);
+            } else if let Some(info) = self.analysis.structs.get(&qualified) {
+                found = true;
+                public = info.public;
+            } else if let Some(info) = self.analysis.enums.get(&qualified) {
+                found = true;
+                public = info.public;
+            } else if let Some(info) = self.analysis.functions.get(&qualified) {
+                found = true;
+                public = info.public;
+            }
+            if !found {
+                self.error(
+                    "NXS001",
+                    format!("unknown item `{}`", qualified),
+                    use_decl.span,
+                );
+                continue;
+            }
+            if !public {
+                self.error(
+                    "NXS038",
+                    format!("item `{}` is private", qualified),
+                    use_decl.span,
+                );
             }
         }
     }
@@ -346,6 +395,7 @@ impl<'a> Checker<'a> {
                     name: definition.name.clone(),
                     name_static,
                     fields: Vec::new(),
+                    public: definition.public,
                 },
             );
         }
@@ -471,6 +521,9 @@ impl<'a> Checker<'a> {
             self.analysis
                 .const_exprs
                 .insert(constant.name.clone(), constant.init.clone());
+            if constant.public {
+                self.analysis.public_consts.insert(constant.name.clone());
+            }
         }
     }
 
@@ -1178,15 +1231,42 @@ impl<'a> Checker<'a> {
                 {
                     let qualified = format!("{}.{}", base_name, name);
                     if let Some(ty) = self.analysis.consts.get(&qualified).copied() {
+                        if !self.analysis.public_consts.contains(&qualified) {
+                            self.error(
+                                "NXS038",
+                                format!("item `{name}` in module `{base_name}` is private"),
+                                *name_span,
+                            );
+                            self.analysis.expr_types.insert(expr.span, Type::Error);
+                            return Type::Error;
+                        }
                         self.analysis.expr_types.insert(expr.span, ty);
                         return ty;
                     }
                     if let Some(info) = self.analysis.structs.get(&qualified).cloned() {
+                        if !info.public {
+                            self.error(
+                                "NXS038",
+                                format!("item `{name}` in module `{base_name}` is private"),
+                                *name_span,
+                            );
+                            self.analysis.expr_types.insert(expr.span, Type::Error);
+                            return Type::Error;
+                        }
                         let ty = Type::Struct(info.name_static);
                         self.analysis.expr_types.insert(expr.span, ty);
                         return ty;
                     }
                     if let Some(info) = self.analysis.enums.get(&qualified).cloned() {
+                        if !info.public {
+                            self.error(
+                                "NXS038",
+                                format!("item `{name}` in module `{base_name}` is private"),
+                                *name_span,
+                            );
+                            self.analysis.expr_types.insert(expr.span, Type::Error);
+                            return Type::Error;
+                        }
                         let ty = Type::Enum(info.name_static);
                         self.analysis.expr_types.insert(expr.span, ty);
                         return ty;
@@ -1364,6 +1444,7 @@ impl<'a> Checker<'a> {
                                     name: name.to_string(),
                                     name_static: name,
                                     fields,
+                                    public: false,
                                 },
                             );
                         }
@@ -1430,6 +1511,17 @@ impl<'a> Checker<'a> {
         }
 
         if let Some(info) = self.analysis.structs.get(callee).cloned() {
+            if callee.contains('.') && !info.public {
+                self.error(
+                    "NXS038",
+                    format!("item `{}` is private", callee),
+                    callee_span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
             if args.len() != info.fields.len() {
                 self.error(
                     "NXS004",
@@ -1462,6 +1554,18 @@ impl<'a> Checker<'a> {
             }
             return Type::Error;
         };
+
+        if callee.contains('.') && !sig.public {
+            self.error(
+                "NXS038",
+                format!("function `{callee}` is private"),
+                callee_span,
+            );
+            for arg in args {
+                self.infer(arg);
+            }
+            return Type::Error;
+        }
 
         if args.len() != sig.params.len() {
             self.error(

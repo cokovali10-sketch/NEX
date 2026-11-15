@@ -30,7 +30,7 @@ planned and are not yet implemented.
 - Enum declarations and `match` over enum values.
 - Array literals and indexing reads/writes.
 - Tuple literals and positional field access.
-- Nested modules (`module name:`) and `use` aliases.
+- Nested modules (`module name:`), `use` aliases, and `pub` visibility.
 - Explicit casts with `as`.
 - Top-level `const` declarations with compile-time constant initializers.
 

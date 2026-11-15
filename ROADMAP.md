@@ -23,7 +23,7 @@
 - [x] Modules and imports (nested `module` blocks and `use` aliases).
 - [x] Struct parameters and return values.
 - [x] Nested struct fields.
-- [ ] Enforce `pub` visibility across modules.
+- [x] Enforce `pub` visibility across modules.
 - [ ] Arrays and tuples in type annotations, parameters, and return values.
 - [ ] Traits and pattern matching beyond enums.
 - [ ] Better control-flow analysis and definite-return checking.
