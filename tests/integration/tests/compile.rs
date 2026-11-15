@@ -714,6 +714,22 @@ fn emits_object_file() {
 }
 
 #[test]
+fn private_module_item_is_reported() {
+    let result = compile(
+        "module math:\n    fn secret() -> i64:\n        return 1\n\nfn main():\n    print(math.secret())\n",
+    );
+    assert!(result.has_errors());
+    assert!(
+        result
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == "NXS038"),
+        "{:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
 fn literal_range_check() {
     let result = compile("fn main():\n    let x: u8 = 300\n");
     assert!(result.has_errors());
