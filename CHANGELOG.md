@@ -34,6 +34,7 @@
 - `nex` project CLI and `nexc` compiler driver.
 - External C function declarations and calls.
 - Built-in `len` and `abs`.
+- Built-in `min`, `max`, `sqrt`, and `pow`.
 - Constant folding for compile-time constant expressions.
 - End-to-end tests for compilation and execution.
 - Initial language, grammar, type, memory, compiler, and diagnostics specifications.

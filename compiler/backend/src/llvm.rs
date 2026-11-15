@@ -21,6 +21,12 @@ const RUNTIME_DECLS: &[&str] = &[
     "declare i32 @nex_rt_str_cmp(ptr, ptr)",
     "declare i64 @nex_rt_len(ptr)",
     "declare i64 @nex_rt_abs(i64)",
+    "declare i64 @nex_rt_min_i64(i64, i64)",
+    "declare i64 @nex_rt_max_i64(i64, i64)",
+    "declare double @nex_rt_min_f64(double, double)",
+    "declare double @nex_rt_max_f64(double, double)",
+    "declare double @nex_rt_sqrt(double)",
+    "declare double @nex_rt_pow(double, double)",
     "declare void @nex_rt_panic(ptr) noreturn",
 ];
 
@@ -537,6 +543,10 @@ fn runtime_signature(name: &str) -> (Vec<IrType>, IrType) {
         "nex_rt_str_cmp" => (vec![ptr, ptr], i32),
         "nex_rt_len" => (vec![ptr], i64),
         "nex_rt_abs" => (vec![i64], i64),
+        "nex_rt_min_i64" | "nex_rt_max_i64" => (vec![i64, i64], i64),
+        "nex_rt_min_f64" | "nex_rt_max_f64" => (vec![f64, f64], f64),
+        "nex_rt_sqrt" => (vec![f64], f64),
+        "nex_rt_pow" => (vec![f64, f64], f64),
         "nex_rt_panic" => (vec![ptr], void),
         _ => (vec![], void),
     }

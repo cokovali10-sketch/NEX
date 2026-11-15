@@ -603,6 +603,25 @@ fn main():
 }
 
 #[test]
+fn builtins_math() {
+    let source = r#"
+fn main():
+    print(min(3, 9))
+    print(" ")
+    print(max(3, 9))
+    print(" ")
+    print(min(2.5, 1.25))
+    print(" ")
+    print(sqrt(9.0))
+    print(" ")
+    print(pow(2.0, 3.0))
+"#;
+    let (stdout, _stderr, code) = run_source(source);
+    assert_eq!(code, 0);
+    assert_eq!(stdout, "3 9 1.25 3 8");
+}
+
+#[test]
 fn builtins_len_and_abs() {
     let source = r#"
 fn main():

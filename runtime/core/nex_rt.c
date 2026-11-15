@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include <math.h>
 
 static void nex_rt_write_utf8(unsigned int codepoint) {
     unsigned char buffer[4];
@@ -127,4 +128,12 @@ long long nex_rt_len(const char *value) {
 long long nex_rt_abs(long long value) {
     return value < 0 ? -value : value;
 }
+
+
+long long nex_rt_min_i64(long long a, long long b) { return a < b ? a : b; }
+long long nex_rt_max_i64(long long a, long long b) { return a > b ? a : b; }
+double nex_rt_min_f64(double a, double b) { return a < b ? a : b; }
+double nex_rt_max_f64(double a, double b) { return a > b ? a : b; }
+double nex_rt_sqrt(double value) { return sqrt(value); }
+double nex_rt_pow(double base, double exponent) { return pow(base, exponent); }
 

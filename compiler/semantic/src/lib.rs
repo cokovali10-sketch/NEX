@@ -1579,6 +1579,95 @@ impl<'a> Checker<'a> {
             return Type::Error;
         }
 
+        if callee == "min" || callee == "max" {
+            if args.len() != 2 {
+                self.error(
+                    "NXS004",
+                    format!("`{callee}` expects 2 arguments, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let left_ty = self.infer(&args[0]);
+            let right_ty = self.infer(&args[1]);
+            if left_ty == Type::Error || right_ty == Type::Error {
+                return Type::Error;
+            }
+            if left_ty != right_ty {
+                self.error(
+                    "NXS008",
+                    format!("operands have different types `{left_ty}` and `{right_ty}`"),
+                    args[0].span.merge(args[1].span),
+                );
+                return Type::Error;
+            }
+            if left_ty == Type::I64 || left_ty == Type::F64 {
+                return left_ty;
+            }
+            self.error(
+                "NXS004",
+                format!("`{callee}` expects `i64` or `f64`, found `{left_ty}`"),
+                args[0].span,
+            );
+            return Type::Error;
+        }
+
+        if callee == "sqrt" {
+            if args.len() != 1 {
+                self.error(
+                    "NXS004",
+                    format!("`sqrt` expects 1 argument, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let arg_ty = self.infer(&args[0]);
+            if arg_ty == Type::F64 {
+                return Type::F64;
+            }
+            if arg_ty != Type::Error {
+                self.error(
+                    "NXS004",
+                    format!("`sqrt` expects `f64`, found `{arg_ty}`"),
+                    args[0].span,
+                );
+            }
+            return Type::Error;
+        }
+
+        if callee == "pow" {
+            if args.len() != 2 {
+                self.error(
+                    "NXS004",
+                    format!("`pow` expects 2 arguments, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let base_ty = self.infer(&args[0]);
+            let exp_ty = self.infer(&args[1]);
+            if base_ty != Type::F64 || exp_ty != Type::F64 {
+                if base_ty != Type::Error && exp_ty != Type::Error {
+                    self.error(
+                        "NXS004",
+                        format!("`pow` expects `f64` arguments, found `{base_ty}` and `{exp_ty}`"),
+                        span,
+                    );
+                }
+                return Type::Error;
+            }
+            return Type::F64;
+        }
+
         if let Some(info) = self.analysis.structs.get(callee).cloned() {
             if callee.contains('.') && !info.public {
                 self.error(

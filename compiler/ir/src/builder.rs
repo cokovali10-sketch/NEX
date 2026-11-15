@@ -1771,6 +1771,64 @@ fn lower_expr(
                 return Ok(Operand::Value(dst));
             }
 
+            if callee == "min" || callee == "max" {
+                let arg_ty = analysis.expr_type(args[0].span).unwrap_or(Type::Error);
+                let runtime_name = if arg_ty == Type::F64 {
+                    if callee == "min" {
+                        "nex_rt_min_f64"
+                    } else {
+                        "nex_rt_max_f64"
+                    }
+                } else {
+                    if callee == "min" {
+                        "nex_rt_min_i64"
+                    } else {
+                        "nex_rt_max_i64"
+                    }
+                };
+                let ret_ty = if arg_ty == Type::F64 {
+                    IrType::F64
+                } else {
+                    IrType::I64
+                };
+                let left = lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
+                let right = lower_expr(builder, &args[1], scopes, storage, analysis, Type::Error)?;
+                let dst = builder.new_value();
+                builder.emit(Inst::Call {
+                    dst: Some(dst),
+                    name: runtime_name.to_string(),
+                    args: vec![left, right],
+                    ret: ret_ty,
+                });
+                return Ok(Operand::Value(dst));
+            }
+
+            if callee == "sqrt" {
+                let arg_value =
+                    lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
+                let dst = builder.new_value();
+                builder.emit(Inst::Call {
+                    dst: Some(dst),
+                    name: "nex_rt_sqrt".to_string(),
+                    args: vec![arg_value],
+                    ret: IrType::F64,
+                });
+                return Ok(Operand::Value(dst));
+            }
+
+            if callee == "pow" {
+                let left = lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
+                let right = lower_expr(builder, &args[1], scopes, storage, analysis, Type::Error)?;
+                let dst = builder.new_value();
+                builder.emit(Inst::Call {
+                    dst: Some(dst),
+                    name: "nex_rt_pow".to_string(),
+                    args: vec![left, right],
+                    ret: IrType::F64,
+                });
+                return Ok(Operand::Value(dst));
+            }
+
             let signature = analysis
                 .function(callee)
                 .ok_or_else(|| format!("unknown function `{callee}` during code generation"))?;
