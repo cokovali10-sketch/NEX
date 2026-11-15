@@ -1849,6 +1849,98 @@ impl<'a> Checker<'a> {
             return Type::String;
         }
 
+        if callee == "str_contains" || callee == "str_index_of" {
+            if args.len() != 2 {
+                self.error(
+                    "NXS004",
+                    format!("`{callee}` expects 2 arguments, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let left_ty = self.infer(&args[0]);
+            let right_ty = self.infer(&args[1]);
+            if (left_ty != Type::String || right_ty != Type::String)
+                && (left_ty != Type::Error && right_ty != Type::Error)
+            {
+                self.error(
+                    "NXS004",
+                    format!(
+                        "`{callee}` expects `string` arguments, found `{left_ty}` and `{right_ty}`"
+                    ),
+                    span,
+                );
+                return Type::Error;
+            }
+            if left_ty == Type::Error || right_ty == Type::Error {
+                return Type::Error;
+            }
+            return if callee == "str_contains" {
+                Type::Bool
+            } else {
+                Type::I64
+            };
+        }
+
+        if callee == "str_substring" {
+            if args.len() != 3 {
+                self.error(
+                    "NXS004",
+                    format!("`str_substring` expects 3 arguments, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let value_ty = self.infer(&args[0]);
+            let start_ty = self.infer(&args[1]);
+            let end_ty = self.infer(&args[2]);
+            let numeric = start_ty == Type::I64 && end_ty == Type::I64;
+            if (value_ty != Type::String || !numeric)
+                && (value_ty != Type::Error && start_ty != Type::Error && end_ty != Type::Error)
+            {
+                self.error(
+                    "NXS004",
+                    "`str_substring` expects `(string, i64, i64)`, found `({value_ty}, {start_ty}, {end_ty})`",
+                    span,
+                );
+                return Type::Error;
+            }
+            if value_ty == Type::Error || start_ty == Type::Error || end_ty == Type::Error {
+                return Type::Error;
+            }
+            return Type::String;
+        }
+
+        if callee == "str_upper" || callee == "str_lower" || callee == "str_trim" {
+            if args.len() != 1 {
+                self.error(
+                    "NXS004",
+                    format!("`{callee}` expects 1 argument, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let value_ty = self.infer(&args[0]);
+            if value_ty != Type::String && value_ty != Type::Error {
+                self.error(
+                    "NXS004",
+                    format!("`{callee}` expects a `string`, found `{value_ty}`"),
+                    span,
+                );
+                return Type::Error;
+            }
+            return value_ty;
+        }
+
         if callee == "to_string" {
             if args.len() != 1 {
                 self.error(

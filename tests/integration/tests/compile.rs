@@ -28,9 +28,11 @@ fn run_source(source: &str) -> (String, String, i32) {
     let output = Command::new(&executable)
         .output()
         .expect("failed to run executable");
+    // The runtime prints "\n"; Windows text mode turns that into "\r\n".
+    let normalize = |value: &[u8]| String::from_utf8_lossy(value).replace("\r\n", "\n");
     (
-        String::from_utf8_lossy(&output.stdout).to_string(),
-        String::from_utf8_lossy(&output.stderr).to_string(),
+        normalize(&output.stdout),
+        normalize(&output.stderr),
         output.status.code().unwrap_or(-1),
     )
 }
@@ -1004,4 +1006,47 @@ fn literal_range_check() {
             .iter()
             .any(|diagnostic| diagnostic.code == "NXS021")
     );
+}
+
+#[test]
+fn string_builtins() {
+    let source = r#"
+fn main():
+    var text = "Hello NEX World"
+    println(str_contains(text, "NEX"))
+    println(str_contains(text, "Rust"))
+    println(str_index_of(text, "NEX"))
+    println(str_index_of(text, "zzz"))
+    println(str_substring(text, 6, 9))
+    println(str_upper("abc"))
+    println(str_lower("ABC"))
+    print("[")
+    print(str_trim("  spaced  "))
+    println("]")
+"#;
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "true\nfalse\n6\n-1\nNEX\nABC\nabc\n[spaced]\n");
+}
+
+#[test]
+fn string_builtin_type_errors() {
+    let result = compile("fn main():\n    print(str_contains(\"a\", 1))\n");
+    assert!(result.has_errors());
+    assert!(result.diagnostics.iter().any(|d| d.code == "NXS004"));
+
+    let result = compile("fn main():\n    print(str_upper(7))\n");
+    assert!(result.has_errors());
+    assert!(result.diagnostics.iter().any(|d| d.code == "NXS004"));
+
+    let result = compile("fn main():\n    print(str_substring(\"abc\", 0))\n");
+    assert!(result.has_errors());
+    assert!(result.diagnostics.iter().any(|d| d.code == "NXS004"));
+}
+
+#[test]
+fn utf8_bom_is_ignored() {
+    let (stdout, stderr, code) = run_source("\u{feff}fn main():\n    print(\"bom ok\")\n");
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "bom ok");
 }

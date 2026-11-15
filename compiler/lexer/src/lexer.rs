@@ -32,6 +32,11 @@ impl<'a> Lexer<'a> {
     }
 
     pub fn lex(mut self) -> LexResult {
+        // Skip a UTF-8 byte order mark if the file starts with one.
+        if self.source.starts_with('\u{feff}') {
+            self.pos += '\u{feff}'.len_utf8();
+        }
+
         while self.pos < self.source.len() {
             if self.at_line_start && self.bracket_depth == 0 {
                 self.handle_line_start();

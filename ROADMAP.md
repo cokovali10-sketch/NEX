@@ -46,7 +46,9 @@
 
 ## NEX 0.5 - Standard Library
 
-- [ ] Collections, strings, math, algorithms.
+- [ ] Collections, math, algorithms.
+- [x] String functions: len, concat, str_contains, str_index_of,
+      str_substring, str_upper, str_lower, str_trim, to_string.
 - [ ] Filesystem and networking.
 - [ ] Time, logging, process APIs.
 

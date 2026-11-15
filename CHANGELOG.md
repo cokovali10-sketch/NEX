@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- String standard library: `str_contains`, `str_index_of`, `str_substring`,
+  `str_upper`, `str_lower`, `str_trim`, with runtime implementations, semantic
+  checks, and end-to-end tests.
+- `examples/strings` demonstrating the string builtins.
+- `docs/standard-library.md` documenting every implemented builtin.
+
+### Fixed
+
+- The lexer now skips a leading UTF-8 BOM instead of reporting `unexpected character`.
+- `use` declarations compile again after the `file` field was added to the AST node.
+- The driver no longer imports `std::collections::HashSet` unused.
+
+
 ## 0.1.0 - 2026-11-12
 
 ### Added

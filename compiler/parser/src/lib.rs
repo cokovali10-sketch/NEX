@@ -569,7 +569,11 @@ impl<'a> Parser<'a> {
         }
         let span = start.merge(self.peek_token().span);
         self.expect_line_end();
-        Some(UseDecl { path, span })
+        Some(UseDecl {
+            path,
+            file: None,
+            span,
+        })
     }
 
     fn parse_params(&mut self) -> Vec<Param> {

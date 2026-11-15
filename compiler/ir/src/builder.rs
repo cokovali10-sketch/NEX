@@ -1926,6 +1926,68 @@ fn lower_expr(
                 return Ok(Operand::Value(dst));
             }
 
+            if callee == "str_contains" || callee == "str_index_of" {
+                let haystack =
+                    lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
+                let needle = lower_expr(builder, &args[1], scopes, storage, analysis, Type::Error)?;
+                let dst = builder.new_value();
+                let (name, ret) = if callee == "str_contains" {
+                    ("nex_rt_str_contains", IrType::I32)
+                } else {
+                    ("nex_rt_str_index_of", IrType::I64)
+                };
+                builder.emit(Inst::Call {
+                    dst: Some(dst),
+                    name: name.to_string(),
+                    args: vec![haystack, needle],
+                    ret,
+                });
+                if callee == "str_contains" {
+                    // The runtime returns a C int; narrow it to the NEX bool type.
+                    let bool_dst = builder.new_value();
+                    builder.emit(Inst::Cast {
+                        dst: bool_dst,
+                        kind: CastKind::Truncate,
+                        from: IrType::I32,
+                        to: IrType::Bool,
+                        operand: Operand::Value(dst),
+                    });
+                    return Ok(Operand::Value(bool_dst));
+                }
+                return Ok(Operand::Value(dst));
+            }
+
+            if callee == "str_substring" {
+                let value = lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
+                let start = lower_expr(builder, &args[1], scopes, storage, analysis, Type::Error)?;
+                let end = lower_expr(builder, &args[2], scopes, storage, analysis, Type::Error)?;
+                let dst = builder.new_value();
+                builder.emit(Inst::Call {
+                    dst: Some(dst),
+                    name: "nex_rt_str_substring".to_string(),
+                    args: vec![value, start, end],
+                    ret: IrType::String,
+                });
+                return Ok(Operand::Value(dst));
+            }
+
+            if callee == "str_upper" || callee == "str_lower" || callee == "str_trim" {
+                let value = lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
+                let dst = builder.new_value();
+                let name = match callee {
+                    "str_upper" => "nex_rt_str_upper",
+                    "str_lower" => "nex_rt_str_lower",
+                    _ => "nex_rt_str_trim",
+                };
+                builder.emit(Inst::Call {
+                    dst: Some(dst),
+                    name: name.to_string(),
+                    args: vec![value],
+                    ret: IrType::String,
+                });
+                return Ok(Operand::Value(dst));
+            }
+
             if callee == "to_string" {
                 let arg_value =
                     lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;

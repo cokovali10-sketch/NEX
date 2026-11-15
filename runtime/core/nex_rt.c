@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <math.h>
+#include <ctype.h>
 
 static void nex_rt_write_utf8(unsigned int codepoint) {
     unsigned char buffer[4];
@@ -181,5 +182,105 @@ char *nex_rt_i64_to_string(long long value) {
         return NULL;
     }
     memcpy(result, buffer, (size_t)length + 1);
+    return result;
+}
+
+int nex_rt_str_contains(const char *haystack, const char *needle) {
+    if (haystack == NULL || needle == NULL) {
+        return 0;
+    }
+    return strstr(haystack, needle) != NULL;
+}
+
+long long nex_rt_str_index_of(const char *haystack, const char *needle) {
+    if (haystack == NULL || needle == NULL) {
+        return -1;
+    }
+    const char *found = strstr(haystack, needle);
+    if (found == NULL) {
+        return -1;
+    }
+    return (long long)(found - haystack);
+}
+
+char *nex_rt_str_substring(const char *value, long long start, long long end) {
+    if (value == NULL) {
+        return NULL;
+    }
+    long long length = (long long)strlen(value);
+    if (start < 0) {
+        start = 0;
+    }
+    if (end > length) {
+        end = length;
+    }
+    if (end < start) {
+        end = start;
+    }
+    long long count = end - start;
+    char *result = (char *)malloc((size_t)count + 1);
+    if (result == NULL) {
+        return NULL;
+    }
+    memcpy(result, value + start, (size_t)count);
+    result[count] = '\0';
+    return result;
+}
+
+char *nex_rt_str_upper(const char *value) {
+    if (value == NULL) {
+        return NULL;
+    }
+    size_t length = strlen(value);
+    char *result = (char *)malloc(length + 1);
+    if (result == NULL) {
+        return NULL;
+    }
+    for (size_t i = 0; i < length; i++) {
+        result[i] = (char)toupper((unsigned char)value[i]);
+    }
+    result[length] = '\0';
+    return result;
+}
+
+char *nex_rt_str_lower(const char *value) {
+    if (value == NULL) {
+        return NULL;
+    }
+    size_t length = strlen(value);
+    char *result = (char *)malloc(length + 1);
+    if (result == NULL) {
+        return NULL;
+    }
+    for (size_t i = 0; i < length; i++) {
+        result[i] = (char)tolower((unsigned char)value[i]);
+    }
+    result[length] = '\0';
+    return result;
+}
+
+char *nex_rt_str_trim(const char *value) {
+    if (value == NULL) {
+        return NULL;
+    }
+    const char *start = value;
+    while (*start == ' ' || *start == '\t' || *start == '\r' || *start == '\n') {
+        start++;
+    }
+    const char *end = start + strlen(start);
+    while (end > start) {
+        char last = end[-1];
+        if (last != ' ' && last != '\t' && last != '\r' && last != '\n') {
+            break;
+        }
+        end--;
+    }
+    size_t count = (size_t)(end - start);
+    char *result = (char *)malloc(count + 1);
+    if (result == NULL) {
+        return NULL;
+    }
+    memcpy(result, start, count);
+    result[count] = '\0';
     return result;
 }
