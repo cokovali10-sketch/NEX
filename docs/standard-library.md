@@ -44,6 +44,19 @@ These are global functions, not methods, so no imports are required.
 String builtins that return a string allocate with `malloc`; NEX does not free
 them yet because there is no ownership model (see `docs/memory-model.md`).
 
+### Files
+
+| Function | Signature | Notes |
+|---|---|---|
+| `read_file` | `(path: string) -> string` | Whole file as a string; empty string when it cannot be read. |
+| `write_file` | `(path: string, content: string) -> bool` | Creates or truncates the file; `false` on failure. |
+| `file_exists` | `(path: string) -> bool` | True when the path can be opened for reading. |
+| `file_size` | `(path: string) -> i64` | Size in bytes, or `-1` when the file cannot be opened. |
+
+There is no streaming API yet: `read_file` loads the whole file, so it is not
+suitable for very large inputs. Paths are interpreted by the host operating
+system, so use `/` on Windows too.
+
 ### Numeric
 
 | Function | Signature | Notes |

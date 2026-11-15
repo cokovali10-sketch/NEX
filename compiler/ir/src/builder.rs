@@ -1995,6 +1995,56 @@ fn lower_expr(
                 return Ok(Operand::Value(dst));
             }
 
+            if callee == "read_file" || callee == "file_exists" || callee == "file_size" {
+                let path = lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
+                let dst = builder.new_value();
+                let (name, ret) = match callee {
+                    "read_file" => ("nex_rt_read_file", IrType::String),
+                    "file_size" => ("nex_rt_file_size", IrType::I64),
+                    _ => ("nex_rt_file_exists", IrType::I32),
+                };
+                builder.emit(Inst::Call {
+                    dst: Some(dst),
+                    name: name.to_string(),
+                    args: vec![path],
+                    ret,
+                });
+                if callee == "file_exists" {
+                    let wide = builder.new_value();
+                    builder.emit(Inst::Cast {
+                        dst: wide,
+                        kind: CastKind::Truncate,
+                        from: IrType::I32,
+                        to: IrType::Bool,
+                        operand: Operand::Value(dst),
+                    });
+                    return Ok(Operand::Value(wide));
+                }
+                return Ok(Operand::Value(dst));
+            }
+
+            if callee == "write_file" {
+                let path = lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
+                let content =
+                    lower_expr(builder, &args[1], scopes, storage, analysis, Type::Error)?;
+                let raw = builder.new_value();
+                builder.emit(Inst::Call {
+                    dst: Some(raw),
+                    name: "nex_rt_write_file".to_string(),
+                    args: vec![path, content],
+                    ret: IrType::I32,
+                });
+                let dst = builder.new_value();
+                builder.emit(Inst::Cast {
+                    dst,
+                    kind: CastKind::Truncate,
+                    from: IrType::I32,
+                    to: IrType::Bool,
+                    operand: Operand::Value(raw),
+                });
+                return Ok(Operand::Value(dst));
+            }
+
             if callee == "str_reverse" {
                 let value = lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
                 let dst = builder.new_value();

@@ -1091,3 +1091,27 @@ fn string_helpers_parse_and_reverse() {
     assert_eq!(code, 0, "stderr: {stderr}");
     assert_eq!(stdout, "cba\n42\n2.5\n7\n2.5\ntrue\n");
 }
+
+#[test]
+fn file_round_trip() {
+    let dir = nex_backend::temp_dir("nex-file-io");
+    std::fs::create_dir_all(&dir).expect("create temp dir");
+    let path = dir.join("note.txt");
+    let path_string = path.to_string_lossy().replace('\\', "/");
+
+    let source = format!(
+        "fn main():\n    var p = \"{path_string}\"\n    println(file_exists(p))\n    println(write_file(p, \"hello\"))\n    println(file_exists(p))\n    print(read_file(p))\n    println(file_size(p))\n",
+    );
+
+    let (stdout, stderr, code) = run_source(&source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "false\ntrue\ntrue\nhello5\n");
+}
+
+#[test]
+fn missing_file_reports_failure() {
+    let source = "fn main():\n    println(file_exists(\"definitely-not-here.txt\"))\n    println(file_size(\"definitely-not-here.txt\"))\n";
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "false\n-1\n");
+}

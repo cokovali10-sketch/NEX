@@ -26,6 +26,8 @@
 - `str_reverse` and `parse_i64`. `abs` now accepts `f64`, and `to_string`
   accepts `f64` and `bool`.
 
+- `read_file`, `write_file`, `file_exists`, and `file_size`.
+
 ### Fixed
 
 - The lexer now skips a leading UTF-8 BOM instead of reporting `unexpected character`.

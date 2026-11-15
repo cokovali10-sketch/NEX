@@ -440,3 +440,75 @@ long long nex_rt_parse_i64(const char *value) {
     }
     return parsed;
 }
+
+char *nex_rt_read_file(const char *path) {
+    if (path == NULL) {
+        return NULL;
+    }
+    FILE *file = fopen(path, "rb");
+    if (file == NULL) {
+        return NULL;
+    }
+    if (fseek(file, 0, SEEK_END) != 0) {
+        fclose(file);
+        return NULL;
+    }
+    long length = ftell(file);
+    if (length < 0) {
+        fclose(file);
+        return NULL;
+    }
+    rewind(file);
+    char *buffer = (char *)malloc((size_t)length + 1);
+    if (buffer == NULL) {
+        fclose(file);
+        return NULL;
+    }
+    size_t read = fread(buffer, 1, (size_t)length, file);
+    fclose(file);
+    buffer[read] = '\0';
+    return buffer;
+}
+
+int nex_rt_write_file(const char *path, const char *content) {
+    if (path == NULL || content == NULL) {
+        return 0;
+    }
+    FILE *file = fopen(path, "wb");
+    if (file == NULL) {
+        return 0;
+    }
+    size_t length = strlen(content);
+    size_t written = fwrite(content, 1, length, file);
+    fclose(file);
+    return written == length;
+}
+
+int nex_rt_file_exists(const char *path) {
+    if (path == NULL) {
+        return 0;
+    }
+    FILE *file = fopen(path, "rb");
+    if (file == NULL) {
+        return 0;
+    }
+    fclose(file);
+    return 1;
+}
+
+long long nex_rt_file_size(const char *path) {
+    if (path == NULL) {
+        return -1;
+    }
+    FILE *file = fopen(path, "rb");
+    if (file == NULL) {
+        return -1;
+    }
+    if (fseek(file, 0, SEEK_END) != 0) {
+        fclose(file);
+        return -1;
+    }
+    long length = ftell(file);
+    fclose(file);
+    return (long long)length;
+}

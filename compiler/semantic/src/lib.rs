@@ -1942,6 +1942,60 @@ impl<'a> Checker<'a> {
             return value_ty;
         }
 
+        if callee == "read_file" || callee == "file_exists" || callee == "file_size" {
+            if args.len() != 1 {
+                self.error(
+                    "NXS004",
+                    format!("`{callee}` expects 1 argument, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let value_ty = self.infer(&args[0]);
+            if value_ty != Type::String && value_ty != Type::Error {
+                self.error(
+                    "NXS004",
+                    format!("`{callee}` expects a `string` path, found `{value_ty}`"),
+                    span,
+                );
+                return Type::Error;
+            }
+            return match callee {
+                "read_file" => Type::String,
+                "file_size" => Type::I64,
+                _ => Type::Bool,
+            };
+        }
+
+        if callee == "write_file" {
+            if args.len() != 2 {
+                self.error(
+                    "NXS004",
+                    format!("`write_file` expects 2 arguments, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let path_ty = self.infer(&args[0]);
+            let content_ty = self.infer(&args[1]);
+            if (path_ty != Type::String || content_ty != Type::String)
+                && (path_ty != Type::Error && content_ty != Type::Error)
+            {
+                self.error("NXS004", "`write_file` expects `(string, string)`", span);
+                return Type::Error;
+            }
+            if path_ty == Type::Error || content_ty == Type::Error {
+                return Type::Error;
+            }
+            return Type::Bool;
+        }
+
         if callee == "str_reverse" {
             if args.len() != 1 {
                 self.error(
