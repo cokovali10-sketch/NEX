@@ -29,7 +29,11 @@ fn run_source(source: &str) -> (String, String, i32) {
         .output()
         .expect("failed to run executable");
     // The runtime prints "\n"; Windows text mode turns that into "\r\n".
-    let normalize = |value: &[u8]| String::from_utf8_lossy(value).replace("\r\n", "\n");
+    let normalize = |value: &[u8]| {
+        String::from_utf8_lossy(value)
+            .replace("\r\n", "\n")
+            .replace('\r', "")
+    };
     (
         normalize(&output.stdout),
         normalize(&output.stderr),
@@ -1162,8 +1166,8 @@ fn http_response_includes_length_and_close() {
     let source = "fn main():\n    print(http_response(\"200 OK\", \"text/plain\", \"hi\"))\n";
     let (stdout, stderr, code) = run_source(source);
     assert_eq!(code, 0, "stderr: {stderr}");
-    assert!(stdout.starts_with("HTTP/1.1 200 OK\r\n"), "{stdout}");
-    assert!(stdout.contains("Content-Type: text/plain\r\n"), "{stdout}");
-    assert!(stdout.contains("Content-Length: 2\r\n"), "{stdout}");
-    assert!(stdout.contains("Connection: close\r\n\r\nhi"), "{stdout}");
+    assert!(stdout.starts_with("HTTP/1.1 200 OK\n"), "{stdout}");
+    assert!(stdout.contains("Content-Type: text/plain\n"), "{stdout}");
+    assert!(stdout.contains("Content-Length: 2\n"), "{stdout}");
+    assert!(stdout.contains("Connection: close\n\nhi"), "{stdout}");
 }
