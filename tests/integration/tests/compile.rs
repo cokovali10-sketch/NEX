@@ -1050,3 +1050,19 @@ fn utf8_bom_is_ignored() {
     assert_eq!(code, 0, "stderr: {stderr}");
     assert_eq!(stdout, "bom ok");
 }
+
+#[test]
+fn pass_statement_is_a_no_op() {
+    let source = "fn noop():\n    pass\n\nfn main():\n    noop()\n    print(\"ok\")\n";
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "ok");
+}
+
+#[test]
+fn pass_is_allowed_in_a_match_arm() {
+    let source = "enum Color:\n    Red\n    Green\n\nfn main():\n    var c = Color.Red\n    match c:\n        case Red:\n            pass\n        case Green:\n            print(\"green\")\n    print(\"done\")\n";
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "done");
+}

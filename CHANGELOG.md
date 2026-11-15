@@ -18,6 +18,9 @@
   self-comparisons, constant conditions, and unused imports, with
   `file:line:column` output and a `--deny-warnings` flag for CI.
 
+- `pass`, an explicitly empty statement, for empty function bodies, `else`
+  branches, and `match` arms. The formatter emits it for empty blocks.
+
 ### Fixed
 
 - The lexer now skips a leading UTF-8 BOM instead of reporting `unexpected character`.

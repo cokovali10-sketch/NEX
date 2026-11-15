@@ -143,6 +143,8 @@ pub enum StmtKind {
     },
     Break,
     Continue,
+    /// `pass`: an intentionally empty block.
+    Pass,
     Expr(Expr),
 }
 

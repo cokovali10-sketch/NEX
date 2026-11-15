@@ -376,6 +376,7 @@ impl<'a> Printer<'a> {
                 }
                 self.indent -= 1;
             }
+            StmtKind::Pass => self.push("pass"),
             StmtKind::Break => self.push("break"),
             StmtKind::Continue => self.push("continue"),
             StmtKind::Expr(expr) => self.push(expr_str(expr)),
@@ -646,6 +647,13 @@ mod tests {
         assert!(!contains_comment(
             "fn main():\n    print(\"# not a comment\")\n"
         ));
+    }
+
+    #[test]
+    fn formats_pass_statements() {
+        let source = "fn noop():\n    pass\n\nfn main():\n    noop()\n";
+        let expected = "fn noop():\n    pass\n\nfn main():\n    noop()\n";
+        assert_eq!(format(source), expected);
     }
 
     #[test]

@@ -209,6 +209,7 @@ impl<'a> Lexer<'a> {
             "return" => TokenKind::Return,
             "break" => TokenKind::Break,
             "continue" => TokenKind::Continue,
+            "pass" => TokenKind::Pass,
             "struct" => TokenKind::Struct,
             "enum" => TokenKind::Enum,
             "impl" => TokenKind::Impl,

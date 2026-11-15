@@ -1002,6 +1002,7 @@ impl<'a> Checker<'a> {
                     );
                 }
             }
+            StmtKind::Pass => {}
             StmtKind::Break | StmtKind::Continue => {
                 if self.loop_depth == 0 {
                     let keyword = match statement.kind {

@@ -434,6 +434,7 @@ fn lower_statement(
             builder.terminate(Terminator::Br(exit));
             Ok(())
         }
+        StmtKind::Pass => Ok(()),
         StmtKind::Continue => {
             let (_, continue_bb) = builder
                 .loop_stack

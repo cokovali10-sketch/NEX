@@ -777,6 +777,14 @@ impl<'a> Parser<'a> {
                     span: start,
                 })
             }
+            TokenKind::Pass => {
+                let start = self.advance().span;
+                self.expect_line_end();
+                Some(Stmt {
+                    kind: StmtKind::Pass,
+                    span: start,
+                })
+            }
             TokenKind::Semicolon => {
                 let token = self.advance();
                 self.error(
