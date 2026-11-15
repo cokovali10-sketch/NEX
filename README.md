@@ -51,7 +51,7 @@ runtime (`runtime/core/nex_rt.c`) — not a hidden language runtime.
   compound assignment, structs with scalar or nested struct fields and
   function parameters and returns, enums with `match`, arrays and tuples with
   type annotations and function parameters and returns, printing,
-  constants, and equality for aggregate values, tuples, and modules with `use`
+  constants, equality for aggregate values, and external C calls, tuples, and modules with `use`
   aliases.
 - Not implemented yet: generics, traits, the full standard library, package
   manager, debugger, profiler, and NEX Studio.

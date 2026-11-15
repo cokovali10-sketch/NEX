@@ -73,6 +73,13 @@ impl<'a> Parser<'a> {
                 } else {
                     self.synchronize_item();
                 }
+            } else if self.check(&TokenKind::Extern) {
+                if let Some(mut function) = self.parse_extern_function() {
+                    function.public = is_public;
+                    functions.push(function);
+                } else {
+                    self.synchronize_item();
+                }
             } else if self.check(&TokenKind::Fn) {
                 if let Some(mut function) = self.parse_function() {
                     function.public = is_public;
@@ -155,6 +162,58 @@ impl<'a> Parser<'a> {
         Some(FnDecl {
             name,
             public: false,
+            extern_abi: None,
+            params,
+            ret,
+            body,
+            span,
+        })
+    }
+
+    fn parse_extern_function(&mut self) -> Option<FnDecl> {
+        let start = self.advance().span; // extern
+        let abi = if let TokenKind::Str(value) = self.peek() {
+            let value = value.clone();
+            self.advance();
+            Some(value)
+        } else {
+            Some("C".to_string())
+        };
+
+        if !self.expect(&TokenKind::Fn, "after `extern`") {
+            self.synchronize_item();
+            return None;
+        }
+
+        let (name, _name_span) = self.expect_ident("as a function name")?;
+        let params = if self.check(&TokenKind::LParen) {
+            self.advance();
+            let params = self.parse_params();
+            if !self.expect(&TokenKind::RParen, "after parameters") {
+                self.synchronize_item();
+                return None;
+            }
+            params
+        } else {
+            Vec::new()
+        };
+
+        let ret = if self.eat(&TokenKind::Arrow) {
+            Some(self.parse_type())
+        } else {
+            None
+        };
+
+        let span = start.merge(self.peek_token().span);
+        self.expect_line_end();
+        let body = nex_ast::Block {
+            stmts: Vec::new(),
+            span,
+        };
+        Some(FnDecl {
+            name,
+            public: false,
+            extern_abi: abi,
             params,
             ret,
             body,
@@ -451,6 +510,14 @@ impl<'a> Parser<'a> {
                     constant.name = format!("{name}.{}", constant.name);
                     constant.public = is_public;
                     consts.push(constant);
+                } else {
+                    self.synchronize_item();
+                }
+            } else if self.check(&TokenKind::Extern) {
+                if let Some(mut function) = self.parse_extern_function() {
+                    function.name = format!("{name}.{}", function.name);
+                    function.public = is_public;
+                    functions.push(function);
                 } else {
                     self.synchronize_item();
                 }

@@ -65,6 +65,7 @@ pub struct ConstDecl {
 pub struct FnDecl {
     pub name: String,
     pub public: bool,
+    pub extern_abi: Option<String>,
     pub params: Vec<Param>,
     pub ret: Option<TypeExpr>,
     pub body: Block,

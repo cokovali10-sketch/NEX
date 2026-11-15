@@ -76,6 +76,26 @@ impl<'a> Emitter<'a> {
                 ),
             );
         }
+        for external in &self.module.externs {
+            sig_map.insert(
+                external.name.clone(),
+                (external.params.clone(), external.ret),
+            );
+        }
+
+        for external in &self.module.externs {
+            let ret = llvm_type(external.ret);
+            let params = external
+                .params
+                .iter()
+                .map(|ty| llvm_type(*ty))
+                .collect::<Vec<_>>()
+                .join(", ");
+            out.push_str(&format!("declare {} @{}({})\n", ret, external.name, params));
+        }
+        if !self.module.externs.is_empty() {
+            out.push('\n');
+        }
 
         for function in &self.module.functions {
             self.emit_function(function, &mut body, &sig_map)?;
@@ -289,7 +309,13 @@ impl<'a> Emitter<'a> {
                 args,
                 ret,
             } => {
-                let symbol = if name.starts_with("nex_rt_") {
+                let symbol = if name.starts_with("nex_rt_")
+                    || self
+                        .module
+                        .externs
+                        .iter()
+                        .any(|external| external.name == *name)
+                {
                     name.clone()
                 } else {
                     format!("nex.fn.{name}")

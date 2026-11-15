@@ -247,7 +247,15 @@ pub struct StructDef {
 }
 
 #[derive(Debug, Clone)]
+pub struct ExternDecl {
+    pub name: String,
+    pub params: Vec<IrType>,
+    pub ret: IrType,
+}
+
+#[derive(Debug, Clone)]
 pub struct IrModule {
     pub structs: Vec<StructDef>,
     pub functions: Vec<IrFunction>,
+    pub externs: Vec<ExternDecl>,
 }

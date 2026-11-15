@@ -603,6 +603,22 @@ fn main():
 }
 
 #[test]
+fn external_c_function() {
+    let source = r#"
+extern "C" fn puts(s: string) -> i32
+
+fn main():
+    let r = puts("ffi works")
+    print(" ")
+    print(r)
+"#;
+    let (stdout, _stderr, code) = run_source(source);
+    assert_eq!(code, 0);
+    assert!(stdout.contains("ffi works"));
+    assert!(stdout.contains("0") || stdout.contains("1"));
+}
+
+#[test]
 fn aggregate_equality() {
     let source = r#"
 struct Point:

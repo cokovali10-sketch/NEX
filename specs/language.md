@@ -7,6 +7,7 @@ planned and are not yet implemented.
 ## Implemented in 0.2
 
 - Function declarations with parameters and optional return type.
+- External C function declarations with `extern "C" fn`.
 - `let` (immutable) and `var` (mutable) bindings with type inference.
 - Assignment to mutable bindings.
 - Compound assignment operators `+=`, `-=`, `*=`, `/=`, `%=` (desugared to

@@ -4,8 +4,8 @@ use nex_ast::{Block, Expr, ExprKind, Program, Stmt, StmtKind};
 use nex_semantic::{Analysis, Type};
 
 use crate::types::{
-    BinOp, BlockId, CastKind, Const, Inst, IrFunction, IrModule, IrType, Operand, StructDef,
-    Terminator, UnOp, ValueId,
+    BinOp, BlockId, CastKind, Const, ExternDecl, Inst, IrFunction, IrModule, IrType, Operand,
+    StructDef, Terminator, UnOp, ValueId,
 };
 
 #[derive(Clone, Copy)]
@@ -114,9 +114,27 @@ pub fn build(program: &Program, analysis: &Analysis) -> Result<IrModule, String>
     let mut module = IrModule {
         structs,
         functions: Vec::new(),
+        externs: Vec::new(),
     };
 
     for function in &program.functions {
+        if analysis.externs.contains(&function.name) {
+            let signature = analysis.functions.get(&function.name).ok_or_else(|| {
+                format!("missing type information for function `{}`", function.name)
+            })?;
+            module.externs.push(ExternDecl {
+                name: function.name.clone(),
+                params: signature
+                    .params
+                    .iter()
+                    .copied()
+                    .map(IrType::from_type)
+                    .collect(),
+                ret: IrType::from_type(signature.ret),
+            });
+            continue;
+        }
+
         let signature = analysis
             .functions
             .get(&function.name)

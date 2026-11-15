@@ -48,6 +48,7 @@ pub struct Analysis {
     pub modules: std::collections::HashSet<String>,
     pub aliases: std::collections::HashMap<String, String>,
     pub public_consts: std::collections::HashSet<String>,
+    pub externs: std::collections::HashSet<String>,
     /// Variant name to the interned name of the enum that declares it.
     pub variant_map: HashMap<String, &'static str>,
     pub consts: BTreeMap<String, Type>,
@@ -137,6 +138,7 @@ impl<'a> Checker<'a> {
                 modules: std::collections::HashSet::new(),
                 aliases: std::collections::HashMap::new(),
                 public_consts: std::collections::HashSet::new(),
+                externs: std::collections::HashSet::new(),
                 variant_map: HashMap::new(),
                 consts: BTreeMap::new(),
                 const_exprs: BTreeMap::new(),
@@ -165,6 +167,10 @@ impl<'a> Checker<'a> {
 
     fn collect_functions(&mut self) {
         for function in &self.program.functions {
+            if function.extern_abi.is_some() {
+                self.analysis.externs.insert(function.name.clone());
+            }
+
             if function.name == "print" || function.name == "println" {
                 self.error(
                     "NXS019",
@@ -597,6 +603,9 @@ impl<'a> Checker<'a> {
     fn check_functions(&mut self) {
         let functions = self.program.functions.clone();
         for function in functions {
+            if self.analysis.externs.contains(&function.name) {
+                continue;
+            }
             let Some(sig) = self.analysis.functions.get(&function.name).cloned() else {
                 continue;
             };
