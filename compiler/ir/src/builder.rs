@@ -923,6 +923,29 @@ fn lower_array_place(
                 .ok_or_else(|| format!("unknown variable `{name}` during code generation"))?;
             Ok(slot.ptr)
         }
+        ExprKind::Call { callee, .. } => {
+            let resolved = analysis
+                .aliases
+                .get(callee)
+                .cloned()
+                .unwrap_or_else(|| callee.clone());
+            let callee = resolved.as_str();
+            let signature = analysis
+                .function(callee)
+                .ok_or_else(|| format!("unknown function `{callee}` during code generation"))?;
+            let Type::Array { llvm, display, .. } = signature.ret else {
+                return Err(format!("`{callee}` does not return an array value"));
+            };
+            let _ = display;
+            let value = lower_expr(builder, expr, scopes, storage, analysis, signature.ret)?;
+            let ptr = builder.alloca_at_entry(IrType::Array(llvm));
+            builder.emit(Inst::Store {
+                ptr,
+                value,
+                ty: IrType::Array(llvm),
+            });
+            Ok(ptr)
+        }
         ExprKind::Field { base, .. } => {
             let Some((struct_name, index, field_ty)) = analysis.field_read(expr.span) else {
                 return Err("missing field information during code generation".to_string());

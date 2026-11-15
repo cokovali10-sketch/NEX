@@ -81,6 +81,7 @@ pub struct Param {
 #[derive(Debug, Clone)]
 pub struct TypeExpr {
     pub name: String,
+    pub array: Option<(Box<TypeExpr>, usize)>,
     pub span: Span,
 }
 

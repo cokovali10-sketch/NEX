@@ -605,6 +605,27 @@ fn main():
 }
 
 #[test]
+fn array_parameters_and_returns() {
+    let source = r#"
+fn identity(a: [i64; 3]) -> [i64; 3]:
+    return a
+
+fn main():
+    let a: [i64; 3] = [1, 2, 3]
+    var b = identity(a)
+    b[1] = 9
+    print(b[0])
+    print(" ")
+    print(b[1])
+    print(" ")
+    print(a[1])
+"#;
+    let (stdout, _stderr, code) = run_source(source);
+    assert_eq!(code, 0);
+    assert_eq!(stdout, "1 9 2");
+}
+
+#[test]
 fn struct_parameters_and_returns() {
     let source = r#"
 struct Point:

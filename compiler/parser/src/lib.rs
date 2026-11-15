@@ -532,6 +532,44 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_type(&mut self) -> TypeExpr {
+        if self.check(&TokenKind::LBracket) {
+            let start = self.advance().span; // [
+            let elem = self.parse_type();
+            if !self.expect(&TokenKind::Semicolon, "in array type") {
+                return TypeExpr {
+                    name: "<error>".to_string(),
+                    array: None,
+                    span: start,
+                };
+            }
+            let size = match self.peek() {
+                TokenKind::Int(value) => {
+                    let value = *value;
+                    self.advance();
+                    value as usize
+                }
+                _ => {
+                    let span = self.peek_token().span;
+                    self.error("NXP011", "expected an array size", span);
+                    0
+                }
+            };
+            let end_span = if self.check(&TokenKind::RBracket) {
+                let span = self.peek_token().span;
+                self.advance();
+                span
+            } else {
+                let span = self.peek_token().span;
+                self.error("NXP011", "expected `]`", span);
+                span
+            };
+            return TypeExpr {
+                name: String::new(),
+                array: Some((Box::new(elem), size)),
+                span: start.merge(end_span),
+            };
+        }
+
         if let Some((name, span)) = self.expect_ident("as a type name") {
             if self.check(&TokenKind::Lt) {
                 let generic_span = self.peek_token().span;
@@ -542,11 +580,16 @@ impl<'a> Parser<'a> {
                 );
                 self.skip_balanced_angles();
             }
-            TypeExpr { name, span }
+            TypeExpr {
+                name,
+                array: None,
+                span,
+            }
         } else {
             let span = self.peek_token().span;
             TypeExpr {
                 name: "<error>".to_string(),
+                array: None,
                 span,
             }
         }

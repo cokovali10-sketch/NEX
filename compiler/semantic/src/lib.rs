@@ -1646,6 +1646,34 @@ impl<'a> Checker<'a> {
     }
 
     fn resolve_type(&mut self, ty: &nex_ast::TypeExpr) -> Type {
+        if let Some((elem_ty_expr, len)) = &ty.array {
+            let elem_ty = self.resolve_type(elem_ty_expr);
+            if elem_ty == Type::Error {
+                return Type::Error;
+            }
+            if *len == 0 {
+                self.error(
+                    "NXS035",
+                    "empty array types are not supported".to_string(),
+                    ty.span,
+                );
+                return Type::Error;
+            }
+            let (display, llvm) = intern_array_type(elem_ty, *len);
+            if !self.analysis.arrays.contains_key(display) {
+                self.analysis.arrays.insert(
+                    display.to_string(),
+                    ArrayInfo {
+                        display,
+                        llvm,
+                        elem: elem_ty,
+                        len: *len,
+                    },
+                );
+            }
+            return Type::Array { display, llvm };
+        }
+
         if let Some(resolved) = Type::from_name(&ty.name) {
             if resolved == Type::Void {
                 // `void` is only valid as a function return type. Callers can still

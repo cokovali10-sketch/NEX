@@ -24,7 +24,8 @@
 - [x] Struct parameters and return values.
 - [x] Nested struct fields.
 - [x] Enforce `pub` visibility across modules.
-- [ ] Arrays and tuples in type annotations, parameters, and return values.
+- [x] Array type annotations, parameters, and return values.
+- [ ] Tuple type annotations, parameters, and return values.
 - [ ] Traits and pattern matching beyond enums.
 - [ ] Better control-flow analysis and definite-return checking.
 - [ ] Richer diagnostics with fixes and suggestions.

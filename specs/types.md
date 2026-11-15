@@ -97,8 +97,9 @@ a[1] = 9
 - `var` arrays support element assignment and compound assignment.
 - Array values can be copied by initializing a binding from an existing array
   variable or literal.
-- Array types cannot be written in source yet, so arrays cannot be function
-  parameters, return values, constants, printed, or compared.
+- Array types can be written in source as `[T; N]`, so arrays can be used in
+  type annotations, function parameters, and return values.
+- Array values still cannot be printed, declared as constants, or compared.
 
 ## Tuples
 
