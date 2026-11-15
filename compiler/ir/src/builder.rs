@@ -1162,6 +1162,45 @@ fn lower_bounds_check(builder: &mut FunctionBuilder, index: Operand, index_ty: T
     builder.current = ok_bb;
 }
 
+fn fold_bin(op: BinOp, lhs: &Const, rhs: &Const, ty: Type) -> Option<Const> {
+    match (op, lhs, rhs) {
+        (BinOp::Add, Const::Int(a), Const::Int(b)) => Some(Const::Int(a.wrapping_add(*b))),
+        (BinOp::Sub, Const::Int(a), Const::Int(b)) => Some(Const::Int(a.wrapping_sub(*b))),
+        (BinOp::Mul, Const::Int(a), Const::Int(b)) => Some(Const::Int(a.wrapping_mul(*b))),
+        (BinOp::Div, Const::Int(a), Const::Int(b)) if *b != 0 => Some(Const::Int(a / *b)),
+        (BinOp::Rem, Const::Int(a), Const::Int(b)) if *b != 0 => Some(Const::Int(a % *b)),
+        (BinOp::Add, Const::Float(a), Const::Float(b)) => Some(Const::Float(a + b)),
+        (BinOp::Sub, Const::Float(a), Const::Float(b)) => Some(Const::Float(a - b)),
+        (BinOp::Mul, Const::Float(a), Const::Float(b)) => Some(Const::Float(a * b)),
+        (BinOp::Div, Const::Float(a), Const::Float(b)) if *b != 0.0 => Some(Const::Float(a / b)),
+        (BinOp::Rem, Const::Float(a), Const::Float(b)) if *b != 0.0 => Some(Const::Float(a % b)),
+        (BinOp::Eq, Const::Int(a), Const::Int(b)) => Some(Const::Bool(a == b)),
+        (BinOp::Ne, Const::Int(a), Const::Int(b)) => Some(Const::Bool(a != b)),
+        (BinOp::Lt, Const::Int(a), Const::Int(b)) => Some(Const::Bool(a < b)),
+        (BinOp::Le, Const::Int(a), Const::Int(b)) => Some(Const::Bool(a <= b)),
+        (BinOp::Gt, Const::Int(a), Const::Int(b)) => Some(Const::Bool(a > b)),
+        (BinOp::Ge, Const::Int(a), Const::Int(b)) => Some(Const::Bool(a >= b)),
+        (BinOp::Eq, Const::Float(a), Const::Float(b)) => Some(Const::Bool(a == b)),
+        (BinOp::Ne, Const::Float(a), Const::Float(b)) => Some(Const::Bool(a != b)),
+        (BinOp::Lt, Const::Float(a), Const::Float(b)) => Some(Const::Bool(a < b)),
+        (BinOp::Le, Const::Float(a), Const::Float(b)) => Some(Const::Bool(a <= b)),
+        (BinOp::Gt, Const::Float(a), Const::Float(b)) => Some(Const::Bool(a > b)),
+        (BinOp::Ge, Const::Float(a), Const::Float(b)) => Some(Const::Bool(a >= b)),
+        (BinOp::Eq, Const::Bool(a), Const::Bool(b)) => Some(Const::Bool(a == b)),
+        (BinOp::Ne, Const::Bool(a), Const::Bool(b)) => Some(Const::Bool(a != b)),
+        (BinOp::Eq, Const::Char(a), Const::Char(b)) => Some(Const::Bool(a == b)),
+        (BinOp::Ne, Const::Char(a), Const::Char(b)) => Some(Const::Bool(a != b)),
+        (BinOp::Lt, Const::Char(a), Const::Char(b)) => Some(Const::Bool(a < b)),
+        (BinOp::Le, Const::Char(a), Const::Char(b)) => Some(Const::Bool(a <= b)),
+        (BinOp::Gt, Const::Char(a), Const::Char(b)) => Some(Const::Bool(a > b)),
+        (BinOp::Ge, Const::Char(a), Const::Char(b)) => Some(Const::Bool(a >= b)),
+        (BinOp::Eq, Const::Str(a), Const::Str(b)) => Some(Const::Bool(a == b)),
+        (BinOp::Ne, Const::Str(a), Const::Str(b)) => Some(Const::Bool(a != b)),
+        _ => None,
+    }
+    .filter(|_| ty != Type::Error)
+}
+
 fn lower_match(
     builder: &mut FunctionBuilder,
     scrutinee: &Expr,
@@ -1627,6 +1666,12 @@ fn lower_expr(
 
             let lhs = lower_expr(builder, left, scopes, storage, analysis, Type::Error)?;
             let rhs = lower_expr(builder, right, scopes, storage, analysis, Type::Error)?;
+            if let (Operand::Const(left_const), Operand::Const(right_const)) = (&lhs, &rhs) {
+                if let Some(result) = fold_bin(bin_op, left_const, right_const, ty) {
+                    return Ok(Operand::Const(result));
+                }
+            }
+
             let dst = builder.new_value();
             builder.emit(Inst::Bin {
                 dst,

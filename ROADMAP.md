@@ -31,7 +31,7 @@
 
 ## NEX 0.3 - Native Compiler
 
-- [ ] Optimization passes in NEX IR.
+- [x] Constant folding in NEX IR.
 - [ ] Debug information.
 - [ ] Cross-platform targets.
 - [ ] Reproducible build metadata.
