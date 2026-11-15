@@ -605,6 +605,32 @@ fn main():
 }
 
 #[test]
+fn tuple_parameters_and_returns() {
+    let source = r#"
+fn identity(a: (i64, i64)) -> (i64, i64):
+    return a
+
+fn main():
+    let a: (i64, i64) = (1, 2)
+    var b = identity(a)
+    b.1 = 9
+    print(b.0)
+    print(" ")
+    print(b.1)
+    print(" ")
+    print(a.1)
+    print(" ")
+    let c: (i64, f64) = (10, 2.5)
+    print(c.0)
+    print(" ")
+    print(c.1)
+"#;
+    let (stdout, _stderr, code) = run_source(source);
+    assert_eq!(code, 0);
+    assert_eq!(stdout, "1 9 2 10 2.5");
+}
+
+#[test]
 fn array_parameters_and_returns() {
     let source = r#"
 fn identity(a: [i64; 3]) -> [i64; 3]:

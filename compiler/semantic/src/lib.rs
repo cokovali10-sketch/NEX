@@ -1420,17 +1420,19 @@ impl<'a> Checker<'a> {
                     );
                     Type::Error
                 } else {
-                    let elem_ty = self.infer(&elements[0]);
-                    if elem_ty == Type::Error {
-                        for element in &elements[1..] {
-                            self.infer(element);
+                    let mut elem_types = Vec::with_capacity(elements.len());
+                    let mut failed = false;
+                    for element in elements {
+                        let ty = self.infer(element);
+                        if ty == Type::Error {
+                            failed = true;
+                        } else {
+                            elem_types.push(ty);
                         }
+                    }
+                    if failed || elem_types.len() != elements.len() {
                         Type::Error
                     } else {
-                        for element in &elements[1..] {
-                            self.check_expected(element, elem_ty);
-                        }
-                        let elem_types = vec![elem_ty; elements.len()];
                         let name = intern_tuple_name(&elem_types);
                         if !self.analysis.structs.contains_key(name) {
                             let fields: Vec<(String, Type)> = elem_types
@@ -1646,6 +1648,43 @@ impl<'a> Checker<'a> {
     }
 
     fn resolve_type(&mut self, ty: &nex_ast::TypeExpr) -> Type {
+        if let Some(elems) = &ty.tuple {
+            if elems.is_empty() {
+                self.error(
+                    "NXS037",
+                    "empty tuples are not supported".to_string(),
+                    ty.span,
+                );
+                return Type::Error;
+            }
+            let mut elem_types = Vec::with_capacity(elems.len());
+            for elem in elems {
+                let resolved = self.resolve_type(elem);
+                if resolved == Type::Error {
+                    return Type::Error;
+                }
+                elem_types.push(resolved);
+            }
+            let name = intern_tuple_name(&elem_types);
+            if !self.analysis.structs.contains_key(name) {
+                let fields: Vec<(String, Type)> = elem_types
+                    .iter()
+                    .enumerate()
+                    .map(|(index, ty)| (index.to_string(), *ty))
+                    .collect();
+                self.analysis.structs.insert(
+                    name.to_string(),
+                    StructInfo {
+                        name: name.to_string(),
+                        name_static: name,
+                        fields,
+                        public: false,
+                    },
+                );
+            }
+            return Type::Struct(name);
+        }
+
         if let Some((elem_ty_expr, len)) = &ty.array {
             let elem_ty = self.resolve_type(elem_ty_expr);
             if elem_ty == Type::Error {

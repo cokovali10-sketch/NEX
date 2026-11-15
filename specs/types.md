@@ -112,8 +112,9 @@ print(t.0)
 - Fields are read with `t.0` and assigned with `t.0 = value` for `var`
   bindings.
 - Tuple values can be copied by initializing a binding.
-- Tuple types cannot be written in source yet, so tuples cannot be function
-  parameters, return values, constants, printed, or compared.
+- Tuple types can be written in source as `(T, U, ...)`, so tuples can be used
+  in type annotations, function parameters, and return values.
+- Tuple values still cannot be printed, declared as constants, or compared.
 
 ## Explicit casts
 

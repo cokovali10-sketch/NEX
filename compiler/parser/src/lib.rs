@@ -532,6 +532,50 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_type(&mut self) -> TypeExpr {
+        if self.check(&TokenKind::LParen) {
+            let start = self.advance().span;
+            let first = self.parse_type();
+            if self.eat(&TokenKind::Comma) {
+                let mut elems = vec![first];
+                loop {
+                    elems.push(self.parse_type());
+                    if !self.eat(&TokenKind::Comma) {
+                        break;
+                    }
+                }
+                let end_span = if self.check(&TokenKind::RParen) {
+                    let span = self.peek_token().span;
+                    self.advance();
+                    span
+                } else {
+                    let span = self.peek_token().span;
+                    self.error("NXP011", "expected `)`", span);
+                    span
+                };
+                return TypeExpr {
+                    name: String::new(),
+                    array: None,
+                    tuple: Some(elems),
+                    span: start.merge(end_span),
+                };
+            }
+            let end_span = if self.check(&TokenKind::RParen) {
+                let span = self.peek_token().span;
+                self.advance();
+                span
+            } else {
+                let span = self.peek_token().span;
+                self.error("NXP011", "expected `)`", span);
+                span
+            };
+            return TypeExpr {
+                name: first.name,
+                array: first.array,
+                tuple: first.tuple,
+                span: first.span.merge(end_span),
+            };
+        }
+
         if self.check(&TokenKind::LBracket) {
             let start = self.advance().span; // [
             let elem = self.parse_type();
@@ -539,6 +583,7 @@ impl<'a> Parser<'a> {
                 return TypeExpr {
                     name: "<error>".to_string(),
                     array: None,
+                    tuple: None,
                     span: start,
                 };
             }
@@ -566,6 +611,7 @@ impl<'a> Parser<'a> {
             return TypeExpr {
                 name: String::new(),
                 array: Some((Box::new(elem), size)),
+                tuple: None,
                 span: start.merge(end_span),
             };
         }
@@ -583,6 +629,7 @@ impl<'a> Parser<'a> {
             TypeExpr {
                 name,
                 array: None,
+                tuple: None,
                 span,
             }
         } else {
@@ -590,6 +637,7 @@ impl<'a> Parser<'a> {
             TypeExpr {
                 name: "<error>".to_string(),
                 array: None,
+                tuple: None,
                 span,
             }
         }

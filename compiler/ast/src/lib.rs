@@ -82,6 +82,7 @@ pub struct Param {
 pub struct TypeExpr {
     pub name: String,
     pub array: Option<(Box<TypeExpr>, usize)>,
+    pub tuple: Option<Vec<TypeExpr>>,
     pub span: Span,
 }
 

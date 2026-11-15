@@ -39,7 +39,6 @@ planned and are not yet implemented.
 - Generics and type constraints.
 - Traits and pattern matching beyond enums.
 - Struct constants.
-- Tuple type annotations, parameters, and return values.
 - Array and tuple printing, constants, and comparison.
 - Async/await and structured concurrency.
 - Macros and compile-time evaluation.
