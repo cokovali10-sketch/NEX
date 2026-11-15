@@ -21,6 +21,8 @@
 - `pass`, an explicitly empty statement, for empty function bodies, `else`
   branches, and `match` arms. The formatter emits it for empty blocks.
 
+- `str_starts_with`, `str_ends_with`, `str_repeat`, and `str_replace`.
+
 ### Fixed
 
 - The lexer now skips a leading UTF-8 BOM instead of reporting `unexpected character`.

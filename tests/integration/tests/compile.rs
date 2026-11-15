@@ -1066,3 +1066,20 @@ fn pass_is_allowed_in_a_match_arm() {
     assert_eq!(code, 0, "stderr: {stderr}");
     assert_eq!(stdout, "done");
 }
+
+#[test]
+fn string_predicates_and_transformations() {
+    let source = "fn main():\n    println(str_starts_with(\"hello\", \"he\"))\n    println(str_ends_with(\"hello\", \"lo\"))\n    println(str_ends_with(\"hello\", \"xx\"))\n    println(str_repeat(\"ab\", 3))\n    println(str_replace(\"a-b-c\", \"-\", \"+\"))\n    println(str_replace(\"aaa\", \"a\", \"bb\"))\n";
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "true\ntrue\nfalse\nababab\na+b+c\nbbbbbb\n");
+}
+
+#[test]
+fn str_repeat_with_zero_returns_empty_string() {
+    let source =
+        "fn main():\n    print(\"[\")\n    print(str_repeat(\"x\", 0))\n    println(\"]\")\n";
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "[]\n");
+}

@@ -33,6 +33,10 @@ These are global functions, not methods, so no imports are required.
 | `str_upper` | `(value: string) -> string` | ASCII-aware uppercase copy. |
 | `str_lower` | `(value: string) -> string` | ASCII-aware lowercase copy. |
 | `str_trim` | `(value: string) -> string` | Removes leading and trailing spaces, tabs, CR, and LF. |
+| `str_starts_with` | `(value: string, prefix: string) -> bool` | Prefix test. |
+| `str_ends_with` | `(value: string, suffix: string) -> bool` | Suffix test. |
+| `str_repeat` | `(value: string, count: i64) -> string` | Repeats `count` times; `0` or less gives an empty string. |
+| `str_replace` | `(value: string, from: string, to: string) -> string` | Replaces every occurrence; an empty `from` returns a copy. |
 | `to_string` | `(value: i64) -> string` | Decimal representation. |
 
 String builtins that return a string allocate with `malloc`; NEX does not free

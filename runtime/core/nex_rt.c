@@ -284,3 +284,102 @@ char *nex_rt_str_trim(const char *value) {
     result[count] = '\0';
     return result;
 }
+
+int nex_rt_str_starts_with(const char *value, const char *prefix) {
+    if (value == NULL || prefix == NULL) {
+        return 0;
+    }
+    size_t prefix_length = strlen(prefix);
+    return strncmp(value, prefix, prefix_length) == 0;
+}
+
+int nex_rt_str_ends_with(const char *value, const char *suffix) {
+    if (value == NULL || suffix == NULL) {
+        return 0;
+    }
+    size_t value_length = strlen(value);
+    size_t suffix_length = strlen(suffix);
+    if (suffix_length > value_length) {
+        return 0;
+    }
+    return strcmp(value + (value_length - suffix_length), suffix) == 0;
+}
+
+char *nex_rt_str_repeat(const char *value, long long count) {
+    if (value == NULL) {
+        return NULL;
+    }
+    if (count <= 0) {
+        char *empty = (char *)malloc(1);
+        if (empty != NULL) {
+            empty[0] = '\0';
+        }
+        return empty;
+    }
+    size_t value_length = strlen(value);
+    size_t total = value_length * (size_t)count;
+    char *result = (char *)malloc(total + 1);
+    if (result == NULL) {
+        return NULL;
+    }
+    for (long long i = 0; i < count; i++) {
+        memcpy(result + (size_t)i * value_length, value, value_length);
+    }
+    result[total] = '\0';
+    return result;
+}
+
+char *nex_rt_str_replace(const char *value, const char *from, const char *to) {
+    if (value == NULL || from == NULL || to == NULL) {
+        return NULL;
+    }
+    size_t from_length = strlen(from);
+    size_t to_length = strlen(to);
+    if (from_length == 0) {
+        // An empty pattern would loop forever; return a copy instead.
+        size_t length = strlen(value);
+        char *copy = (char *)malloc(length + 1);
+        if (copy != NULL) {
+            memcpy(copy, value, length + 1);
+        }
+        return copy;
+    }
+
+    size_t value_length = strlen(value);
+    size_t matches = 0;
+    const char *cursor = value;
+    while ((cursor = strstr(cursor, from)) != NULL) {
+        matches++;
+        cursor += from_length;
+    }
+    if (matches == 0) {
+        char *copy = (char *)malloc(value_length + 1);
+        if (copy != NULL) {
+            memcpy(copy, value, value_length + 1);
+        }
+        return copy;
+    }
+
+    size_t result_length = value_length + matches * to_length;
+    char *result = (char *)malloc(result_length + 1);
+    if (result == NULL) {
+        return NULL;
+    }
+
+    size_t written = 0;
+    const char *read = value;
+    const char *found;
+    while ((found = strstr(read, from)) != NULL) {
+        size_t chunk = (size_t)(found - read);
+        memcpy(result + written, read, chunk);
+        written += chunk;
+        memcpy(result + written, to, to_length);
+        written += to_length;
+        read = found + from_length;
+    }
+    size_t tail = strlen(read);
+    memcpy(result + written, read, tail);
+    written += tail;
+    result[written] = '\0';
+    return result;
+}

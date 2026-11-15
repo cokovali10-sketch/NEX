@@ -1989,6 +1989,59 @@ fn lower_expr(
                 return Ok(Operand::Value(dst));
             }
 
+            if callee == "str_starts_with" || callee == "str_ends_with" {
+                let value = lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
+                let other = lower_expr(builder, &args[1], scopes, storage, analysis, Type::Error)?;
+                let name = if callee == "str_starts_with" {
+                    "nex_rt_str_starts_with"
+                } else {
+                    "nex_rt_str_ends_with"
+                };
+                let raw = builder.new_value();
+                builder.emit(Inst::Call {
+                    dst: Some(raw),
+                    name: name.to_string(),
+                    args: vec![value, other],
+                    ret: IrType::I32,
+                });
+                let dst = builder.new_value();
+                builder.emit(Inst::Cast {
+                    dst,
+                    kind: CastKind::Truncate,
+                    from: IrType::I32,
+                    to: IrType::Bool,
+                    operand: Operand::Value(raw),
+                });
+                return Ok(Operand::Value(dst));
+            }
+
+            if callee == "str_repeat" {
+                let value = lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
+                let count = lower_expr(builder, &args[1], scopes, storage, analysis, Type::Error)?;
+                let dst = builder.new_value();
+                builder.emit(Inst::Call {
+                    dst: Some(dst),
+                    name: "nex_rt_str_repeat".to_string(),
+                    args: vec![value, count],
+                    ret: IrType::String,
+                });
+                return Ok(Operand::Value(dst));
+            }
+
+            if callee == "str_replace" {
+                let value = lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
+                let from = lower_expr(builder, &args[1], scopes, storage, analysis, Type::Error)?;
+                let to = lower_expr(builder, &args[2], scopes, storage, analysis, Type::Error)?;
+                let dst = builder.new_value();
+                builder.emit(Inst::Call {
+                    dst: Some(dst),
+                    name: "nex_rt_str_replace".to_string(),
+                    args: vec![value, from, to],
+                    ret: IrType::String,
+                });
+                return Ok(Operand::Value(dst));
+            }
+
             if callee == "to_string" {
                 let arg_value =
                     lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;

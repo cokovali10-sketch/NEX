@@ -1942,6 +1942,105 @@ impl<'a> Checker<'a> {
             return value_ty;
         }
 
+        if callee == "str_starts_with" || callee == "str_ends_with" {
+            if args.len() != 2 {
+                self.error(
+                    "NXS004",
+                    format!("`{callee}` expects 2 arguments, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let value_ty = self.infer(&args[0]);
+            let other_ty = self.infer(&args[1]);
+            if (value_ty != Type::String || other_ty != Type::String)
+                && (value_ty != Type::Error && other_ty != Type::Error)
+            {
+                self.error(
+                    "NXS004",
+                    format!(
+                        "`{callee}` expects `string` arguments, found `{value_ty}` and `{other_ty}`"
+                    ),
+                    span,
+                );
+                return Type::Error;
+            }
+            if value_ty == Type::Error || other_ty == Type::Error {
+                return Type::Error;
+            }
+            return Type::Bool;
+        }
+
+        if callee == "str_repeat" {
+            if args.len() != 2 {
+                self.error(
+                    "NXS004",
+                    format!("`str_repeat` expects 2 arguments, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let value_ty = self.infer(&args[0]);
+            let count_ty = self.infer(&args[1]);
+            if (value_ty != Type::String || count_ty != Type::I64)
+                && (value_ty != Type::Error && count_ty != Type::Error)
+            {
+                self.error(
+                    "NXS004",
+                    format!(
+                        "`str_repeat` expects `(string, i64)`, found `({value_ty}, {count_ty})`"
+                    ),
+                    span,
+                );
+                return Type::Error;
+            }
+            if value_ty == Type::Error || count_ty == Type::Error {
+                return Type::Error;
+            }
+            return Type::String;
+        }
+
+        if callee == "str_replace" {
+            if args.len() != 3 {
+                self.error(
+                    "NXS004",
+                    format!("`str_replace` expects 3 arguments, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let value_ty = self.infer(&args[0]);
+            let from_ty = self.infer(&args[1]);
+            let to_ty = self.infer(&args[2]);
+            let all_strings =
+                value_ty == Type::String && from_ty == Type::String && to_ty == Type::String;
+            if !all_strings
+                && value_ty != Type::Error
+                && from_ty != Type::Error
+                && to_ty != Type::Error
+            {
+                self.error(
+                    "NXS004",
+                    "`str_replace` expects three `string` arguments",
+                    span,
+                );
+                return Type::Error;
+            }
+            if value_ty == Type::Error || from_ty == Type::Error || to_ty == Type::Error {
+                return Type::Error;
+            }
+            return Type::String;
+        }
+
         if callee == "to_string" {
             if args.len() != 1 {
                 self.error(
