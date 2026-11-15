@@ -34,6 +34,9 @@
 - HTTP helpers: `http_method`, `http_path`, `http_version`, `http_header`,
   `http_body`, `http_response`. A NEX program can now serve HTTP/1.1.
 
+- Design decision for growable arrays: `specs/dynamic-arrays.md` (representation,
+  ABI, type-system migration, and the test plan).
+
 ### Fixed
 
 - The lexer now skips a leading UTF-8 BOM instead of reporting `unexpected character`.
