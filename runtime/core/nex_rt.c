@@ -149,3 +149,7 @@ void nex_rt_free(long long ptr) {
     free((void *)ptr);
 }
 
+
+long long nex_rt_peek_i64(long long ptr) { return *(long long *)ptr; }
+void nex_rt_poke_i64(long long ptr, long long value) { *(long long *)ptr = value; }
+

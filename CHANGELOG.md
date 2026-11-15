@@ -38,6 +38,7 @@
 - Built-in `min`, `max`, `sqrt`, and `pow`.
 - Built-in `assert` and `panic`.
 - Built-in `alloc` and `free`.
+- Built-in `peek` and `poke`.
 - Constant folding for compile-time constant expressions.
 - End-to-end tests for compilation and execution.
 - Initial language, grammar, type, memory, compiler, and diagnostics specifications.

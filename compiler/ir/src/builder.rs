@@ -1888,6 +1888,31 @@ fn lower_expr(
                 return Ok(Operand::Const(Const::Bool(false)));
             }
 
+            if callee == "peek" {
+                let arg_value =
+                    lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
+                let dst = builder.new_value();
+                builder.emit(Inst::Call {
+                    dst: Some(dst),
+                    name: "nex_rt_peek_i64".to_string(),
+                    args: vec![arg_value],
+                    ret: IrType::I64,
+                });
+                return Ok(Operand::Value(dst));
+            }
+
+            if callee == "poke" {
+                let ptr = lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
+                let value = lower_expr(builder, &args[1], scopes, storage, analysis, Type::Error)?;
+                builder.emit(Inst::Call {
+                    dst: None,
+                    name: "nex_rt_poke_i64".to_string(),
+                    args: vec![ptr, value],
+                    ret: IrType::Void,
+                });
+                return Ok(Operand::Const(Const::Bool(false)));
+            }
+
             let signature = analysis
                 .function(callee)
                 .ok_or_else(|| format!("unknown function `{callee}` during code generation"))?;

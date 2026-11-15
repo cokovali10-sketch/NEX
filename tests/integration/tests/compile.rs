@@ -603,6 +603,20 @@ fn main():
 }
 
 #[test]
+fn builtins_peek_and_poke() {
+    let source = r#"
+fn main():
+    let p = alloc(8)
+    poke(p, 42)
+    print(peek(p))
+    free(p)
+"#;
+    let (stdout, _stderr, code) = run_source(source);
+    assert_eq!(code, 0);
+    assert_eq!(stdout, "42");
+}
+
+#[test]
 fn builtins_alloc_and_free() {
     let source = r#"
 fn main():

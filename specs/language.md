@@ -29,6 +29,7 @@ planned and are not yet implemented.
   `i64` and `f64`, and `sqrt`/`pow` for `f64`.
 - Built-in `assert` and `panic`.
 - Built-in `alloc` and `free` for raw memory.
+- Built-in `peek` and `poke` for raw `i64` memory access.
 - String comparison (`==`, `!=`, `<`, `<=`, `>`, `>=`) comparing contents.
 - Struct declarations with scalar fields, construction, field access, and
   field assignment (see `specs/types.md`).
