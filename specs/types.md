@@ -1,4 +1,4 @@
-# NEX Type System (0.1)
+# NEX Type System (0.2)
 
 ## Implemented types
 
@@ -26,7 +26,7 @@
 
 ## Coercion
 
-NEX 0.1 intentionally avoids implicit widening. The only implicit conversions are:
+NEX 0.2 intentionally avoids implicit widening. The only implicit conversions are:
 
 - An integer literal may be coerced to an integer type if it fits in that type.
 - A floating point literal may be coerced to `f32` or `f64`.

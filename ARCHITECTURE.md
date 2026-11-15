@@ -36,7 +36,7 @@ first lowered to `nex-ir`, which is independent of LLVM. This keeps the frontend
 portable and leaves room for future backends, optimization passes, and a stable
 debug representation.
 
-## Memory model in 0.1
+## Memory model in 0.2
 
 NEX 0.1 uses stack allocation and value semantics. Local variables are lowered to
 `alloca` instructions. There is no heap allocator, ownership checker, or garbage

@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="320" viewBox="0 0 1200 320" role="img" aria-label="NEX banner">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="40%" stop-color="#1e1b4b"/>
+      <stop offset="100%" stop-color="#312e81"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#6366f1"/>
+      <stop offset="50%" stop-color="#8b5cf6"/>
+      <stop offset="100%" stop-color="#ec4899"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.85" cy="0.2" r="0.6">
+      <stop offset="0%" stop-color="#8b5cf6" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#8b5cf6" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="320" fill="url(#bg)"/>
+  <rect width="1200" height="320" fill="url(#glow)"/>
+  <!-- grid -->
+  <g stroke="rgba(255,255,255,0.04)" stroke-width="1">
+    <path d="M0 80 H1200 M0 160 H1200 M0 240 H1200"/>
+    <path d="M150 0 V320 M300 0 V320 M450 0 V320 M600 0 V320 M750 0 V320 M900 0 V320 M1050 0 V320"/>
+  </g>
+  <!-- logo mark -->
+  <g transform="translate(80,80)">
+    <rect width="160" height="160" rx="36" fill="url(#accent)"/>
+    <path d="M40 128 V32 L68 32 L104 84 V32 L132 32 V128 L104 128 L68 76 V128 Z" fill="#ffffff" opacity="0.95"/>
+    <circle cx="132" cy="128" r="5" fill="#fbbf24"/>
+  </g>
+  <!-- title -->
+  <text x="280" y="150" font-family="Segoe UI, Inter, system-ui, sans-serif" font-size="96" font-weight="800" fill="#ffffff" letter-spacing="-3">NEX</text>
+  <text x="284" y="195" font-family="Segoe UI, Inter, system-ui, sans-serif" font-size="26" font-weight="500" fill="#c7d2fe">Native Execution eXperiment</text>
+  <text x="284" y="235" font-family="Segoe UI, Inter, system-ui, sans-serif" font-size="18" fill="#94a3b8">A real, native-compiled programming language built from scratch in Rust.</text>
+  <!-- accent bar -->
+  <rect x="284" y="255" width="220" height="4" rx="2" fill="url(#accent)"/>
+  <!-- chips -->
+  <g font-family="Consolas, monospace" font-size="13" fill="#e2e8f0">
+    <rect x="284" y="275" width="78" height="24" rx="6" fill="rgba(255,255,255,0.08)" stroke="rgba(255,255,255,0.12)"/>
+    <text x="296" y="291">Rust</text>
+    <rect x="372" y="275" width="78" height="24" rx="6" fill="rgba(255,255,255,0.08)" stroke="rgba(255,255,255,0.12)"/>
+    <text x="382" y="291">LLVM IR</text>
+    <rect x="460" y="275" width="92" height="24" rx="6" fill="rgba(255,255,255,0.08)" stroke="rgba(255,255,255,0.12)"/>
+    <text x="470" y="291">Native exe</text>
+    <rect x="562" y="275" width="96" height="24" rx="6" fill="rgba(255,255,255,0.08)" stroke="rgba(255,255,255,0.12)"/>
+    <text x="572" y="291">No runtime</text>
+  </g>
+</svg>

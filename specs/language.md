@@ -1,10 +1,10 @@
-# NEX Language Specification (0.1 Status)
+# NEX Language Specification (0.2 Status)
 
 This document describes the intended NEX language. Features marked as
-**implemented in 0.1** are available in the current compiler. Other features are
+**implemented in 0.2** are available in the current compiler. Other features are
 planned and are not yet implemented.
 
-## Implemented in 0.1
+## Implemented in 0.2
 
 - Function declarations with parameters and optional return type.
 - `let` (immutable) and `var` (mutable) bindings with type inference.
@@ -40,8 +40,7 @@ planned and are not yet implemented.
 - Traits and pattern matching beyond enums.
 - Structs with nested struct fields, struct function parameters/returns, and
   struct constants.
-- Arrays with type annotations and array parameters/returns.
-- Modules and imports.
+- Arrays and tuples in type annotations, parameters, and return values.
 - Async/await and structured concurrency.
 - Macros and compile-time evaluation.
 - Unsafe blocks and low-level pointers.
@@ -54,7 +53,7 @@ planned and are not yet implemented.
 - Tabs in leading indentation are errors.
 - `#` starts a line comment.
 - Strings support `\n`, `\r`, `\t`, `\\`, `\"`, `\xNN`, and `\u{...}`.
-- Embedded NUL characters in strings are not supported in 0.1.
+- Embedded NUL characters in strings are not supported in 0.2.
 
 ## Program structure
 

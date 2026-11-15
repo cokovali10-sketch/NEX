@@ -19,4 +19,4 @@ The standard library is planned. Modules will include:
 - process
 - memory
 
-None of these modules are implemented in NEX 0.1.
+None of these modules are implemented in NEX 0.2.

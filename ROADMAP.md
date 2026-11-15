@@ -1,6 +1,6 @@
 # NEX Roadmap
 
-## NEX 0.1 - Language Foundation (current)
+## NEX 0.1 - Language Foundation (complete)
 
 - [x] Rust workspace and repository governance.
 - [x] Lexer with indentation, comments, literals, and diagnostics.
@@ -13,16 +13,18 @@
 - [x] `nex` and `nexc` commands.
 - [x] End-to-end tests.
 
-## NEX 0.2 - Semantic Core
+## NEX 0.2 - Semantic Core (current)
 
 - [x] Structs: declarations with scalar fields, construction, field access,
       field assignment, and struct copies by binding initialization.
 - [x] Enums and `match` over enum values (case arms and `else` arm).
-- [ ] Traits and pattern matching beyond enums.
-- [ ] Nested struct fields and struct parameters/return values.
 - [x] Arrays: literals, indexing reads and writes.
 - [x] Tuples.
 - [x] Modules and imports (nested `module` blocks and `use` aliases).
+- [ ] Nested struct fields.
+- [ ] Struct parameters and return values.
+- [ ] Enforce `pub` visibility across modules.
+- [ ] Arrays and tuples in type annotations, parameters, and return values.
 - [ ] Traits and pattern matching beyond enums.
 - [ ] Better control-flow analysis and definite-return checking.
 - [ ] Richer diagnostics with fixes and suggestions.

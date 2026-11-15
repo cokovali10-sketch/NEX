@@ -29,9 +29,11 @@
 ### Known limitations
 
 - Only Windows x86-64 is tested.
-- No generics, enums, modules, arrays, or standard library yet.
-- Struct fields must be scalar types; struct values cannot be passed to
-  functions, returned, printed, or used as constants yet.
+- No generics, traits, or standard library yet.
+- Struct fields must be scalar types; struct values cannot be printed or used
+  as constants yet.
+- Arrays and tuples cannot yet be used as parameter or return types.
 - No ownership or lifetime checking yet.
+- `pub` declarations are parsed but visibility is not enforced yet.
 - `nex fmt`, `nex lint`, `nex add`, and `nex benchmark` are not implemented.
-- `nex` arithmetic is limited to `i64`, `f64`, `bool`, `char`, and `string`.
+- `nex` arithmetic is limited to numeric types, `bool`, `char`, and `string`.
