@@ -503,18 +503,6 @@ impl<'a> Checker<'a> {
                 continue;
             }
 
-            if matches!(declared_ty, Type::Struct(_)) {
-                self.error(
-                    "NXS028",
-                    format!(
-                        "constant `{}` has struct type `{declared_ty}`; struct constants are planned for a later release",
-                        constant.name
-                    ),
-                    constant.span,
-                );
-                continue;
-            }
-
             self.analysis
                 .consts
                 .insert(constant.name.clone(), declared_ty);
@@ -539,6 +527,22 @@ impl<'a> Checker<'a> {
                 self.is_const_expr(left, visiting) && self.is_const_expr(right, visiting)
             }
             ExprKind::Cast { expr: inner, .. } => self.is_const_expr(inner, visiting),
+            ExprKind::Array(elements) => elements
+                .iter()
+                .all(|element| self.is_const_expr(element, visiting)),
+            ExprKind::Tuple(elements) => elements
+                .iter()
+                .all(|element| self.is_const_expr(element, visiting)),
+            ExprKind::Call { callee, args, .. } => {
+                let resolved = self
+                    .analysis
+                    .aliases
+                    .get(callee)
+                    .cloned()
+                    .unwrap_or_else(|| callee.clone());
+                self.analysis.structs.contains_key(&resolved)
+                    && args.iter().all(|arg| self.is_const_expr(arg, visiting))
+            }
             ExprKind::Ident(name) => {
                 if !self.analysis.consts.contains_key(name) {
                     return false;

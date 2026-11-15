@@ -214,16 +214,14 @@ fn struct_errors_are_reported() {
         recursive.diagnostics
     );
 
-    let constant = compile(
-        "struct Point:\n    x: i64\n\nconst P: Point = Point(1)\n\nfn main():\n    print(1)\n",
-    );
+    let void_constant = compile("const P: void = 1\n\nfn main():\n    print(1)\n");
     assert!(
-        constant
+        void_constant
             .diagnostics
             .iter()
-            .any(|diagnostic| diagnostic.code == "NXS028"),
+            .any(|diagnostic| diagnostic.code == "NXS002"),
         "{:?}",
-        constant.diagnostics
+        void_constant.diagnostics
     );
 
     let printed =
@@ -602,6 +600,35 @@ fn main():
     let (stdout, _stderr, code) = run_source(source);
     assert_eq!(code, 0);
     assert_eq!(stdout, "7 4 1 2");
+}
+
+#[test]
+fn aggregate_constants() {
+    let source = r#"
+struct Point:
+    x: i64
+    y: i64
+
+const P: Point = Point(3, 4)
+const A: [i64; 3] = [1, 2, 3]
+const T: (i64, i64) = (7, 8)
+
+fn main():
+    print(P)
+    print(" ")
+    print(A)
+    print(" ")
+    print(T)
+    print(" ")
+    var p = P
+    p.x = 99
+    print(P.x)
+    print(" ")
+    print(p.x)
+"#;
+    let (stdout, _stderr, code) = run_source(source);
+    assert_eq!(code, 0);
+    assert_eq!(stdout, "{3, 4} [1, 2, 3] (7, 8) 3 99");
 }
 
 #[test]

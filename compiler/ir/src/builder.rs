@@ -628,8 +628,25 @@ fn lower_struct_place(
     storage: &HashMap<nex_diagnostics::Span, (ValueId, IrType)>,
     analysis: &Analysis,
 ) -> Result<ValueId, String> {
+    if let ExprKind::Field { base, name, .. } = &expr.kind
+        && let ExprKind::Ident(module_name) = &base.kind
+        && analysis.modules.contains(module_name)
+    {
+        let qualified = format!("{}.{}", module_name, name);
+        if let Some(init) = analysis.const_exprs.get(&qualified) {
+            return lower_struct_place(builder, init, scopes, storage, analysis);
+        }
+    }
     match &expr.kind {
         ExprKind::Ident(name) => {
+            let resolved = analysis
+                .aliases
+                .get(name)
+                .cloned()
+                .unwrap_or_else(|| name.clone());
+            if let Some(init) = analysis.const_exprs.get(&resolved) {
+                return lower_struct_place(builder, init, scopes, storage, analysis);
+            }
             let slot = lookup_slot(scopes, name)
                 .ok_or_else(|| format!("unknown variable `{name}` during code generation"))?;
             if matches!(slot.ty, IrType::Struct(_)) {
@@ -1039,8 +1056,25 @@ fn lower_array_place(
     storage: &HashMap<nex_diagnostics::Span, (ValueId, IrType)>,
     analysis: &Analysis,
 ) -> Result<ValueId, String> {
+    if let ExprKind::Field { base, name, .. } = &expr.kind
+        && let ExprKind::Ident(module_name) = &base.kind
+        && analysis.modules.contains(module_name)
+    {
+        let qualified = format!("{}.{}", module_name, name);
+        if let Some(init) = analysis.const_exprs.get(&qualified) {
+            return lower_array_place(builder, init, scopes, storage, analysis);
+        }
+    }
     match &expr.kind {
         ExprKind::Ident(name) => {
+            let resolved = analysis
+                .aliases
+                .get(name)
+                .cloned()
+                .unwrap_or_else(|| name.clone());
+            if let Some(init) = analysis.const_exprs.get(&resolved) {
+                return lower_array_place(builder, init, scopes, storage, analysis);
+            }
             let slot = lookup_slot(scopes, name)
                 .ok_or_else(|| format!("unknown variable `{name}` during code generation"))?;
             Ok(slot.ptr)

@@ -38,8 +38,7 @@ planned and are not yet implemented.
 
 - Generics and type constraints.
 - Traits and pattern matching beyond enums.
-- Struct constants.
-- Array and tuple constants and comparison.
+- Array and tuple comparison.
 - Async/await and structured concurrency.
 - Macros and compile-time evaluation.
 - Unsafe blocks and low-level pointers.
