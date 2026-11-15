@@ -14,6 +14,10 @@
   modes. Compound assignments are preserved; comments are dropped (the lexer
   discards them) and the command warns before overwriting such a file.
 
+- `nex lint` reports unused bindings, unused private functions,
+  self-comparisons, constant conditions, and unused imports, with
+  `file:line:column` output and a `--deny-warnings` flag for CI.
+
 ### Fixed
 
 - The lexer now skips a leading UTF-8 BOM instead of reporting `unexpected character`.
@@ -76,7 +80,7 @@
 - Arrays and tuples cannot yet be used as parameter or return types.
 - No ownership or lifetime checking yet.
 - `pub` declarations are parsed but visibility is not enforced yet.
-- `nex lint`, `nex add`, `nex benchmark`, `nex debug`, and `nex profile` are
-  not implemented yet.
+- `nex add`, `nex benchmark`, `nex debug`, and `nex profile` are not
+  implemented yet.
 - `nex fmt` drops comments, because the lexer discards them.
 - `nex` arithmetic is limited to numeric types, `bool`, `char`, and `string`.

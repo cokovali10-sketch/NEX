@@ -36,7 +36,30 @@ Behaviour worth knowing:
   before overwriting such a file, and refuses to touch a file that does not
   parse.
 
+### `nex lint`
+
+Reports suspicious but legal code. The linter runs on the parsed AST, so it
+stays silent on files that do not compile.
+
+```powershell
+nex lint src/main.nex
+nex lint --deny-warnings src/main.nex   # exit 1 when a warning is reported
+```
+
+Checks in NEX 0.1:
+
+| Code | Check |
+|---|---|
+| `NXL001` | a local binding is declared but never used |
+| `NXL002` | a private function is never called |
+| `NXL003` | an expression is compared with itself |
+| `NXL004` | an `if` or `while` condition is a constant |
+| `NXL005` | a `use` item is never referenced |
+
+Bindings starting with `_` are exempt from `NXL001`.
+
 ## `nexc`
+
 
 Compile a single file:
 

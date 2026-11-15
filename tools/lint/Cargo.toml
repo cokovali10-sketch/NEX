@@ -1,0 +1,15 @@
+[package]
+name = "nex-lint"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Static checks for NEX sources"
+
+[dependencies]
+nex-ast = { workspace = true }
+nex-diagnostics = { workspace = true }
+nex-lexer = { workspace = true }
+nex-parser = { workspace = true }

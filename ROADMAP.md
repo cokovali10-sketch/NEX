@@ -62,7 +62,8 @@
 ## NEX 0.7 - Developer Tools
 
 - [x] Formatter (`nex fmt`, AST-based, `--check`/`--write`).
-- [ ] Linter.
+- [x] Linter (`nex lint`: unused bindings, unused private functions,
+      self-comparisons, constant conditions, unused imports).
 - [ ] Debugger.
 - [ ] Profiler.
 - [ ] Package manager.

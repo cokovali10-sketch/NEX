@@ -43,7 +43,8 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         }
         "fmt" => cmd_fmt(&args[1..]),
-        "lint" | "add" | "benchmark" | "debug" | "profile" => {
+        "lint" => cmd_lint(&args[1..]),
+        "add" | "benchmark" | "debug" | "profile" => {
             eprintln!(
                 "nex: `{}` is planned for a later NEX release; see ROADMAP.md",
                 args[0]
@@ -58,6 +59,69 @@ fn main() -> ExitCode {
     }
 }
 
+fn cmd_lint(args: &[String]) -> ExitCode {
+    let mut deny = false;
+    let mut paths: Vec<String> = Vec::new();
+
+    for arg in args {
+        match arg.as_str() {
+            "--deny-warnings" | "-D" => deny = true,
+            "--help" | "-h" => {
+                println!("usage: nex lint [--deny-warnings] <file.nex>...");
+                println!();
+                println!("  --deny-warnings   exit 1 when a warning is reported");
+                return ExitCode::SUCCESS;
+            }
+            other => paths.push(other.to_string()),
+        }
+    }
+
+    if paths.is_empty() {
+        eprintln!("nex: `lint` requires at least one .nex file");
+        return ExitCode::from(2);
+    }
+
+    let mut status = ExitCode::SUCCESS;
+    for path in paths {
+        let source = match fs::read_to_string(&path) {
+            Ok(source) => source,
+            Err(error) => {
+                eprintln!("nex: cannot read `{path}`: {error}");
+                status = ExitCode::from(2);
+                continue;
+            }
+        };
+
+        let result = nex_lint::lint_source(&source);
+        let file = nex_diagnostics::SourceFile::new(path.clone(), source.clone());
+
+        if !result.diagnostics.is_empty() {
+            eprintln!("nex: `{path}` does not compile; linting skipped");
+            eprintln!("{}", render_all(&file, &result.diagnostics));
+            status = ExitCode::from(1);
+            continue;
+        }
+
+        if result.warnings.is_empty() {
+            println!("{path}: no findings");
+            continue;
+        }
+
+        for warning in &result.warnings {
+            let (line, column) = file.line_col(warning.span.start);
+            println!(
+                "{path}:{line}:{column}: {}: {}",
+                warning.code, warning.message
+            );
+        }
+        println!("{} warning(s) in {path}", result.warnings.len());
+        if deny {
+            status = ExitCode::from(1);
+        }
+    }
+
+    status
+}
 fn cmd_fmt(args: &[String]) -> ExitCode {
     let mut write = false;
     let mut check = false;

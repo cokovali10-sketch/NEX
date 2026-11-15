@@ -11,6 +11,7 @@ members = [
     "compiler/driver",
     "tools/cli",
     "tools/fmt",
+    "tools/lint",
     "tests/integration",
 ]
 
@@ -33,6 +34,7 @@ nex-ir = { path = "compiler/ir" }
 nex-backend = { path = "compiler/backend" }
 nex-driver = { path = "compiler/driver" }
 nex-fmt = { path = "tools/fmt" }
+nex-lint = { path = "tools/lint" }
 
 [profile.release]
 lto = "thin"
