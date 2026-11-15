@@ -37,6 +37,7 @@
 - Built-in `len` and `abs`.
 - Built-in `min`, `max`, `sqrt`, and `pow`.
 - Built-in `assert` and `panic`.
+- Built-in `alloc` and `free`.
 - Constant folding for compile-time constant expressions.
 - End-to-end tests for compilation and execution.
 - Initial language, grammar, type, memory, compiler, and diagnostics specifications.

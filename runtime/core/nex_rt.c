@@ -137,3 +137,15 @@ double nex_rt_max_f64(double a, double b) { return a > b ? a : b; }
 double nex_rt_sqrt(double value) { return sqrt(value); }
 double nex_rt_pow(double base, double exponent) { return pow(base, exponent); }
 
+
+long long nex_rt_alloc(long long size) {
+    if (size <= 0) {
+        return 0;
+    }
+    return (long long)malloc((size_t)size);
+}
+
+void nex_rt_free(long long ptr) {
+    free((void *)ptr);
+}
+

@@ -603,6 +603,20 @@ fn main():
 }
 
 #[test]
+fn builtins_alloc_and_free() {
+    let source = r#"
+fn main():
+    let p = alloc(16)
+    print(p != 0)
+    free(p)
+    print(" done")
+"#;
+    let (stdout, _stderr, code) = run_source(source);
+    assert_eq!(code, 0);
+    assert_eq!(stdout, "true done");
+}
+
+#[test]
 fn builtins_assert_and_panic() {
     let source = r#"
 fn main():

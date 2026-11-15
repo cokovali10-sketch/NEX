@@ -1714,6 +1714,54 @@ impl<'a> Checker<'a> {
             return Type::Void;
         }
 
+        if callee == "alloc" {
+            if args.len() != 1 {
+                self.error(
+                    "NXS004",
+                    format!("`alloc` expects 1 argument, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let arg_ty = self.infer(&args[0]);
+            if arg_ty != Type::I64 && arg_ty != Type::Error {
+                self.error(
+                    "NXS004",
+                    format!("`alloc` expects `i64`, found `{arg_ty}`"),
+                    args[0].span,
+                );
+                return Type::Error;
+            }
+            return Type::I64;
+        }
+
+        if callee == "free" {
+            if args.len() != 1 {
+                self.error(
+                    "NXS004",
+                    format!("`free` expects 1 argument, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let arg_ty = self.infer(&args[0]);
+            if arg_ty != Type::I64 && arg_ty != Type::Error {
+                self.error(
+                    "NXS004",
+                    format!("`free` expects `i64`, found `{arg_ty}`"),
+                    args[0].span,
+                );
+                return Type::Error;
+            }
+            return Type::Void;
+        }
+
         if let Some(info) = self.analysis.structs.get(callee).cloned() {
             if callee.contains('.') && !info.public {
                 self.error(
