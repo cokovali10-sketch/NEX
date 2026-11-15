@@ -54,7 +54,7 @@ pub struct Analysis {
     /// Field reads keyed by expression span: (struct name, field index, field type).
     pub field_reads: HashMap<Span, (&'static str, u32, Type)>,
     /// Field writes keyed by statement span: (struct name, field index, field type).
-    pub field_writes: HashMap<Span, (&'static str, u32, Type)>,
+    pub field_writes: HashMap<Span, Vec<(&'static str, u32, Type)>>,
     /// Enum variant values keyed by expression span: (enum name, variant index).
     pub variant_values: HashMap<Span, (&'static str, u32)>,
     pub diagnostics: Vec<Diagnostic>,
@@ -85,8 +85,8 @@ impl Analysis {
         self.field_reads.get(&span).copied()
     }
 
-    pub fn field_write(&self, span: Span) -> Option<(&'static str, u32, Type)> {
-        self.field_writes.get(&span).copied()
+    pub fn field_write(&self, span: Span) -> Option<Vec<(&'static str, u32, Type)>> {
+        self.field_writes.get(&span).cloned()
     }
 
     pub fn variant_value(&self, span: Span) -> Option<(&'static str, u32)> {
@@ -328,6 +328,8 @@ impl<'a> Checker<'a> {
     }
 
     fn collect_structs(&mut self) {
+        // First register every struct name so that field types can refer to
+        // structs declared later in the same program (including nested fields).
         for definition in &self.program.structs {
             if self.analysis.structs.contains_key(&definition.name) {
                 self.error(
@@ -337,7 +339,18 @@ impl<'a> Checker<'a> {
                 );
                 continue;
             }
+            let name_static: &'static str = Box::leak(definition.name.clone().into_boxed_str());
+            self.analysis.structs.insert(
+                definition.name.clone(),
+                StructInfo {
+                    name: definition.name.clone(),
+                    name_static,
+                    fields: Vec::new(),
+                },
+            );
+        }
 
+        for definition in &self.program.structs {
             if definition.fields.is_empty() {
                 self.error(
                     "NXS025",
@@ -377,11 +390,13 @@ impl<'a> Checker<'a> {
                     );
                     continue;
                 }
-                if matches!(ty, Type::Struct(_)) {
+                if let Type::Struct(nested) = ty
+                    && nested == definition.name
+                {
                     self.error(
                         "NXS025",
                         format!(
-                            "field `{}` has struct type `{ty}`; nested struct fields are planned for a later release",
+                            "field `{}` has recursive struct type `{ty}`; recursive struct fields are not supported",
                             field.name
                         ),
                         field.ty.span,
@@ -391,15 +406,9 @@ impl<'a> Checker<'a> {
                 fields.push((field.name.clone(), ty));
             }
 
-            let name_static: &'static str = Box::leak(definition.name.clone().into_boxed_str());
-            self.analysis.structs.insert(
-                definition.name.clone(),
-                StructInfo {
-                    name: definition.name.clone(),
-                    name_static,
-                    fields,
-                },
-            );
+            if let Some(info) = self.analysis.structs.get_mut(&definition.name) {
+                info.fields = fields;
+            }
         }
     }
 
@@ -648,7 +657,7 @@ impl<'a> Checker<'a> {
                 let var_ty = var.ty;
                 self.check_expected(value, var_ty);
             }
-            StmtKind::AssignField { base, field, value } => {
+            StmtKind::AssignField { base, path, value } => {
                 let Some(var) = self.lookup(base) else {
                     self.error(
                         "NXS016",
@@ -667,36 +676,59 @@ impl<'a> Checker<'a> {
                         statement.span,
                     );
                 }
-                let var_ty = var.ty;
-                if let Type::Struct(struct_name) = var_ty {
-                    let info = self.analysis.structs.get(struct_name).cloned();
-                    if let Some(info) = info {
-                        if let Some(index) = info.fields.iter().position(|(name, _)| name == field)
-                        {
-                            let field_ty = info.fields[index].1;
-                            self.analysis
-                                .field_writes
-                                .insert(statement.span, (info.name_static, index as u32, field_ty));
-                            self.check_expected(value, field_ty);
+                let mut current_ty = var.ty;
+                let mut steps = Vec::with_capacity(path.len());
+                let mut failed = false;
+                for field in path {
+                    if let Type::Struct(struct_name) = current_ty {
+                        let info = self.analysis.structs.get(struct_name).cloned();
+                        if let Some(info) = info {
+                            if let Some(index) =
+                                info.fields.iter().position(|(name, _)| name == field)
+                            {
+                                let field_ty = info.fields[index].1;
+                                steps.push((info.name_static, index as u32, field_ty));
+                                current_ty = field_ty;
+                            } else {
+                                self.error(
+                                    "NXS027",
+                                    format!("struct `{struct_name}` has no field `{field}`"),
+                                    statement.span,
+                                );
+                                failed = true;
+                                break;
+                            }
                         } else {
-                            self.error(
-                                "NXS027",
-                                format!("struct `{struct_name}` has no field `{field}`"),
-                                statement.span,
-                            );
-                            self.infer(value);
+                            failed = true;
+                            break;
                         }
                     } else {
-                        self.infer(value);
+                        self.error(
+                            "NXS027",
+                            format!(
+                                "cannot assign field `{field}` on a value of type `{current_ty}`"
+                            ),
+                            statement.span,
+                        );
+                        failed = true;
+                        break;
                     }
-                } else {
+                }
+                if failed {
+                    self.infer(value);
+                    return;
+                }
+                if current_ty == Type::Void {
                     self.error(
-                        "NXS027",
-                        format!("cannot assign field `{field}` on a value of type `{var_ty}`"),
+                        "NXS002",
+                        "field cannot have type `void`".to_string(),
                         statement.span,
                     );
                     self.infer(value);
+                    return;
                 }
+                self.analysis.field_writes.insert(statement.span, steps);
+                self.check_expected(value, current_ty);
             }
             StmtKind::If {
                 branches,

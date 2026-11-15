@@ -1369,11 +1369,24 @@ fn assignment_from_place(place: Expr, value: Expr, span: Span) -> Option<Stmt> {
             span,
         }),
         ExprKind::Field { base, name, .. } => {
-            if let ExprKind::Ident(base_name) = base.kind {
+            // Collect a (possibly nested) field path such as `p.inner.x`.
+            let mut path = vec![name.clone()];
+            let mut current = base.as_ref();
+            while let ExprKind::Field {
+                base: inner,
+                name: field,
+                ..
+            } = &current.kind
+            {
+                path.push(field.clone());
+                current = inner.as_ref();
+            }
+            if let ExprKind::Ident(base_name) = &current.kind {
+                path.reverse();
                 Some(Stmt {
                     kind: StmtKind::AssignField {
-                        base: base_name,
-                        field: name,
+                        base: base_name.clone(),
+                        path,
                         value,
                     },
                     span,
@@ -1491,13 +1504,13 @@ mod tests {
         assert_eq!(result.program.structs.len(), 1);
         assert_eq!(result.program.structs[0].name, "Point");
         assert_eq!(result.program.structs[0].fields.len(), 2);
-        let StmtKind::AssignField { base, field, .. } =
+        let StmtKind::AssignField { base, path, .. } =
             &result.program.functions[0].body.stmts[1].kind
         else {
             panic!("expected field assignment");
         };
         assert_eq!(base, "p");
-        assert_eq!(field, "x");
+        assert_eq!(path, &["x".to_string()]);
     }
 
     #[test]

@@ -110,7 +110,7 @@ pub enum StmtKind {
     },
     AssignField {
         base: String,
-        field: String,
+        path: Vec<String>,
         value: Expr,
     },
     AssignIndex {

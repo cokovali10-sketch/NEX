@@ -48,8 +48,8 @@ runtime (`runtime/core/nex_rt.c`) — not a hidden language runtime.
   tests.
 - Implemented in the language: functions, bindings, `if`/`elif`/`else`,
   `while`, `for`, `const`, explicit casts, string equality and ordering,
-  compound assignment, structs with scalar fields and function parameters
-  and returns, enums with `match`, arrays, tuples, and modules with `use`
+  compound assignment, structs with scalar or nested struct fields and
+  function parameters and returns, enums with `match`, arrays, tuples, and modules with `use`
   aliases.
 - Not implemented yet: generics, traits, the full standard library, package
   manager, debugger, profiler, and NEX Studio.

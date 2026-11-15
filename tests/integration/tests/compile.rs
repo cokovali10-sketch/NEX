@@ -204,16 +204,14 @@ fn struct_errors_are_reported() {
         immutable_field.diagnostics
     );
 
-    let nested = compile(
-        "struct Inner:\n    x: i64\n\nstruct Outer:\n    inner: Inner\n\nfn main():\n    print(1)\n",
-    );
+    let recursive = compile("struct Node:\n    next: Node\n\nfn main():\n    print(1)\n");
     assert!(
-        nested
+        recursive
             .diagnostics
             .iter()
             .any(|diagnostic| diagnostic.code == "NXS025"),
         "{:?}",
-        nested.diagnostics
+        recursive.diagnostics
     );
 
     let constant = compile(
@@ -576,6 +574,34 @@ fn type_error_is_reported() {
             .iter()
             .any(|diagnostic| diagnostic.code == "NXS006")
     );
+}
+
+#[test]
+fn nested_struct_fields() {
+    let source = r#"
+struct Inner:
+    x: i64
+    y: i64
+
+struct Outer:
+    inner: Inner
+    z: i64
+
+fn main():
+    var o = Outer(Inner(3, 4), 9)
+    o.inner.x = 7
+    print(o.inner.x)
+    print(" ")
+    print(o.inner.y)
+    print(" ")
+    o.inner = Inner(1, 2)
+    print(o.inner.x)
+    print(" ")
+    print(o.inner.y)
+"#;
+    let (stdout, _stderr, code) = run_source(source);
+    assert_eq!(code, 0);
+    assert_eq!(stdout, "7 4 1 2");
 }
 
 #[test]

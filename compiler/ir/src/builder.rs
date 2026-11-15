@@ -310,29 +310,37 @@ fn lower_statement(
                 }
             }
         }
-        StmtKind::AssignField { base, field, value } => {
-            let Some((struct_name, index, field_ty)) = analysis.field_write(statement.span) else {
+        StmtKind::AssignField {
+            base,
+            path: _,
+            value,
+        } => {
+            let Some(steps) = analysis.field_write(statement.span) else {
                 return Err(format!(
-                    "missing field information for assignment to `{base}.{field}`"
+                    "missing field information for assignment to `{base}`"
                 ));
             };
-            let field_ty = IrType::from_type(field_ty);
             let slot = lookup_slot(scopes, base)
                 .ok_or_else(|| format!("unknown variable `{base}` during code generation"))?;
-            let base_ptr = slot.ptr;
-            let field_ptr = builder.new_value();
-            builder.emit(Inst::FieldPtr {
-                dst: field_ptr,
-                base: base_ptr,
-                struct_name,
-                index,
-                field_ty,
-            });
+            let mut ptr = slot.ptr;
+            let mut last_ty = IrType::Void;
+            for (struct_name, index, ty) in &steps {
+                last_ty = IrType::from_type(*ty);
+                let next = builder.new_value();
+                builder.emit(Inst::FieldPtr {
+                    dst: next,
+                    base: ptr,
+                    struct_name,
+                    index: *index,
+                    field_ty: last_ty,
+                });
+                ptr = next;
+            }
             let operand = lower_expr(builder, value, scopes, storage, analysis, Type::Error)?;
             builder.emit(Inst::Store {
-                ptr: field_ptr,
+                ptr,
                 value: operand,
-                ty: field_ty,
+                ty: last_ty,
             });
             Ok(())
         }
@@ -709,6 +717,24 @@ fn lower_struct_place(
                 });
             }
             Ok(ptr)
+        }
+        ExprKind::Field { base, .. } => {
+            let Some((struct_name, index, field_ty)) = analysis.field_read(expr.span) else {
+                return Err("missing field information during code generation".to_string());
+            };
+            if !matches!(field_ty, Type::Struct(_)) {
+                return Err("field does not have a struct type".to_string());
+            }
+            let base_ptr = lower_struct_place(builder, base, scopes, storage, analysis)?;
+            let field_ptr = builder.new_value();
+            builder.emit(Inst::FieldPtr {
+                dst: field_ptr,
+                base: base_ptr,
+                struct_name,
+                index,
+                field_ty: IrType::from_type(field_ty),
+            });
+            Ok(field_ptr)
         }
         _ => Err("struct values must be variables or constructor calls".to_string()),
     }

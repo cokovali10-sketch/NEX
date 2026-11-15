@@ -22,7 +22,7 @@
 - [x] Tuples.
 - [x] Modules and imports (nested `module` blocks and `use` aliases).
 - [x] Struct parameters and return values.
-- [ ] Nested struct fields.
+- [x] Nested struct fields.
 - [ ] Enforce `pub` visibility across modules.
 - [ ] Arrays and tuples in type annotations, parameters, and return values.
 - [ ] Traits and pattern matching beyond enums.

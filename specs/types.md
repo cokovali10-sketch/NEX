@@ -58,8 +58,9 @@ struct Point:
 - A struct is constructed positionally: `Point(1, 2)`.
 - Fields are read with `p.x` and assigned with `p.x = value` (including the
   compound assignment operators) when the binding was declared with `var`.
-- Field types must be scalar: `bool`, `char`, the numeric types, or `string`.
-  Nested struct fields are planned.
+- Field types may be scalar (`bool`, `char`, the numeric types, or `string`) or
+  another struct type, allowing nested struct fields. Directly recursive
+  struct fields are not supported.
 - A struct value can be copied by initializing a binding from an existing
   struct variable or constructor, for example `let q = p`.
 - Struct values cannot be printed, declared as constants, or compared with
@@ -126,6 +127,6 @@ let z = true as i64
 ## Planned
 
 - Generic type parameters.
-- Structs with nested struct fields and struct constants.
+- Struct constants.
 - Tuple, array, optional, and result types.
 - Traits and type constraints.
