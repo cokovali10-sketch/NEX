@@ -34,6 +34,7 @@
 - `nex` project CLI and `nexc` compiler driver.
 - External C function declarations and calls.
 - Reproducible build metadata in `build.json`.
+- Debug symbols generated with Clang `-g`.
 - Built-in `len` and `abs`.
 - Built-in `min`, `max`, `sqrt`, and `pow`.
 - Built-in `assert` and `panic`.

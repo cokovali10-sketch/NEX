@@ -32,7 +32,7 @@
 ## NEX 0.3 - Native Compiler
 
 - [x] Constant folding in NEX IR.
-- [ ] Debug information.
+- [x] Debug symbols via Clang (`-g`).
 - [ ] Cross-platform targets.
 - [x] Reproducible build metadata (build.json).
 
