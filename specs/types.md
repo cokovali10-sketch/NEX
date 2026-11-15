@@ -62,8 +62,8 @@ struct Point:
   Nested struct fields are planned.
 - A struct value can be copied by initializing a binding from an existing
   struct variable or constructor, for example `let q = p`.
-- Struct values cannot be printed, passed to functions, returned from
-  functions, declared as constants, or compared with `==`/`!=` yet.
+- Struct values cannot be printed, declared as constants, or compared with
+  `==`/`!=` yet.
 
 ## User-defined enums
 
@@ -126,7 +126,6 @@ let z = true as i64
 ## Planned
 
 - Generic type parameters.
-- Structs with nested struct fields, struct parameters and return values, and
-  struct constants.
+- Structs with nested struct fields and struct constants.
 - Tuple, array, optional, and result types.
 - Traits and type constraints.

@@ -8,10 +8,10 @@ use crate::types::{
     Terminator, UnOp, ValueId,
 };
 
-#[derive(Clone)]
-enum Slot {
-    Value(ValueId),
-    Local(ValueId, IrType),
+#[derive(Clone, Copy)]
+struct Slot {
+    ptr: ValueId,
+    ty: IrType,
 }
 
 struct FunctionBuilder {
@@ -133,8 +133,17 @@ pub fn build(program: &Program, analysis: &Analysis) -> Result<IrModule, String>
 
         let mut scopes: Vec<HashMap<String, Slot>> = Vec::new();
         let mut param_scope = HashMap::new();
-        for (param, (value, _ty)) in function.params.iter().zip(builder.func.params.iter()) {
-            param_scope.insert(param.name.clone(), Slot::Value(*value));
+        let ir_params = builder.func.params.clone();
+        for (param, (value, ty)) in function.params.iter().zip(ir_params.iter()) {
+            // Parameters are stored in stack slots so that struct parameters
+            // (and scalar parameters) are addressable and use value semantics.
+            let ptr = builder.alloca_at_entry(*ty);
+            builder.emit(Inst::Store {
+                ptr,
+                value: Operand::Value(*value),
+                ty: *ty,
+            });
+            param_scope.insert(param.name.clone(), Slot { ptr, ty: *ty });
         }
         scopes.push(param_scope);
 
@@ -261,20 +270,20 @@ fn lower_statement(
                 builder.emit(Inst::Store { ptr, value, ty });
             }
             if let Some(scope) = scopes.last_mut() {
-                scope.insert(name.clone(), Slot::Local(ptr, ty));
+                scope.insert(name.clone(), Slot { ptr, ty });
             }
             Ok(())
         }
         StmtKind::Assign { name, value } => {
             let slot = lookup_slot(scopes, name)
                 .ok_or_else(|| format!("unknown variable `{name}` during code generation"))?;
-            match slot {
-                Slot::Local(ptr, IrType::Struct(struct_name)) => {
+            match (slot.ptr, slot.ty) {
+                (ptr, IrType::Struct(struct_name)) => {
                     let source = lower_struct_place(builder, value, scopes, storage, analysis)?;
                     copy_struct(builder, ptr, source, struct_name, analysis)?;
                     Ok(())
                 }
-                Slot::Local(ptr, IrType::Array(array_type)) => {
+                (ptr, IrType::Array(array_type)) => {
                     let source = lower_array_place(builder, value, scopes, storage, analysis)?;
                     let src_ty = analysis.expr_type(value.span).unwrap_or(Type::Error);
                     let (elem, len) = match src_ty {
@@ -289,7 +298,7 @@ fn lower_statement(
                     copy_array(builder, ptr, source, array_type, elem, len)?;
                     Ok(())
                 }
-                Slot::Local(ptr, ty) => {
+                (ptr, ty) => {
                     let operand =
                         lower_expr(builder, value, scopes, storage, analysis, Type::Error)?;
                     builder.emit(Inst::Store {
@@ -299,7 +308,6 @@ fn lower_statement(
                     });
                     Ok(())
                 }
-                Slot::Value(_) => Err(format!("cannot assign to immutable binding `{name}`")),
             }
         }
         StmtKind::AssignField { base, field, value } => {
@@ -311,9 +319,7 @@ fn lower_statement(
             let field_ty = IrType::from_type(field_ty);
             let slot = lookup_slot(scopes, base)
                 .ok_or_else(|| format!("unknown variable `{base}` during code generation"))?;
-            let Slot::Local(base_ptr, _) = slot else {
-                return Err(format!("cannot assign a field of `{base}` by value"));
-            };
+            let base_ptr = slot.ptr;
             let field_ptr = builder.new_value();
             builder.emit(Inst::FieldPtr {
                 dst: field_ptr,
@@ -349,7 +355,11 @@ fn lower_statement(
         StmtKind::AssignIndex { base, index, value } => {
             let slot = lookup_slot(scopes, base)
                 .ok_or_else(|| format!("unknown variable `{base}` during code generation"))?;
-            let Slot::Local(base_ptr, IrType::Array(array_type)) = slot else {
+            let Slot {
+                ptr: base_ptr,
+                ty: IrType::Array(array_type),
+            } = slot
+            else {
                 return Err(format!("cannot assign to an element of `{base}` by value"));
             };
             let idx_value = lower_expr(builder, index, scopes, storage, analysis, Type::Error)?;
@@ -558,7 +568,10 @@ fn lower_for(
     if let Some(scope) = scopes.last_mut() {
         scope.insert(
             var.to_string(),
-            Slot::Local(var_ptr, IrType::from_type(var_ty)),
+            Slot {
+                ptr: var_ptr,
+                ty: IrType::from_type(var_ty),
+            },
         );
     }
     lower_stmts(builder, &body.stmts, scopes, storage, analysis)?;
@@ -611,37 +624,57 @@ fn lower_struct_place(
         ExprKind::Ident(name) => {
             let slot = lookup_slot(scopes, name)
                 .ok_or_else(|| format!("unknown variable `{name}` during code generation"))?;
-            match slot {
-                Slot::Local(ptr, IrType::Struct(_)) => Ok(ptr),
-                Slot::Local(..) => Err(format!("variable `{name}` does not have a struct type")),
-                Slot::Value(_) => Err(format!("`{name}` is not a struct value")),
+            if matches!(slot.ty, IrType::Struct(_)) {
+                Ok(slot.ptr)
+            } else {
+                Err(format!("variable `{name}` does not have a struct type"))
             }
         }
         ExprKind::Call { callee, args, .. } => {
-            let Some(info) = analysis.struct_info(callee) else {
-                return Err(format!("`{callee}` is not a struct constructor"));
-            };
-            let ptr = builder.alloca_at_entry(IrType::Struct(info.name_static));
-            for (index, arg) in args.iter().enumerate() {
-                let Some((_, field_ty)) = info.fields.get(index) else {
-                    return Err(format!("too many values for struct `{callee}`"));
-                };
-                let ir_ty = IrType::from_type(*field_ty);
-                let value = lower_expr(builder, arg, scopes, storage, analysis, *field_ty)?;
-                let field_ptr = builder.new_value();
-                builder.emit(Inst::FieldPtr {
-                    dst: field_ptr,
-                    base: ptr,
-                    struct_name: info.name_static,
-                    index: index as u32,
-                    field_ty: ir_ty,
-                });
-                builder.emit(Inst::Store {
-                    ptr: field_ptr,
-                    value,
-                    ty: ir_ty,
-                });
+            let resolved = analysis
+                .aliases
+                .get(callee)
+                .cloned()
+                .unwrap_or_else(|| callee.clone());
+            let callee = resolved.as_str();
+            if let Some(info) = analysis.struct_info(callee) {
+                let ptr = builder.alloca_at_entry(IrType::Struct(info.name_static));
+                for (index, arg) in args.iter().enumerate() {
+                    let Some((_, field_ty)) = info.fields.get(index) else {
+                        return Err(format!("too many values for struct `{callee}`"));
+                    };
+                    let ir_ty = IrType::from_type(*field_ty);
+                    let value = lower_expr(builder, arg, scopes, storage, analysis, *field_ty)?;
+                    let field_ptr = builder.new_value();
+                    builder.emit(Inst::FieldPtr {
+                        dst: field_ptr,
+                        base: ptr,
+                        struct_name: info.name_static,
+                        index: index as u32,
+                        field_ty: ir_ty,
+                    });
+                    builder.emit(Inst::Store {
+                        ptr: field_ptr,
+                        value,
+                        ty: ir_ty,
+                    });
+                }
+                return Ok(ptr);
             }
+
+            let signature = analysis
+                .function(callee)
+                .ok_or_else(|| format!("unknown function `{callee}` during code generation"))?;
+            let Type::Struct(name) = signature.ret else {
+                return Err(format!("`{callee}` does not return a struct value"));
+            };
+            let value = lower_expr(builder, expr, scopes, storage, analysis, signature.ret)?;
+            let ptr = builder.alloca_at_entry(IrType::Struct(name));
+            builder.emit(Inst::Store {
+                ptr,
+                value,
+                ty: IrType::Struct(name),
+            });
             Ok(ptr)
         }
         ExprKind::Tuple(elements) => {
@@ -862,10 +895,7 @@ fn lower_array_place(
         ExprKind::Ident(name) => {
             let slot = lookup_slot(scopes, name)
                 .ok_or_else(|| format!("unknown variable `{name}` during code generation"))?;
-            match slot {
-                Slot::Local(ptr, _) => Ok(ptr),
-                Slot::Value(_) => Err(format!("`{name}` is not an array value")),
-            }
+            Ok(slot.ptr)
         }
         ExprKind::Field { base, .. } => {
             let Some((struct_name, index, field_ty)) = analysis.field_read(expr.span) else {
@@ -992,14 +1022,13 @@ fn lower_expr(
             }
             let slot = lookup_slot(scopes, name)
                 .ok_or_else(|| format!("unknown variable `{name}` during code generation"))?;
-            match slot {
-                Slot::Value(value) => Ok(Operand::Value(value)),
-                Slot::Local(ptr, ty) => {
-                    let dst = builder.new_value();
-                    builder.emit(Inst::Load { dst, ptr, ty });
-                    Ok(Operand::Value(dst))
-                }
-            }
+            let dst = builder.new_value();
+            builder.emit(Inst::Load {
+                dst,
+                ptr: slot.ptr,
+                ty: slot.ty,
+            });
+            Ok(Operand::Value(dst))
         }
         ExprKind::Unary { op, operand } => {
             let operand_value =
@@ -1173,10 +1202,15 @@ fn lower_expr(
                 return Ok(Operand::Const(Const::Bool(false)));
             }
 
-            if analysis.struct_info(callee).is_some() {
-                return Err(format!(
-                    "struct constructor `{callee}` cannot be used as a scalar value"
-                ));
+            if let Some(info) = analysis.struct_info(callee) {
+                let ptr = lower_struct_place(builder, expr, scopes, storage, analysis)?;
+                let dst = builder.new_value();
+                builder.emit(Inst::Load {
+                    dst,
+                    ptr,
+                    ty: IrType::Struct(info.name_static),
+                });
+                return Ok(Operand::Value(dst));
             }
 
             let signature = analysis
@@ -1306,10 +1340,21 @@ fn lower_expr(
             });
             Ok(Operand::Value(loaded))
         }
-        ExprKind::Tuple(elements) => {
-            let _ = elements;
+        ExprKind::Tuple(_) => {
+            let ty = analysis
+                .expr_type(expr.span)
+                .ok_or_else(|| "missing type information for tuple".to_string())?;
+            let Type::Struct(name) = ty else {
+                return Err("not a tuple value".to_string());
+            };
             let source = lower_struct_place(builder, expr, scopes, storage, analysis)?;
-            Ok(Operand::Value(source))
+            let dst = builder.new_value();
+            builder.emit(Inst::Load {
+                dst,
+                ptr: source,
+                ty: IrType::Struct(name),
+            });
+            Ok(Operand::Value(dst))
         }
         ExprKind::Error => Err("invalid expression reached code generation".to_string()),
     }
@@ -1404,7 +1449,7 @@ fn lower_or(
 fn lookup_slot(scopes: &[HashMap<String, Slot>], name: &str) -> Option<Slot> {
     for scope in scopes.iter().rev() {
         if let Some(slot) = scope.get(name) {
-            return Some(slot.clone());
+            return Some(*slot);
         }
     }
     None

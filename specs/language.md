@@ -38,8 +38,7 @@ planned and are not yet implemented.
 
 - Generics and type constraints.
 - Traits and pattern matching beyond enums.
-- Structs with nested struct fields, struct function parameters/returns, and
-  struct constants.
+- Structs with nested struct fields and struct constants.
 - Arrays and tuples in type annotations, parameters, and return values.
 - Async/await and structured concurrency.
 - Macros and compile-time evaluation.

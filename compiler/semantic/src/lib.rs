@@ -209,16 +209,6 @@ impl<'a> Checker<'a> {
                         param.ty.span,
                     );
                 }
-                if matches!(ty, Type::Struct(_)) {
-                    self.error(
-                        "NXS028",
-                        format!(
-                            "parameter `{}` has struct type `{ty}`; passing struct values to functions is planned for a later release",
-                            param.name
-                        ),
-                        param.ty.span,
-                    );
-                }
                 params.push(ty);
             }
 
@@ -227,17 +217,6 @@ impl<'a> Checker<'a> {
                 .as_ref()
                 .map(|ty| self.resolve_type(ty))
                 .unwrap_or(Type::Void);
-
-            if matches!(ret, Type::Struct(_)) {
-                self.error(
-                    "NXS028",
-                    format!(
-                        "function `{}` returns struct type `{ret}`; returning struct values is planned for a later release",
-                        function.name
-                    ),
-                    function.span,
-                );
-            }
 
             self.analysis.functions.insert(
                 function.name.clone(),

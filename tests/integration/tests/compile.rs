@@ -204,16 +204,28 @@ fn struct_errors_are_reported() {
         immutable_field.diagnostics
     );
 
-    let parameter = compile(
-        "struct Point:\n    x: i64\n\nfn f(p: Point) -> i64:\n    return p.x\n\nfn main():\n    print(1)\n",
+    let nested = compile(
+        "struct Inner:\n    x: i64\n\nstruct Outer:\n    inner: Inner\n\nfn main():\n    print(1)\n",
     );
     assert!(
-        parameter
+        nested
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == "NXS025"),
+        "{:?}",
+        nested.diagnostics
+    );
+
+    let constant = compile(
+        "struct Point:\n    x: i64\n\nconst P: Point = Point(1)\n\nfn main():\n    print(1)\n",
+    );
+    assert!(
+        constant
             .diagnostics
             .iter()
             .any(|diagnostic| diagnostic.code == "NXS028"),
         "{:?}",
-        parameter.diagnostics
+        constant.diagnostics
     );
 
     let printed =
@@ -564,6 +576,47 @@ fn type_error_is_reported() {
             .iter()
             .any(|diagnostic| diagnostic.code == "NXS006")
     );
+}
+
+#[test]
+fn struct_parameters_and_returns() {
+    let source = r#"
+struct Point:
+    x: i64
+    y: i64
+
+fn make(x: i64, y: i64) -> Point:
+    return Point(x, y)
+
+fn sum(p: Point) -> i64:
+    return p.x + p.y
+
+fn bump(p: Point) -> Point:
+    var q = p
+    q.x = q.x + 1
+    return q
+
+fn main():
+    let p = make(3, 4)
+    print(sum(p))
+    print(" ")
+    let q = bump(p)
+    print(q.x)
+    print(" ")
+    print(p.x)
+    print(" ")
+    print(sum(Point(10, 20)))
+    print(" ")
+    let r = make(1, 2)
+    print(r.y)
+    print(" ")
+    print(make(7, 8).x)
+    print(" ")
+    print(sum(make(5, 6)))
+"#;
+    let (stdout, _stderr, code) = run_source(source);
+    assert_eq!(code, 0);
+    assert_eq!(stdout, "7 4 3 30 2 7 11");
 }
 
 #[test]
