@@ -75,6 +75,42 @@ primitives serves one connection at a time and needs `threads` (not implemented)
 for concurrency. `tcp_read` returns whatever a single `recv` produced, so an
 HTTP server must loop until it sees the full request.
 
+### HTTP
+
+Request parsing and response building on top of the socket helpers. These are
+string functions, so they work on a request head read with `tcp_read`.
+
+| Function | Signature | Notes |
+|---|---|---|
+| `http_method` | `(request: string) -> string` | `GET`, `POST`, ... |
+| `http_path` | `(request: string) -> string` | Request target, e.g. `/hello`. |
+| `http_version` | `(request: string) -> string` | `HTTP/1.1`. |
+| `http_header` | `(request: string, name: string) -> string` | Case-insensitive lookup; empty string when absent. |
+| `http_body` | `(request: string) -> string` | Everything after the first empty line. |
+| `http_response` | `(status: string, content_type: string, body: string) -> string` | Full `HTTP/1.1` response with `Content-Length` and `Connection: close`. |
+
+A minimal server looks like this:
+
+```nex
+fn handle(request: string) -> string:
+    var path = http_path(request)
+    if path == "/":
+        return http_response("200 OK", "text/plain; charset=utf-8", "hello")
+    return http_response("404 Not Found", "text/plain; charset=utf-8", "not found")
+
+fn main():
+    var server = tcp_listen(8080, 8)
+    var client = tcp_accept(server)
+    var request = tcp_read(client, 8192)
+    var response = handle(request)
+    tcp_write(client, response, len(response))
+    tcp_close(client)
+    tcp_close(server)
+```
+
+This serves one request and exits: there is no `threads` support yet, so a real
+server must loop and handle one connection at a time.
+
 ### Numeric
 
 | Function | Signature | Notes |

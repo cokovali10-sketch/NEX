@@ -694,3 +694,185 @@ int nex_rt_tcp_close(long long socket) {
     NEX_CLOSE_SOCKET((nex_socket)socket);
     return 1;
 }
+
+/* ------------------------------------------------------------------------- */
+/* Minimal HTTP/1.1 helpers: parse a request head, build a response.          */
+/* ------------------------------------------------------------------------- */
+
+static const char *nex_http_skip_spaces(const char *cursor) {
+    while (*cursor == ' ' || *cursor == '\t') {
+        cursor++;
+    }
+    return cursor;
+}
+
+static char *nex_http_token(const char *start, size_t length) {
+    char *token = (char *)malloc(length + 1);
+    if (token == NULL) {
+        return NULL;
+    }
+    memcpy(token, start, length);
+    token[length] = '\0';
+    return token;
+}
+
+/* Returns a copy of the request method: "GET", "POST", ... */
+char *nex_rt_http_method(const char *request) {
+    if (request == NULL) {
+        return NULL;
+    }
+    const char *cursor = nex_http_skip_spaces(request);
+    const char *end = cursor;
+    while (*end != '\0' && *end != ' ') {
+        end++;
+    }
+    return nex_http_token(cursor, (size_t)(end - cursor));
+}
+
+/* Returns the request target, e.g. "/index.html". */
+char *nex_rt_http_path(const char *request) {
+    if (request == NULL) {
+        return NULL;
+    }
+    const char *method_end = request;
+    while (*method_end != '\0' && *method_end != ' ') {
+        method_end++;
+    }
+    if (*method_end == '\0') {
+        return NULL;
+    }
+    const char *path = nex_http_skip_spaces(method_end);
+    const char *end = path;
+    while (*end != '\0' && *end != ' ' && *end != '\r' && *end != '\n') {
+        end++;
+    }
+    return nex_http_token(path, (size_t)(end - path));
+}
+
+/* Returns the HTTP version token, e.g. "HTTP/1.1". */
+char *nex_rt_http_version(const char *request) {
+    if (request == NULL) {
+        return NULL;
+    }
+    const char *cursor = request;
+    for (int field = 0; field < 2; field++) {
+        while (*cursor != '\0' && *cursor != ' ') {
+            cursor++;
+        }
+        if (*cursor == '\0') {
+            return NULL;
+        }
+        cursor = nex_http_skip_spaces(cursor);
+    }
+    const char *end = cursor;
+    while (*end != '\0' && *end != ' ' && *end != '\r' && *end != '\n') {
+        end++;
+    }
+    return nex_http_token(cursor, (size_t)(end - cursor));
+}
+
+/* Case-insensitive header lookup inside the request head. */
+char *nex_rt_http_header(const char *request, const char *name) {
+    if (request == NULL || name == NULL) {
+        return NULL;
+    }
+    size_t name_length = strlen(name);
+    const char *cursor = request;
+    while (*cursor != '\0') {
+        const char *line_end = cursor;
+        while (*line_end != '\0' && *line_end != '\n') {
+            line_end++;
+        }
+        if (line_end > cursor && cursor[0] != '\r' && cursor[0] != '\n') {
+            size_t line_length = (size_t)(line_end - cursor);
+            int matches = line_length > name_length;
+            for (size_t i = 0; matches && i < name_length; i++) {
+                char left = cursor[i];
+                char right = name[i];
+                if (left >= 'A' && left <= 'Z') {
+                    left = (char)(left - 'A' + 'a');
+                }
+                if (right >= 'A' && right <= 'Z') {
+                    right = (char)(right - 'A' + 'a');
+                }
+                if (left != right) {
+                    matches = 0;
+                }
+            }
+            if (matches && cursor[name_length] == ':') {
+                const char *value = nex_http_skip_spaces(cursor + name_length + 1);
+                const char *value_end = line_end;
+                if (value_end > value && value_end[-1] == '\r') {
+                    value_end--;
+                }
+                return nex_http_token(value, (size_t)(value_end - value));
+            }
+        }
+        if (*line_end == '\0') {
+            break;
+        }
+        cursor = line_end + 1;
+    }
+    return NULL;
+}
+
+/* Body = everything after the first empty line. */
+char *nex_rt_http_body(const char *request) {
+    if (request == NULL) {
+        return NULL;
+    }
+    const char *cursor = request;
+    while (*cursor != '\0') {
+        if (cursor[0] == '\r' && cursor[1] == '\n' && cursor[2] == '\r' && cursor[3] == '\n') {
+            cursor += 4;
+            break;
+        }
+        if (cursor[0] == '\n' && cursor[1] == '\n') {
+            cursor += 2;
+            break;
+        }
+        cursor++;
+    }
+    size_t length = strlen(cursor);
+    char *body = (char *)malloc(length + 1);
+    if (body == NULL) {
+        return NULL;
+    }
+    memcpy(body, cursor, length + 1);
+    return body;
+}
+
+/* Builds a complete HTTP/1.1 response with Content-Length and Connection: close. */
+char *nex_rt_http_response(const char *status, const char *content_type, const char *body) {
+    if (status == NULL) {
+        status = "200 OK";
+    }
+    if (content_type == NULL || *content_type == '\0') {
+        content_type = "text/plain; charset=utf-8";
+    }
+    if (body == NULL) {
+        body = "";
+    }
+    size_t status_length = strlen(status);
+    size_t type_length = strlen(content_type);
+    size_t body_length = strlen(body);
+    size_t digits = 1;
+    for (size_t value = body_length; value >= 10; value /= 10) {
+        digits++;
+    }
+    size_t head_length = status_length + type_length + digits + 128;
+    char *response = (char *)malloc(head_length + body_length + 1);
+    if (response == NULL) {
+        return NULL;
+    }
+    snprintf(
+        response,
+        head_length + body_length + 1,
+        "HTTP/1.1 %s\r\nContent-Type: %s\r\nContent-Length: %zu\r\nConnection: close\r\n\r\n%s",
+        status,
+        content_type,
+        body_length,
+        body
+    );
+    return response;
+}

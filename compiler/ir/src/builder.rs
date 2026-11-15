@@ -1995,6 +1995,42 @@ fn lower_expr(
                 return Ok(Operand::Value(dst));
             }
 
+            if callee == "http_method"
+                || callee == "http_path"
+                || callee == "http_version"
+                || callee == "http_header"
+                || callee == "http_body"
+                || callee == "http_response"
+            {
+                let mut call_args = Vec::new();
+                for arg in args {
+                    call_args.push(lower_expr(
+                        builder,
+                        arg,
+                        scopes,
+                        storage,
+                        analysis,
+                        Type::Error,
+                    )?);
+                }
+                let name = match callee {
+                    "http_method" => "nex_rt_http_method",
+                    "http_path" => "nex_rt_http_path",
+                    "http_version" => "nex_rt_http_version",
+                    "http_header" => "nex_rt_http_header",
+                    "http_body" => "nex_rt_http_body",
+                    _ => "nex_rt_http_response",
+                };
+                let dst = builder.new_value();
+                builder.emit(Inst::Call {
+                    dst: Some(dst),
+                    name: name.to_string(),
+                    args: call_args,
+                    ret: IrType::String,
+                });
+                return Ok(Operand::Value(dst));
+            }
+
             if callee == "tcp_connect"
                 || callee == "tcp_listen"
                 || callee == "tcp_accept"

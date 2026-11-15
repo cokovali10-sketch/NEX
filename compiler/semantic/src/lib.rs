@@ -1942,6 +1942,85 @@ impl<'a> Checker<'a> {
             return value_ty;
         }
 
+        if callee == "http_method"
+            || callee == "http_path"
+            || callee == "http_version"
+            || callee == "http_body"
+        {
+            if args.len() != 1 {
+                self.error(
+                    "NXS004",
+                    format!("`{callee}` expects 1 argument, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let request_ty = self.infer(&args[0]);
+            if request_ty != Type::String && request_ty != Type::Error {
+                self.error(
+                    "NXS004",
+                    format!("`{callee}` expects a `string` request, found `{request_ty}`"),
+                    span,
+                );
+                return Type::Error;
+            }
+            return Type::String;
+        }
+
+        if callee == "http_header" {
+            if args.len() != 2 {
+                self.error(
+                    "NXS004",
+                    format!("`http_header` expects 2 arguments, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let request_ty = self.infer(&args[0]);
+            let name_ty = self.infer(&args[1]);
+            if (request_ty != Type::String || name_ty != Type::String)
+                && (request_ty != Type::Error && name_ty != Type::Error)
+            {
+                self.error("NXS004", "`http_header` expects `(string, string)`", span);
+                return Type::Error;
+            }
+            return Type::String;
+        }
+
+        if callee == "http_response" {
+            if args.len() != 3 {
+                self.error(
+                    "NXS004",
+                    format!("`http_response` expects 3 arguments, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let status_ty = self.infer(&args[0]);
+            let type_ty = self.infer(&args[1]);
+            let body_ty = self.infer(&args[2]);
+            if (status_ty != Type::String || type_ty != Type::String || body_ty != Type::String)
+                && (status_ty != Type::Error && type_ty != Type::Error && body_ty != Type::Error)
+            {
+                self.error(
+                    "NXS004",
+                    "`http_response` expects `(string, string, string)`",
+                    span,
+                );
+                return Type::Error;
+            }
+            return Type::String;
+        }
+
         if callee == "tcp_connect" {
             if args.len() != 2 {
                 self.error(

@@ -31,6 +31,9 @@
 - Blocking TCP sockets: `tcp_listen`, `tcp_accept`, `tcp_connect`,
   `tcp_write`, `tcp_read`, `tcp_close` (Windows and POSIX).
 
+- HTTP helpers: `http_method`, `http_path`, `http_version`, `http_header`,
+  `http_body`, `http_response`. A NEX program can now serve HTTP/1.1.
+
 ### Fixed
 
 - The lexer now skips a leading UTF-8 BOM instead of reporting `unexpected character`.

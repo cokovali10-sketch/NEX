@@ -1145,3 +1145,25 @@ fn tcp_connect_to_a_closed_port_returns_negative() {
     assert_eq!(code, 0, "stderr: {stderr}");
     assert_eq!(stdout, "true\n");
 }
+
+#[test]
+fn http_request_parsing() {
+    let source = "fn main():\n    var req = \"GET /hello HTTP/1.1\\r\\nHost: example.com\\r\\nContent-Type: text/plain\\r\\n\\r\\nbody-here\"\n    println(http_method(req))\n    println(http_path(req))\n    println(http_version(req))\n    println(http_header(req, \"host\"))\n    println(http_header(req, \"content-type\"))\n    println(http_body(req))\n";
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(
+        stdout,
+        "GET\n/hello\nHTTP/1.1\nexample.com\ntext/plain\nbody-here\n"
+    );
+}
+
+#[test]
+fn http_response_includes_length_and_close() {
+    let source = "fn main():\n    print(http_response(\"200 OK\", \"text/plain\", \"hi\"))\n";
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert!(stdout.starts_with("HTTP/1.1 200 OK\r\n"), "{stdout}");
+    assert!(stdout.contains("Content-Type: text/plain\r\n"), "{stdout}");
+    assert!(stdout.contains("Content-Length: 2\r\n"), "{stdout}");
+    assert!(stdout.contains("Connection: close\r\n\r\nhi"), "{stdout}");
+}
