@@ -1004,3 +1004,31 @@ void *nex_rt_array_grow(void *data, long long size) {
     }
     return realloc(data, (size_t)size);
 }
+
+/* Ensures capacity for `needed_len` elements of `elem_size` bytes, growing by
+   doubling. The header is never reallocated, so the pointer stays valid. */
+void *nex_rt_array_ensure(void *header, long long needed_len, long long elem_size) {
+    if (header == NULL) {
+        return NULL;
+    }
+    long long *words = (long long *)header;
+    void **data = (void **)header;
+    long long len = words[1];
+    long long cap = words[2];
+    (void)len;
+    if (needed_len <= cap) {
+        return header;
+    }
+    long long new_cap = cap > 0 ? cap * 2 : 4;
+    while (new_cap < needed_len) {
+        new_cap *= 2;
+    }
+    long long bytes = new_cap * (elem_size > 0 ? elem_size : 1);
+    void *grown = realloc(data[0], (size_t)bytes);
+    if (grown == NULL) {
+        return NULL;
+    }
+    data[0] = grown;
+    words[2] = new_cap;
+    return header;
+}

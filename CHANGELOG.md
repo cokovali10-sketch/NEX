@@ -42,6 +42,9 @@
 
 - `str_index_of_from`, `char_at`, and `char_code` for parsing and splitting.
 
+- Growable arrays: `[T]`, `push`, `len`, bounds-checked indexing, and
+  assignment to elements. See `specs/dynamic-arrays.md`.
+
 ### Fixed
 
 - The lexer now skips a leading UTF-8 BOM instead of reporting `unexpected character`.

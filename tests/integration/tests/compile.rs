@@ -1207,3 +1207,43 @@ fn char_at_and_char_code() {
     assert_eq!(code, 0, "stderr: {stderr}");
     assert_eq!(stdout, "b\n65\n\n");
 }
+
+#[test]
+fn growable_array_push_index_and_len() {
+    let source = "fn main():\n    var a: [i64] = []\n    push(a, 10)\n    push(a, 20)\n    push(a, 30)\n    println(len(a))\n    println(a[0])\n    println(a[2])\n    a[1] = 99\n    println(a[1])\n";
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "3\n10\n30\n99\n");
+}
+
+#[test]
+fn growable_array_grows_past_doubling_boundaries() {
+    let source = "fn main():\n    var a: [i64] = []\n    var i = 0\n    while i < 40:\n        push(a, i)\n        i = i + 1\n    println(len(a))\n    println(a[39])\n";
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "40\n39\n");
+}
+
+#[test]
+fn growable_array_out_of_bounds_panics() {
+    let source = "fn main():\n    var a: [i64] = []\n    push(a, 1)\n    print(a[5])\n";
+    let result = compile(source);
+    assert!(!result.has_errors(), "{:?}", result.diagnostics);
+    let executable = result
+        .artifacts
+        .as_ref()
+        .and_then(|artifacts| artifacts.executable.clone())
+        .expect("executable should be produced");
+    let output = std::process::Command::new(&executable)
+        .output()
+        .expect("failed to run executable");
+    assert!(!output.status.success(), "expected a non-zero exit");
+}
+
+#[test]
+fn growable_array_of_strings() {
+    let source = "fn main():\n    var a: [string] = []\n    push(a, \"one\")\n    push(a, \"two\")\n    println(len(a))\n    println(a[1])\n";
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "2\ntwo\n");
+}

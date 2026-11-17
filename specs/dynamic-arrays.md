@@ -4,6 +4,24 @@ Status: accepted (2026-11-15). This document fixes the design before
 implementation starts, so the compiler changes can be made in one pass instead
 of being rediscovered in each layer.
 
+## Implementation note (2026-11-17)
+
+The design below was adjusted while implementing it, and the code is the source
+of truth:
+
+- `Type` **keeps `Copy`**. A growable array is `Type::DynArray(&'static str)`,
+  where the string is the interned display name (for example `[i64]`). The
+  element type is read from the existing `Analysis::arrays` registry, which
+  already stores `elem: Type`. This avoided changing every `match` on `Type`.
+- In IR a growable array value is a **plain pointer** to the header
+  `{ ptr, i64, i64 }`, so a variable costs one word, not three.
+- Field access uses a dedicated `Inst::HeaderPtr` with `i32` indices. The
+  installed clang rejects `getelementptr` with `i64` struct indices.
+- `push` calls `nex_rt_array_ensure`, which doubles the capacity
+  (`4, 8, 16, ...`) and reallocs only the data buffer.
+
+Everything else in this document (semantics, bounds checks, aliasing) holds.
+
 ## Why
 
 Every collection NEX will ever need — `json`, `str_split`, buffers, result sets

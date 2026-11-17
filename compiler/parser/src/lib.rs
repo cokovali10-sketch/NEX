@@ -650,7 +650,13 @@ impl<'a> Parser<'a> {
         if self.check(&TokenKind::LBracket) {
             let start = self.advance().span; // [
             let elem = self.parse_type();
-            if !self.expect(&TokenKind::Semicolon, "in array type") {
+            // `[T]` is the growable form, `[T; N]` the fixed-size one. The
+            // semicolon is only required when a length follows.
+            if self.check(&TokenKind::Semicolon) {
+                self.advance();
+            } else if !self.check(&TokenKind::RBracket) {
+                let span = self.peek_token().span;
+                self.error("NXP011", "expected `;` or `]` in array type", span);
                 return TypeExpr {
                     name: "<error>".to_string(),
                     array: None,

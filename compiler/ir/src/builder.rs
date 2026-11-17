@@ -381,6 +381,20 @@ fn lower_statement(
         StmtKind::AssignIndex { base, index, value } => {
             let slot = lookup_slot(scopes, base)
                 .ok_or_else(|| format!("unknown variable `{base}` during code generation"))?;
+            // A growable array is stored as a header pointer, so the slot type is
+            // a plain pointer and the element type comes from the assigned value.
+            if slot.ty == IrType::String {
+                let elem_ty = analysis.expr_type(value.span).unwrap_or(Type::Error);
+                let header = builder.new_value();
+                builder.emit(Inst::Load {
+                    dst: header,
+                    ptr: slot.ptr,
+                    ty: IrType::String,
+                });
+                return lower_dyn_assign_index(
+                    builder, header, index, value, elem_ty, scopes, storage, analysis,
+                );
+            }
             let Slot {
                 ptr: base_ptr,
                 ty: IrType::Array(array_type),
@@ -396,7 +410,12 @@ fn lower_statement(
                 .find(|candidate| candidate.llvm == array_type)
                 .cloned();
             if let Some(found) = &info {
-                lower_bounds_check(builder, idx_value.clone(), index_ty, found.len);
+                lower_bounds_check(
+                    builder,
+                    idx_value.clone(),
+                    index_ty,
+                    Operand::Const(Const::Int(found.len as i64)),
+                );
             }
             let elem = info.map(|found| found.elem).unwrap_or(Type::Error);
             let elem_ir = IrType::from_type(elem);
@@ -1114,7 +1133,7 @@ fn lower_place_equality(
     }
 }
 
-fn lower_bounds_check(builder: &mut FunctionBuilder, index: Operand, index_ty: Type, len: usize) {
+fn lower_bounds_check(builder: &mut FunctionBuilder, index: Operand, index_ty: Type, len: Operand) {
     let ir_ty = IrType::from_type(index_ty);
     let ge_zero = builder.new_value();
     builder.emit(Inst::Bin {
@@ -1130,7 +1149,7 @@ fn lower_bounds_check(builder: &mut FunctionBuilder, index: Operand, index_ty: T
         op: BinOp::Lt,
         ty: ir_ty,
         lhs: index,
-        rhs: Operand::Const(Const::Int(len as i64)),
+        rhs: len,
     });
     let ok = builder.new_value();
     builder.emit(Inst::Bin {
@@ -1563,18 +1582,14 @@ fn field_ptr(
     elem_ty: IrType,
 ) -> ValueId {
     let slot = builder.new_value();
-    builder.emit(Inst::IndexPtr {
+    let _ = elem_ty;
+    builder.emit(Inst::HeaderPtr {
         dst: slot,
         base: header,
-        array_type: DYN_HEADER_LLVM,
-        index: Operand::Const(Const::Int(index)),
-        elem_ty,
+        index: index as u32,
     });
     slot
 }
-
-/// LLVM spelling of the growable array header.
-const DYN_HEADER_LLVM: &str = "{ ptr, i64, i64 }";
 
 /// Size in bytes of an IR type when stored in memory.
 fn ir_elem_size(ty: IrType) -> i64 {
@@ -1585,6 +1600,139 @@ fn ir_elem_size(ty: IrType) -> i64 {
         IrType::I64 | IrType::U64 | IrType::F64 | IrType::String | IrType::Array(_) => 8,
         IrType::Struct(_) => 8,
         IrType::Void => 0,
+    }
+}
+
+/// Lowers `a[i]` for a growable array: bounds-check against the stored length,
+/// then load from the data buffer.
+fn lower_dyn_index(
+    builder: &mut FunctionBuilder,
+    base: &Expr,
+    index: &Expr,
+    expr: &Expr,
+    scopes: &mut Vec<HashMap<String, Slot>>,
+    storage: &HashMap<nex_diagnostics::Span, (ValueId, IrType)>,
+    analysis: &Analysis,
+) -> Result<Operand, String> {
+    let header_operand = lower_expr(builder, base, scopes, storage, analysis, Type::Error)?;
+    let header = operand_value_id(builder, header_operand)?;
+    let elem_ty = analysis.expr_type(expr.span).unwrap_or(Type::Error);
+    let elem_ir = IrType::from_type(elem_ty);
+
+    let len_slot = field_ptr(builder, header, 1, IrType::I64);
+    let len_value = builder.new_value();
+    builder.emit(Inst::Load {
+        dst: len_value,
+        ptr: len_slot,
+        ty: IrType::I64,
+    });
+
+    let index_value = lower_expr(builder, index, scopes, storage, analysis, Type::Error)?;
+    let index_ty = analysis.expr_type(index.span).unwrap_or(Type::I64);
+    lower_bounds_check(
+        builder,
+        index_value.clone(),
+        index_ty,
+        Operand::Value(len_value),
+    );
+
+    let data_slot = field_ptr(builder, header, 0, IrType::String);
+    let data_value = builder.new_value();
+    builder.emit(Inst::Load {
+        dst: data_value,
+        ptr: data_slot,
+        ty: IrType::String,
+    });
+
+    let elem_ptr = builder.new_value();
+    builder.emit(Inst::DynIndexPtr {
+        dst: elem_ptr,
+        base: data_value,
+        index: index_value,
+        elem_ty: elem_ir,
+    });
+
+    let loaded = builder.new_value();
+    builder.emit(Inst::Load {
+        dst: loaded,
+        ptr: elem_ptr,
+        ty: elem_ir,
+    });
+    Ok(Operand::Value(loaded))
+}
+
+/// Lowers `a[i] = value` for a growable array.
+#[allow(clippy::too_many_arguments)]
+fn lower_dyn_assign_index(
+    builder: &mut FunctionBuilder,
+    header: ValueId,
+    index: &Expr,
+    value: &Expr,
+    elem_ty: Type,
+    scopes: &mut Vec<HashMap<String, Slot>>,
+    storage: &HashMap<nex_diagnostics::Span, (ValueId, IrType)>,
+    analysis: &Analysis,
+) -> Result<(), String> {
+    if elem_ty == Type::Error {
+        return Err("cannot assign to an element of a growable array without a type".to_string());
+    }
+    let elem_ir = IrType::from_type(elem_ty);
+    let len_slot = field_ptr(builder, header, 1, IrType::I64);
+    let len_value = builder.new_value();
+    builder.emit(Inst::Load {
+        dst: len_value,
+        ptr: len_slot,
+        ty: IrType::I64,
+    });
+    let idx_value = lower_expr(builder, index, scopes, storage, analysis, Type::Error)?;
+    lower_bounds_check(
+        builder,
+        idx_value.clone(),
+        Type::I64,
+        Operand::Value(len_value),
+    );
+    let data_slot = field_ptr(builder, header, 0, IrType::String);
+    let data = builder.new_value();
+    builder.emit(Inst::Load {
+        dst: data,
+        ptr: data_slot,
+        ty: IrType::String,
+    });
+    let target = builder.new_value();
+    builder.emit(Inst::DynIndexPtr {
+        dst: target,
+        base: data,
+        index: idx_value,
+        elem_ty: elem_ir,
+    });
+    let value = lower_expr(builder, value, scopes, storage, analysis, elem_ty)?;
+    builder.emit(Inst::Store {
+        ptr: target,
+        value,
+        ty: elem_ir,
+    });
+    Ok(())
+}
+
+/// Materialises an operand into a value id when it is not already one.
+fn operand_value_id(builder: &mut FunctionBuilder, operand: Operand) -> Result<ValueId, String> {
+    match operand {
+        Operand::Value(value) => Ok(value),
+        other => {
+            let slot = builder.alloca_at_entry(IrType::String);
+            builder.emit(Inst::Store {
+                ptr: slot,
+                value: other,
+                ty: IrType::String,
+            });
+            let loaded = builder.new_value();
+            builder.emit(Inst::Load {
+                dst: loaded,
+                ptr: slot,
+                ty: IrType::String,
+            });
+            Ok(loaded)
+        }
     }
 }
 
@@ -1859,6 +2007,19 @@ fn lower_expr(
                         return Ok(Operand::Const(Const::Int(info.len as i64)));
                     }
                 }
+                if let Type::DynArray(_) = arg_ty {
+                    let header_operand =
+                        lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
+                    let header = operand_value_id(builder, header_operand)?;
+                    let slot = field_ptr(builder, header, 1, IrType::I64);
+                    let loaded = builder.new_value();
+                    builder.emit(Inst::Load {
+                        dst: loaded,
+                        ptr: slot,
+                        ty: IrType::I64,
+                    });
+                    return Ok(Operand::Value(loaded));
+                }
                 let arg_value =
                     lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
                 let dst = builder.new_value();
@@ -1869,6 +2030,84 @@ fn lower_expr(
                     ret: IrType::I64,
                 });
                 return Ok(Operand::Value(dst));
+            }
+
+            if callee == "push" {
+                if args.len() != 2 {
+                    return Err("`push` expects 2 arguments".to_string());
+                }
+                let array_ty = analysis.expr_type(args[0].span).unwrap_or(Type::Error);
+                let value_ty = analysis.expr_type(args[1].span).unwrap_or(Type::Error);
+                let element = match array_ty {
+                    Type::DynArray(display) => analysis
+                        .array_info(display)
+                        .map(|info| info.elem)
+                        .unwrap_or(Type::Error),
+                    _ => Type::Error,
+                };
+                if element == Type::Error {
+                    return Err("`push` expects a growable array".to_string());
+                }
+                if element != value_ty {
+                    return Err(format!("`push` expects `{element}`, found `{value_ty}`"));
+                }
+                let elem_ir = IrType::from_type(element);
+                let header_operand =
+                    lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
+                let header = operand_value_id(builder, header_operand)?;
+                let len_slot = field_ptr(builder, header, 1, IrType::I64);
+                let current_len = builder.new_value();
+                builder.emit(Inst::Load {
+                    dst: current_len,
+                    ptr: len_slot,
+                    ty: IrType::I64,
+                });
+                let needed = builder.new_value();
+                builder.emit(Inst::Bin {
+                    dst: needed,
+                    op: BinOp::Add,
+                    ty: IrType::I64,
+                    lhs: Operand::Value(current_len),
+                    rhs: Operand::Const(Const::Int(1)),
+                });
+                let ensured = builder.new_value();
+                builder.emit(Inst::Call {
+                    dst: Some(ensured),
+                    name: "nex_rt_array_ensure".to_string(),
+                    args: vec![
+                        Operand::Value(header),
+                        Operand::Value(needed),
+                        Operand::Const(Const::Int(ir_elem_size(elem_ir))),
+                    ],
+                    ret: IrType::String,
+                });
+                let data_slot = field_ptr(builder, ensured, 0, IrType::String);
+                let data = builder.new_value();
+                builder.emit(Inst::Load {
+                    dst: data,
+                    ptr: data_slot,
+                    ty: IrType::String,
+                });
+                let slot = builder.new_value();
+                builder.emit(Inst::DynIndexPtr {
+                    dst: slot,
+                    base: data,
+                    index: Operand::Value(current_len),
+                    elem_ty: elem_ir,
+                });
+                let value = lower_expr(builder, &args[1], scopes, storage, analysis, element)?;
+                builder.emit(Inst::Store {
+                    ptr: slot,
+                    value,
+                    ty: elem_ir,
+                });
+                let new_len_slot = field_ptr(builder, ensured, 1, IrType::I64);
+                builder.emit(Inst::Store {
+                    ptr: new_len_slot,
+                    value: Operand::Value(needed),
+                    ty: IrType::I64,
+                });
+                return Ok(Operand::Const(Const::Bool(true)));
             }
 
             if callee == "abs" {
@@ -2521,6 +2760,9 @@ fn lower_expr(
         }
         ExprKind::Index { base, index } => {
             let base_ty = analysis.expr_type(base.span).unwrap_or(Type::Error);
+            if let Type::DynArray(_) = base_ty {
+                return lower_dyn_index(builder, base, index, expr, scopes, storage, analysis);
+            }
             let elem_ty = analysis.expr_type(expr.span).unwrap_or(Type::Error);
             let elem_ir = IrType::from_type(elem_ty);
             let base_ptr = lower_array_place(builder, base, scopes, storage, analysis)?;
@@ -2530,7 +2772,12 @@ fn lower_expr(
             let array_type = match base_ty {
                 Type::Array { llvm, display, .. } => {
                     if let Some(info) = analysis.array_info(display) {
-                        lower_bounds_check(builder, idx_value.clone(), index_ty, info.len);
+                        lower_bounds_check(
+                            builder,
+                            idx_value.clone(),
+                            index_ty,
+                            Operand::Const(Const::Int(info.len as i64)),
+                        );
                     }
                     llvm
                 }

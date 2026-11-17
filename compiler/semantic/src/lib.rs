@@ -872,7 +872,12 @@ impl<'a> Checker<'a> {
                     );
                 }
                 let var_ty = var.ty;
-                if let Type::Array { display, .. } = var_ty {
+                let array_display = match var_ty {
+                    Type::Array { display, .. } => Some(display),
+                    Type::DynArray(display) => Some(display),
+                    _ => None,
+                };
+                if let Some(display) = array_display {
                     let info = self.analysis.arrays.get(display).cloned();
                     if let Some(info) = info {
                         let index_ty = self.infer(index);
@@ -1054,6 +1059,33 @@ impl<'a> Checker<'a> {
                     self.analysis.expr_types.insert(expr.span, Type::Error);
                     return Type::Error;
                 }
+            }
+        }
+
+        // `var a: [i64] = [1, 2, 3]` — an array literal in a growable context
+        // keeps the expected growable type instead of becoming `[i64; 3]`.
+        if let ExprKind::Array(elements) = &expr.kind {
+            if let Type::DynArray(display) = expected {
+                let element = self
+                    .analysis
+                    .arrays
+                    .get(display)
+                    .map(|info| info.elem)
+                    .unwrap_or(Type::Error);
+                if element == Type::Error {
+                    self.error(
+                        "NXS035",
+                        format!("unknown element type in `{expected}`"),
+                        expr.span,
+                    );
+                    self.analysis.expr_types.insert(expr.span, Type::Error);
+                    return Type::Error;
+                }
+                for item in elements {
+                    self.check_expected(item, element);
+                }
+                self.analysis.expr_types.insert(expr.span, expected);
+                return expected;
             }
         }
 
@@ -1417,6 +1449,12 @@ impl<'a> Checker<'a> {
                         .get(display)
                         .map(|info| info.elem)
                         .unwrap_or(Type::Error)
+                } else if let Type::DynArray(display) = base_ty {
+                    self.analysis
+                        .arrays
+                        .get(display)
+                        .map(|info| info.elem)
+                        .unwrap_or(Type::Error)
                 } else {
                     self.error(
                         "NXS036",
@@ -1543,7 +1581,7 @@ impl<'a> Checker<'a> {
             if arg_ty == Type::Error {
                 return Type::Error;
             }
-            if arg_ty == Type::String || matches!(arg_ty, Type::Array { .. }) {
+            if arg_ty == Type::String || matches!(arg_ty, Type::Array { .. } | Type::DynArray(_)) {
                 return Type::I64;
             }
             self.error(
@@ -2307,6 +2345,52 @@ impl<'a> Checker<'a> {
                 return Type::Error;
             }
             return Type::Bool;
+        }
+
+        if callee == "push" {
+            if args.len() != 2 {
+                self.error(
+                    "NXS004",
+                    format!("`push` expects 2 arguments, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let array_ty = self.infer(&args[0]);
+            let value_ty = self.infer(&args[1]);
+            return match array_ty {
+                Type::DynArray(display) => {
+                    let element = self
+                        .analysis
+                        .arrays
+                        .get(display)
+                        .map(|info| info.elem)
+                        .unwrap_or(Type::Error);
+                    if element == Type::Error || value_ty == Type::Error {
+                        return Type::Error;
+                    }
+                    if element != value_ty {
+                        self.error(
+                            "NXS004",
+                            format!("`push` expects `{element}`, found `{value_ty}`"),
+                            args[1].span,
+                        );
+                        return Type::Error;
+                    }
+                    Type::Void
+                }
+                _ => {
+                    self.error(
+                        "NXS004",
+                        format!("`push` expects a growable array, found `{array_ty}`"),
+                        args[0].span,
+                    );
+                    Type::Error
+                }
+            };
         }
 
         if callee == "str_reverse" {

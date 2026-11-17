@@ -41,8 +41,8 @@ impl IrType {
             Type::String => Self::String,
             Type::Struct(name) => Self::Struct(name),
             Type::Array { llvm, .. } => Self::Array(llvm),
-            // Growable arrays are a three-word struct at the ABI level.
-            Type::DynArray(_) => Self::Array(nex_semantic::DYN_ARRAY_LLVM),
+            // Growable arrays are handled through a header pointer: the value is a\n            // plain pointer to `{ ptr, i64, i64 }`, so variables store one word.
+            Type::DynArray(_) => Self::String,
             Type::Enum(_) => Self::I32,
             Type::Void => Self::Void,
             Type::Error => Self::Void,
@@ -212,6 +212,13 @@ pub enum Inst {
         array_type: &'static str,
         index: Operand,
         elem_ty: IrType,
+    },
+    /// Field address inside the growable array header:
+    /// `getelementptr inbounds { ptr, i64, i64 }, ptr %header, i32 0, i32 N`.
+    HeaderPtr {
+        dst: ValueId,
+        base: ValueId,
+        index: u32,
     },
     /// Compute a pointer into a growable array's data buffer:
     /// `getelementptr inbounds <elem>, ptr %data, i64 %index`. Bounds checking is

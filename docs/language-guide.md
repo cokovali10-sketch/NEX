@@ -56,3 +56,22 @@ fn main():
 
 The formatter (`nex fmt`) emits `pass` for an empty block, so formatting and
 parsing stay compatible.
+
+## Growable arrays
+
+`[T]` is a growable array. It starts empty, grows with `push`, and is indexed
+like any other array. Every access is bounds-checked.
+
+```nex
+fn main():
+    var names: [string] = []
+    push(names, "ann")
+    push(names, "bob")
+    println(len(names))   // 2
+    println(names[0])     // ann
+    names[1] = "bobby"
+```
+
+`[T; N]` (fixed size) is a different type and keeps its length in the type.
+Assigning one name to another copies the header, so both names see the same
+elements; see `docs/memory-model.md`.
