@@ -21,8 +21,35 @@ fn dispatch(request: string) -> string:
 
     return http_response("404 Not Found", "text/plain", "not found")
 
+# Reads until the end of the request head, plus any declared body bytes.
+fn read_request(client: i64) -> string:
+    var request = ""
+
+    while true:
+        var chunk = tcp_read(client, 4096)
+        if len(chunk) == 0:
+            return request
+
+        request = concat(request, chunk)
+
+        if not str_contains(request, "\r\n\r\n"):
+            continue
+
+        var declared = parse_i64(http_header(request, "content-length"))
+        if declared <= 0:
+            return request
+
+        var have = len(http_body(request))
+        while have < declared:
+            var more = tcp_read(client, 4096)
+            if len(more) == 0:
+                return request
+            request = concat(request, more)
+            have = have + len(more)
+        return request
+
 fn serve(client: i64):
-    var request = tcp_read(client, 16384)
+    var request = read_request(client)
     if len(request) == 0:
         tcp_close(client)
         return

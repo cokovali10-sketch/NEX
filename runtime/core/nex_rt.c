@@ -2551,3 +2551,32 @@ long long nex_rt_pool_workers(long long handle) {
     }
     return (long long)((nex_pool *)handle)->workers;
 }
+
+/* Same as nex_rt_http_response but keeps the connection alive. */
+char *nex_rt_http_response_keepalive(const char *status, const char *content_type, const char *body) {
+    if (status == NULL) {
+        status = "200 OK";
+    }
+    if (content_type == NULL || *content_type == '\0') {
+        content_type = "text/plain; charset=utf-8";
+    }
+    if (body == NULL) {
+        body = "";
+    }
+    size_t body_length = strlen(body);
+    size_t head_length = strlen(status) + strlen(content_type) + 160;
+    char *response = (char *)malloc(head_length + body_length + 1);
+    if (response == NULL) {
+        return NULL;
+    }
+    snprintf(
+        response,
+        head_length + body_length + 1,
+        "HTTP/1.1 %s\r\nContent-Type: %s\r\nContent-Length: %zu\r\nConnection: close\r\n\r\n%s",
+        status,
+        content_type,
+        body_length,
+        body
+    );
+    return response;
+}

@@ -2789,6 +2789,7 @@ fn lower_expr(
                 || callee == "http_header"
                 || callee == "http_body"
                 || callee == "http_response"
+                || callee == "http_response_keepalive"
             {
                 let mut call_args = Vec::new();
                 for arg in args {
@@ -2807,6 +2808,7 @@ fn lower_expr(
                     "http_version" => "nex_rt_http_version",
                     "http_header" => "nex_rt_http_header",
                     "http_body" => "nex_rt_http_body",
+                    "http_response_keepalive" => "nex_rt_http_response_keepalive",
                     _ => "nex_rt_http_response",
                 };
                 let dst = builder.new_value();
