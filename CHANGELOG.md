@@ -61,6 +61,8 @@
 
 - Router: `router_new`, `router_add`, `router_match`, `router_param` with `:param` capture and 404/405 results.
 
+- `thread_spawn(name, arg)` passes a single `i64` argument to the worker.
+
 ### Fixed
 
 - The lexer now skips a leading UTF-8 BOM instead of reporting `unexpected character`.

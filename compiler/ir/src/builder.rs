@@ -2137,11 +2137,27 @@ fn lower_expr(
                     dst,
                     name: format!("nex.fn.{name}"),
                 });
+                let mut call_args = vec![Operand::Value(dst)];
+                if let Some(argument) = args.get(1) {
+                    call_args.push(lower_expr(
+                        builder,
+                        argument,
+                        scopes,
+                        storage,
+                        analysis,
+                        Type::Error,
+                    )?);
+                }
+                let runtime = if args.len() == 2 {
+                    "nex_rt_thread_spawn_arg"
+                } else {
+                    "nex_rt_thread_spawn"
+                };
                 let handle = builder.new_value();
                 builder.emit(Inst::Call {
                     dst: Some(handle),
-                    name: "nex_rt_thread_spawn".to_string(),
-                    args: vec![Operand::Value(dst)],
+                    name: runtime.to_string(),
+                    args: call_args,
                     ret: IrType::I64,
                 });
                 return Ok(Operand::Value(handle));

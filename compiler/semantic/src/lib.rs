@@ -2648,12 +2648,8 @@ impl<'a> Checker<'a> {
         }
 
         if callee == "thread_spawn" {
-            if args.len() != 1 {
-                self.error(
-                    "NXS004",
-                    format!("`thread_spawn` expects 1 argument, found {}", args.len()),
-                    span,
-                );
+            if args.is_empty() || args.len() > 2 {
+                self.error("NXS004", "`thread_spawn` expects 1 or 2 arguments", span);
                 for arg in args {
                     self.infer(arg);
                 }
@@ -2671,6 +2667,17 @@ impl<'a> Checker<'a> {
             if let ExprKind::Str(name) = &args[0].kind {
                 if !self.analysis.functions.contains_key(name) {
                     self.error("NXS004", format!("unknown function `{name}`"), args[0].span);
+                    return Type::Error;
+                }
+            }
+            if args.len() == 2 {
+                let arg_ty = self.infer(&args[1]);
+                if arg_ty != Type::I64 && arg_ty != Type::Error {
+                    self.error(
+                        "NXS004",
+                        format!("thread argument must be `i64`, found `{arg_ty}`"),
+                        span,
+                    );
                     return Type::Error;
                 }
             }

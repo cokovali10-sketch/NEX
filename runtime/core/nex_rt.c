@@ -1953,7 +1953,8 @@ long long nex_rt_thread_spawn_arg(long long entry, long long argument) {
     if (state == NULL) {
         return 0;
     }
-    state->entry = (void (*)(void))entry;
+    state->entry_arg = (void (*)(long long))entry;
+    state->argument = argument;
     return nex_thread_start(state);
 }
 

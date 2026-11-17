@@ -199,13 +199,13 @@ fn main():
 
 ### Threads
 
-Threads are OS threads. The entry point is named as a string and must be a
-function that takes no arguments and returns nothing; arguments and return values
-are not supported yet.
+Threads are OS threads. The entry point is named as a string. It either takes no arguments or a single
+`i64`; return values are not supported yet.
 
 | Function | Signature | Notes |
 |---|---|---|
 | `thread_spawn` | `("name") -> i64` | Handle, or `0` when the thread could not start. |
+| `thread_spawn` | `("name", arg: i64) -> i64` | Same, passing one `i64` argument to the worker. |
 | `thread_join` | `(handle: i64) -> bool` | Waits for completion. |
 | `thread_running` | `(handle: i64) -> bool` | False once the thread has finished. |
 

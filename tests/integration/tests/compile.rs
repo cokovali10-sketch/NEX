@@ -1352,3 +1352,19 @@ fn router_reports_404_and_405() {
     assert_eq!(code, 0, "stderr: {stderr}");
     assert_eq!(stdout, "0\n-1\n");
 }
+
+#[test]
+fn thread_spawn_passes_an_i64_argument() {
+    let source = "fn worker(times: i64):\n    print(times)\n\nfn main():\n    var a = thread_spawn(\"worker\", 41)\n    thread_join(a)\n";
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "41");
+}
+
+#[test]
+fn threads_with_arguments_share_a_mutex_protected_counter() {
+    let source = "var lock = 0\nvar total = 0\n\nfn worker(times: i64):\n    var i = 0\n    while i < times:\n        mutex_lock(lock)\n        total = total + 1\n        mutex_unlock(lock)\n        i = i + 1\n\nfn main():\n    lock = mutex_new()\n    var a = thread_spawn(\"worker\", 1000)\n    var b = thread_spawn(\"worker\", 1000)\n    thread_join(a)\n    thread_join(b)\n    println(total)\n";
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "2000\n");
+}
