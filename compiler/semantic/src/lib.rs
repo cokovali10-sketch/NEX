@@ -2596,6 +2596,60 @@ impl<'a> Checker<'a> {
             };
         }
 
+        if callee == "thread_spawn" {
+            if args.len() != 1 {
+                self.error(
+                    "NXS004",
+                    format!("`thread_spawn` expects 1 argument, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let name_ty = self.infer(&args[0]);
+            if name_ty != Type::String && name_ty != Type::Error {
+                self.error(
+                    "NXS004",
+                    format!("`thread_spawn` expects a function name, found `{name_ty}`"),
+                    span,
+                );
+                return Type::Error;
+            }
+            if let ExprKind::Str(name) = &args[0].kind {
+                if !self.analysis.functions.contains_key(name) {
+                    self.error("NXS004", format!("unknown function `{name}`"), args[0].span);
+                    return Type::Error;
+                }
+            }
+            return Type::I64;
+        }
+
+        if callee == "thread_join" || callee == "thread_running" {
+            if args.len() != 1 {
+                self.error(
+                    "NXS004",
+                    format!("`{callee}` expects 1 argument, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let handle_ty = self.infer(&args[0]);
+            if handle_ty != Type::I64 && handle_ty != Type::Error {
+                self.error(
+                    "NXS004",
+                    format!("`{callee}` expects a thread handle, found `{handle_ty}`"),
+                    span,
+                );
+                return Type::Error;
+            }
+            return Type::Bool;
+        }
+
         if callee == "push" {
             if args.len() != 2 {
                 self.error(

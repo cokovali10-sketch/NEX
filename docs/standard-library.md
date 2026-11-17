@@ -197,6 +197,30 @@ fn main():
     println(map_get(headers, "content-type"))
 ```
 
+### Threads
+
+Threads are OS threads. The entry point is named as a string and must be a
+function that takes no arguments and returns nothing; arguments and return values
+are not supported yet.
+
+| Function | Signature | Notes |
+|---|---|---|
+| `thread_spawn` | `("name") -> i64` | Handle, or `0` when the thread could not start. |
+| `thread_join` | `(handle: i64) -> bool` | Waits for completion. |
+| `thread_running` | `(handle: i64) -> bool` | False once the thread has finished. |
+
+```nex
+fn worker():
+    print("worked")
+
+fn main():
+    var handle = thread_spawn("worker")
+    thread_join(handle)
+```
+
+There are no mutexes, channels, or thread-safe collections yet, so shared state
+between threads needs external synchronisation.
+
 ### Numeric
 
 | Function | Signature | Notes |

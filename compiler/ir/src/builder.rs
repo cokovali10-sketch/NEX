@@ -2060,6 +2060,51 @@ fn lower_expr(
                 return Ok(Operand::Value(dst));
             }
 
+            if callee == "thread_spawn" {
+                let name = match &args[0].kind {
+                    ExprKind::Str(name) => name.clone(),
+                    _ => return Err("`thread_spawn` expects a function name literal".to_string()),
+                };
+                let dst = builder.new_value();
+                builder.emit(Inst::FuncPtr {
+                    dst,
+                    name: format!("nex.fn.{name}"),
+                });
+                let handle = builder.new_value();
+                builder.emit(Inst::Call {
+                    dst: Some(handle),
+                    name: "nex_rt_thread_spawn".to_string(),
+                    args: vec![Operand::Value(dst)],
+                    ret: IrType::I64,
+                });
+                return Ok(Operand::Value(handle));
+            }
+
+            if callee == "thread_join" || callee == "thread_running" {
+                let handle = lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
+                let name = if callee == "thread_join" {
+                    "nex_rt_thread_join"
+                } else {
+                    "nex_rt_thread_running"
+                };
+                let raw = builder.new_value();
+                builder.emit(Inst::Call {
+                    dst: Some(raw),
+                    name: name.to_string(),
+                    args: vec![handle],
+                    ret: IrType::I64,
+                });
+                let dst = builder.new_value();
+                builder.emit(Inst::Cast {
+                    dst,
+                    kind: CastKind::Truncate,
+                    from: IrType::I64,
+                    to: IrType::Bool,
+                    operand: Operand::Value(raw),
+                });
+                return Ok(Operand::Value(dst));
+            }
+
             if callee.starts_with("map_") {
                 let mut call_args = Vec::new();
                 for arg in args {

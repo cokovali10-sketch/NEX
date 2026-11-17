@@ -1900,3 +1900,83 @@ static void nex_map_grow(nex_map *map) {
     }
     free(old_entries);
 }
+
+/* ------------------------------------------------------------------------- */
+/* Threads. NEX passes a function symbol as an integer handle; the runtime     */
+/* trampoline calls it. Arguments are not supported yet.                      */
+/* ------------------------------------------------------------------------- */
+
+#ifdef _WIN32
+static DWORD WINAPI nex_thread_trampoline(LPVOID entry) {
+    ((void (*)(void))entry)();
+    return 0;
+}
+
+long long nex_rt_thread_spawn(long long entry) {
+    if (entry == 0) {
+        return 0;
+    }
+    HANDLE handle = CreateThread(NULL, 0, nex_thread_trampoline, (LPVOID)entry, 0, NULL);
+    if (handle == NULL) {
+        return 0;
+    }
+    return (long long)handle;
+}
+
+long long nex_rt_thread_join(long long handle) {
+    if (handle == 0) {
+        return 0;
+    }
+    WaitForSingleObject((HANDLE)handle, INFINITE);
+    CloseHandle((HANDLE)handle);
+    return 1;
+}
+
+long long nex_rt_thread_running(long long handle) {
+    if (handle == 0) {
+        return 0;
+    }
+    return WaitForSingleObject((HANDLE)handle, 0) == WAIT_TIMEOUT;
+}
+#else
+#include <pthread.h>
+
+static void *nex_thread_trampoline(void *entry) {
+    ((void (*)(void))entry)();
+    return NULL;
+}
+
+long long nex_rt_thread_spawn(long long entry) {
+    if (entry == 0) {
+        return 0;
+    }
+    pthread_t *thread = (pthread_t *)malloc(sizeof(pthread_t));
+    if (thread == NULL) {
+        return 0;
+    }
+    if (pthread_create(thread, NULL, nex_thread_trampoline, (void *)entry) != 0) {
+        free(thread);
+        return 0;
+    }
+    return (long long)thread;
+}
+
+long long nex_rt_thread_join(long long handle) {
+    if (handle == 0) {
+        return 0;
+    }
+    pthread_t *thread = (pthread_t *)handle;
+    int result = pthread_join(*thread, NULL);
+    free(thread);
+    return result == 0;
+}
+
+long long nex_rt_thread_running(long long handle) {
+    if (handle == 0) {
+        return 0;
+    }
+    pthread_t *thread = (pthread_t *)handle;
+    int result = pthread_kill(*thread, 0);
+    return result == 0;
+}
+#endif

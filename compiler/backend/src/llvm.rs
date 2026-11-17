@@ -64,6 +64,9 @@ const RUNTIME_DECLS: &[&str] = &[
     "declare i64 @nex_rt_str_index_of_from(ptr, ptr, i64)",
     "declare ptr @nex_rt_char_at(ptr, i64)",
     "declare i64 @nex_rt_char_code(ptr)",
+    "declare i64 @nex_rt_thread_spawn(i64)",
+    "declare i64 @nex_rt_thread_join(i64)",
+    "declare i64 @nex_rt_thread_running(i64)",
     "declare i64 @nex_rt_map_new(i64)",
     "declare i64 @nex_rt_map_set(i64, ptr, ptr)",
     "declare ptr @nex_rt_map_get(i64, ptr)",
@@ -303,6 +306,9 @@ impl<'a> Emitter<'a> {
                     "  %v{} = getelementptr inbounds {}, ptr %v{}, i64 0, {}\n",
                     dst.0, array_type, base.0, index_str
                 ));
+            }
+            Inst::FuncPtr { dst, name } => {
+                body.push_str(&format!("  %v{} = ptrtoint ptr @{} to i64\n", dst.0, name));
             }
             Inst::HeaderPtr { dst, base, index } => {
                 body.push_str(&format!(
@@ -666,6 +672,9 @@ fn runtime_signature(name: &str) -> (Vec<IrType>, IrType) {
         "nex_rt_str_index_of_from" => (vec![ptr, ptr, i64], i64),
         "nex_rt_char_at" => (vec![ptr, i64], ptr),
         "nex_rt_char_code" => (vec![ptr], i64),
+        "nex_rt_thread_spawn" => (vec![i64], i64),
+        "nex_rt_thread_join" => (vec![i64], i64),
+        "nex_rt_thread_running" => (vec![i64], i64),
         "nex_rt_map_new" => (vec![i64], i64),
         "nex_rt_map_set" => (vec![i64, ptr, ptr], i64),
         "nex_rt_map_get" => (vec![i64, ptr], ptr),

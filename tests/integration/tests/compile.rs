@@ -1295,3 +1295,20 @@ fn map_handles_many_keys_and_enumeration() {
     assert_eq!(code, 0, "stderr: {stderr}");
     assert_eq!(stdout, "50\ntrue\n0\n");
 }
+
+#[test]
+fn thread_spawn_and_join_run_the_worker() {
+    let source = "fn worker():\n    print(\"from-worker\")\n\nfn main():\n    var handle = thread_spawn(\"worker\")\n    println(handle > 0)\n    println(thread_join(handle))\n";
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    // The worker runs concurrently, so only its text and the join result are fixed.
+    assert!(stdout.contains("from-worker"), "stdout: {stdout}");
+    assert_eq!(stdout.matches("true").count(), 2, "stdout: {stdout}");
+}
+
+#[test]
+fn thread_spawn_rejects_an_unknown_function() {
+    let result = compile("fn main():\n    var h = thread_spawn(\"nope\")\n");
+    assert!(result.has_errors());
+    assert!(result.diagnostics.iter().any(|d| d.code == "NXS004"));
+}

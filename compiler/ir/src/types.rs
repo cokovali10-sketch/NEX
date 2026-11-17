@@ -213,6 +213,12 @@ pub enum Inst {
         index: Operand,
         elem_ty: IrType,
     },
+    /// Address of a function symbol as an integer:
+    /// `ptrtoint ptr @name to i64`. Used by `thread_spawn`.
+    FuncPtr {
+        dst: ValueId,
+        name: String,
+    },
     /// Field address inside the growable array header:
     /// `getelementptr inbounds { ptr, i64, i64 }, ptr %header, i32 0, i32 N`.
     HeaderPtr {
