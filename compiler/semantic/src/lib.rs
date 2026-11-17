@@ -2650,6 +2650,41 @@ impl<'a> Checker<'a> {
             return Type::Bool;
         }
 
+        if callee == "mutex_new" {
+            if !args.is_empty() {
+                self.error("NXS004", "`mutex_new` takes no arguments", span);
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            return Type::I64;
+        }
+
+        if callee == "mutex_lock" || callee == "mutex_unlock" {
+            if args.len() != 1 {
+                self.error(
+                    "NXS004",
+                    format!("`{callee}` expects 1 argument, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let handle_ty = self.infer(&args[0]);
+            if handle_ty != Type::I64 && handle_ty != Type::Error {
+                self.error(
+                    "NXS004",
+                    format!("`{callee}` expects a mutex handle, found `{handle_ty}`"),
+                    span,
+                );
+                return Type::Error;
+            }
+            return Type::Void;
+        }
+
         if callee == "push" {
             if args.len() != 2 {
                 self.error(

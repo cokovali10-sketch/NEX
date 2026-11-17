@@ -2105,6 +2105,42 @@ fn lower_expr(
                 return Ok(Operand::Value(dst));
             }
 
+            if callee == "mutex_new" || callee == "mutex_lock" || callee == "mutex_unlock" {
+                let mut call_args = Vec::new();
+                for arg in args {
+                    call_args.push(lower_expr(
+                        builder,
+                        arg,
+                        scopes,
+                        storage,
+                        analysis,
+                        Type::Error,
+                    )?);
+                }
+                let (name, ret) = match callee {
+                    "mutex_new" => ("nex_rt_mutex_new", IrType::I64),
+                    "mutex_lock" => ("nex_rt_mutex_lock", IrType::Void),
+                    _ => ("nex_rt_mutex_unlock", IrType::Void),
+                };
+                if ret == IrType::Void {
+                    builder.emit(Inst::Call {
+                        dst: None,
+                        name: name.to_string(),
+                        args: call_args,
+                        ret,
+                    });
+                    return Ok(Operand::Const(Const::Bool(true)));
+                }
+                let dst = builder.new_value();
+                builder.emit(Inst::Call {
+                    dst: Some(dst),
+                    name: name.to_string(),
+                    args: call_args,
+                    ret,
+                });
+                return Ok(Operand::Value(dst));
+            }
+
             if callee.starts_with("map_") {
                 let mut call_args = Vec::new();
                 for arg in args {

@@ -1312,3 +1312,11 @@ fn thread_spawn_rejects_an_unknown_function() {
     assert!(result.has_errors());
     assert!(result.diagnostics.iter().any(|d| d.code == "NXS004"));
 }
+
+#[test]
+fn mutex_lock_and_unlock_work() {
+    let source = "fn main():\n    var lock = mutex_new()\n    println(lock > 0)\n    mutex_lock(lock)\n    print(\"in-critical-section\")\n    mutex_unlock(lock)\n";
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "true\nin-critical-section");
+}

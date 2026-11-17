@@ -1989,3 +1989,54 @@ long long nex_rt_thread_running(long long handle) {
     return state->done ? 0 : 1;
 }
 #endif
+
+/* ------------------------------------------------------------------------- */
+/* Mutexes. Handles are heap-allocated; no ownership model yet.                */
+/* ------------------------------------------------------------------------- */
+
+#ifdef _WIN32
+long long nex_rt_mutex_new(void) {
+    CRITICAL_SECTION *mutex = (CRITICAL_SECTION *)malloc(sizeof(CRITICAL_SECTION));
+    if (mutex == NULL) {
+        return 0;
+    }
+    InitializeCriticalSection(mutex);
+    return (long long)mutex;
+}
+
+void nex_rt_mutex_lock(long long handle) {
+    if (handle != 0) {
+        EnterCriticalSection((CRITICAL_SECTION *)handle);
+    }
+}
+
+void nex_rt_mutex_unlock(long long handle) {
+    if (handle != 0) {
+        LeaveCriticalSection((CRITICAL_SECTION *)handle);
+    }
+}
+#else
+long long nex_rt_mutex_new(void) {
+    pthread_mutex_t *mutex = (pthread_mutex_t *)malloc(sizeof(pthread_mutex_t));
+    if (mutex == NULL) {
+        return 0;
+    }
+    if (pthread_mutex_init(mutex, NULL) != 0) {
+        free(mutex);
+        return 0;
+    }
+    return (long long)mutex;
+}
+
+void nex_rt_mutex_lock(long long handle) {
+    if (handle != 0) {
+        pthread_mutex_lock((pthread_mutex_t *)handle);
+    }
+}
+
+void nex_rt_mutex_unlock(long long handle) {
+    if (handle != 0) {
+        pthread_mutex_unlock((pthread_mutex_t *)handle);
+    }
+}
+#endif

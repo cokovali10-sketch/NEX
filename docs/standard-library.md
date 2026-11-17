@@ -218,8 +218,23 @@ fn main():
     thread_join(handle)
 ```
 
-There are no mutexes, channels, or thread-safe collections yet, so shared state
-between threads needs external synchronisation.
+Mutexes are listed below; channels and thread-safe collections still do not exist.
+
+| Function | Signature | Notes |
+|---|---|---|
+| `mutex_new` | `() -> i64` | Handle to a new mutex. |
+| `mutex_lock` | `(handle: i64) -> void` | Blocks until the mutex is free. |
+| `mutex_unlock` | `(handle: i64) -> void` | Releases the mutex. |
+
+```nex
+var lock = 0
+var total = 0
+
+fn bump():
+    mutex_lock(lock)
+    total = total + 1
+        mutex_unlock(lock)
+```
 
 ### Numeric
 

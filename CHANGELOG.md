@@ -55,6 +55,8 @@
 
 - Threads: `thread_spawn`, `thread_join`, `thread_running` (OS threads, no args yet).
 
+- Mutexes: `mutex_new`, `mutex_lock`, `mutex_unlock`.
+
 ### Fixed
 
 - The lexer now skips a leading UTF-8 BOM instead of reporting `unexpected character`.
