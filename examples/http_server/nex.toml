@@ -1,0 +1,8 @@
+[package]
+name = "http_server"
+version = "0.1.0"
+edition = "2026"
+description = "A tiny HTTP server: router, path params, JSON responses"
+
+[build]
+entry = "src/main.nex"

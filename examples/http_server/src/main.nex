@@ -1,0 +1,50 @@
+var router = 0
+
+fn json(body: string) -> string:
+    return http_response("200 OK", "application/json", body)
+
+fn text(body: string) -> string:
+    return http_response("200 OK", "text/plain; charset=utf-8", body)
+
+fn dispatch(request: string) -> string:
+    var method = http_method(request)
+    var path = http_path(request)
+    var route = router_match(router, method, path)
+
+    if route == 1:
+        return json("{\"hello\": \"world\"}")
+
+    if route == 2:
+        var id = router_param(router, "id")
+        return json(concat("{\"id\": ", concat(id, "}")))
+
+    if route == 3:
+        return text("created")
+
+    if route == -1:
+        return http_response("405 Method Not Allowed", "text/plain", "method not allowed")
+
+    return http_response("404 Not Found", "text/plain", "not found")
+
+fn main():
+    router = router_new()
+    router_add(router, "GET", "/")
+    router_add(router, "GET", "/user/:id")
+    router_add(router, "POST", "/items")
+
+    var server = tcp_listen(8080, 16)
+    if server < 0:
+        print("failed to listen on 8080")
+        return
+
+    print("NEX server on http://127.0.0.1:8080")
+
+    while true:
+        var client = tcp_accept(server)
+        if client < 0:
+            continue
+
+        var request = tcp_read(client, 16384)
+        var response = dispatch(request)
+        tcp_write(client, response, len(response))
+        tcp_close(client)
