@@ -111,6 +111,19 @@ fn main():
 This serves one request and exits: there is no `threads` support yet, so a real
 server must loop and handle one connection at a time.
 
+### Time
+
+| Function | Signature | Notes |
+|---|---|---|
+| `unix_time` | `() -> i64` | Seconds since the Unix epoch (wall clock). |
+| `now_ms` | `() -> i64` | Milliseconds from a monotonic clock: use it to measure durations. |
+| `sleep_ms` | `(milliseconds: i64) -> void` | Blocks the calling thread. |
+| `http_date` | `() -> string` | Current time as an RFC 7231 IMF-fixdate, e.g. `Sun, 15 Nov 2026 14:45:33 GMT`. |
+
+`now_ms` is monotonic, so it never jumps when the system clock is adjusted;
+`unix_time` is the wall clock and is the one to use for `Date` headers and
+timestamps you persist.
+
 ### Numeric
 
 | Function | Signature | Notes |

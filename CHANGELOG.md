@@ -37,6 +37,9 @@
 - Design decision for growable arrays: `specs/dynamic-arrays.md` (representation,
   ABI, type-system migration, and the test plan).
 
+- Time helpers: `unix_time`, `now_ms` (monotonic), `sleep_ms`, and `http_date`
+  (RFC 7231 IMF-fixdate).
+
 ### Fixed
 
 - The lexer now skips a leading UTF-8 BOM instead of reporting `unexpected character`.

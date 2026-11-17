@@ -1995,6 +1995,45 @@ fn lower_expr(
                 return Ok(Operand::Value(dst));
             }
 
+            if callee == "unix_time"
+                || callee == "now_ms"
+                || callee == "http_date"
+                || callee == "sleep_ms"
+            {
+                let mut call_args = Vec::new();
+                for arg in args {
+                    call_args.push(lower_expr(
+                        builder,
+                        arg,
+                        scopes,
+                        storage,
+                        analysis,
+                        Type::Error,
+                    )?);
+                }
+                let (name, ret) = match callee {
+                    "unix_time" => ("nex_rt_unix_time", IrType::I64),
+                    "now_ms" => ("nex_rt_now_ms", IrType::I64),
+                    "sleep_ms" => ("nex_rt_sleep_ms", IrType::Void),
+                    _ => ("nex_rt_http_date", IrType::String),
+                };
+                let dst = if ret == IrType::Void {
+                    None
+                } else {
+                    Some(builder.new_value())
+                };
+                builder.emit(Inst::Call {
+                    dst,
+                    name: name.to_string(),
+                    args: call_args,
+                    ret,
+                });
+                return match dst {
+                    Some(value) => Ok(Operand::Value(value)),
+                    None => Ok(Operand::Const(Const::Bool(true))),
+                };
+            }
+
             if callee == "http_method"
                 || callee == "http_path"
                 || callee == "http_version"

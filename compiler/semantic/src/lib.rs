@@ -1942,6 +1942,45 @@ impl<'a> Checker<'a> {
             return value_ty;
         }
 
+        if callee == "unix_time" || callee == "now_ms" || callee == "http_date" {
+            if !args.is_empty() {
+                self.error("NXS004", format!("`{callee}` takes no arguments"), span);
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            return if callee == "http_date" {
+                Type::String
+            } else {
+                Type::I64
+            };
+        }
+
+        if callee == "sleep_ms" {
+            if args.len() != 1 {
+                self.error(
+                    "NXS004",
+                    format!("`sleep_ms` expects 1 argument, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let duration_ty = self.infer(&args[0]);
+            if duration_ty != Type::I64 && duration_ty != Type::Error {
+                self.error(
+                    "NXS004",
+                    format!("`sleep_ms` expects an `i64`, found `{duration_ty}`"),
+                    span,
+                );
+                return Type::Error;
+            }
+            return Type::Void;
+        }
+
         if callee == "http_method"
             || callee == "http_path"
             || callee == "http_version"

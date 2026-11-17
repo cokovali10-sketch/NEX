@@ -1171,3 +1171,23 @@ fn http_response_includes_length_and_close() {
     assert!(stdout.contains("Content-Length: 2\n"), "{stdout}");
     assert!(stdout.contains("Connection: close\n\nhi"), "{stdout}");
 }
+
+#[test]
+fn time_helpers_measure_and_sleep() {
+    let source = "fn main():\n    println(unix_time() > 0)\n    var start = now_ms()\n    sleep_ms(25)\n    var elapsed = now_ms() - start\n    println(elapsed >= 20)\n";
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "true\ntrue\n");
+}
+
+#[test]
+fn http_date_is_an_imf_fixdate() {
+    let source = "fn main():\n    println(http_date())\n";
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    let line = stdout.trim();
+    let (weekday, rest) = line.split_once(", ").expect("comma after weekday");
+    assert_eq!(weekday.len(), 3, "{line}");
+    assert!(rest.ends_with(" GMT"), "{line}");
+    assert_eq!(rest.len(), 24, "{line}");
+}

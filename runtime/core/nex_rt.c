@@ -4,6 +4,7 @@
 #include <string.h>
 #include <math.h>
 #include <ctype.h>
+#include <time.h>
 
 static void nex_rt_write_utf8(unsigned int codepoint) {
     unsigned char buffer[4];
@@ -875,4 +876,66 @@ char *nex_rt_http_response(const char *status, const char *content_type, const c
         body
     );
     return response;
+}
+
+/* ------------------------------------------------------------------------- */
+/* Time helpers.                                                            */
+/* ------------------------------------------------------------------------- */
+
+long long nex_rt_unix_time(void) {
+    return (long long)time(NULL);
+}
+
+long long nex_rt_now_ms(void) {
+#ifdef _WIN32
+    static LARGE_INTEGER frequency = {0};
+    if (frequency.QuadPart == 0) {
+        QueryPerformanceFrequency(&frequency);
+    }
+    LARGE_INTEGER counter;
+    QueryPerformanceCounter(&counter);
+    return (long long)((counter.QuadPart * 1000) / frequency.QuadPart);
+#else
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
+        return 0;
+    }
+    return (long long)ts.tv_sec * 1000 + (long long)(ts.tv_nsec / 1000000);
+#endif
+}
+
+void nex_rt_sleep_ms(long long milliseconds) {
+    if (milliseconds <= 0) {
+        return;
+    }
+#ifdef _WIN32
+    Sleep((DWORD)milliseconds);
+#else
+    struct timespec ts;
+    ts.tv_sec = (time_t)(milliseconds / 1000);
+    ts.tv_nsec = (long)((milliseconds % 1000) * 1000000);
+    nanosleep(&ts, NULL);
+#endif
+}
+
+/* RFC 7231 IMF-fixdate, e.g. "Sun, 15 Nov 2026 14:45:33 GMT". */
+char *nex_rt_http_date(void) {
+    time_t now = time(NULL);
+    struct tm broken_down;
+#ifdef _WIN32
+    gmtime_s(&broken_down, &now);
+#else
+    gmtime_r(&now, &broken_down);
+#endif
+    char buffer[32];
+    if (strftime(buffer, sizeof(buffer), "%a, %d %b %Y %H:%M:%S GMT", &broken_down) == 0) {
+        return NULL;
+    }
+    size_t length = strlen(buffer);
+    char *result = (char *)malloc(length + 1);
+    if (result == NULL) {
+        return NULL;
+    }
+    memcpy(result, buffer, length + 1);
+    return result;
 }
