@@ -32,6 +32,10 @@ pub enum Type {
         display: &'static str,
         llvm: &'static str,
     },
+    /// Growable array: the interned display name (for example `[i64]`) is enough
+    /// to find the element type in `Analysis::arrays`. See
+    /// `specs/dynamic-arrays.md`.
+    DynArray(&'static str),
     Void,
     Error,
 }
@@ -75,6 +79,7 @@ impl Type {
             Self::Struct(name) => name,
             Self::Enum(name) => name,
             Self::Array { display, .. } => display,
+            Self::DynArray(display) => display,
             Self::Void => "void",
             Self::Error => "<error>",
         }

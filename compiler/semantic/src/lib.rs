@@ -2660,27 +2660,48 @@ impl<'a> Checker<'a> {
             if elem_ty == Type::Error {
                 return Type::Error;
             }
-            if *len == 0 {
-                self.error(
-                    "NXS035",
-                    "empty array types are not supported".to_string(),
-                    ty.span,
-                );
-                return Type::Error;
+            match len {
+                // `[T]`: a growable array, stored in the same registry with
+                // `len: 0` as the "no fixed length" marker.
+                None => {
+                    let display = intern_dyn_array_type(elem_ty);
+                    if !self.analysis.arrays.contains_key(display) {
+                        self.analysis.arrays.insert(
+                            display.to_string(),
+                            ArrayInfo {
+                                display,
+                                llvm: DYN_ARRAY_LLVM,
+                                elem: elem_ty,
+                                len: 0,
+                            },
+                        );
+                    }
+                    return Type::DynArray(display);
+                }
+                Some(0) => {
+                    self.error(
+                        "NXS035",
+                        "empty array types are not supported".to_string(),
+                        ty.span,
+                    );
+                    return Type::Error;
+                }
+                Some(size) => {
+                    let (display, llvm) = intern_array_type(elem_ty, *size);
+                    if !self.analysis.arrays.contains_key(display) {
+                        self.analysis.arrays.insert(
+                            display.to_string(),
+                            ArrayInfo {
+                                display,
+                                llvm,
+                                elem: elem_ty,
+                                len: *size,
+                            },
+                        );
+                    }
+                    return Type::Array { display, llvm };
+                }
             }
-            let (display, llvm) = intern_array_type(elem_ty, *len);
-            if !self.analysis.arrays.contains_key(display) {
-                self.analysis.arrays.insert(
-                    display.to_string(),
-                    ArrayInfo {
-                        display,
-                        llvm,
-                        elem: elem_ty,
-                        len: *len,
-                    },
-                );
-            }
-            return Type::Array { display, llvm };
         }
 
         if let Some(resolved) = Type::from_name(&ty.name) {
@@ -2811,6 +2832,14 @@ fn sanitize_type_name(name: &str) -> String {
         })
         .collect()
 }
+/// LLVM spelling of a growable array: three words (data, len, cap).
+pub const DYN_ARRAY_LLVM: &str = "{ ptr, i64, i64 }";
+
+/// Interns the display name of a growable array, e.g. `[i64]`.
+fn intern_dyn_array_type(elem: Type) -> &'static str {
+    Box::leak(format!("[{elem}]").into_boxed_str())
+}
+
 fn intern_array_type(elem: Type, len: usize) -> (&'static str, &'static str) {
     let display = Box::leak(format!("[{}; {}]", elem, len).into_boxed_str());
     let llvm = Box::leak(format!("[{} x {}]", len, llvm_type_name(elem)).into_boxed_str());

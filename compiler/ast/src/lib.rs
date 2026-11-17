@@ -83,7 +83,9 @@ pub struct Param {
 #[derive(Debug, Clone)]
 pub struct TypeExpr {
     pub name: String,
-    pub array: Option<(Box<TypeExpr>, usize)>,
+    /// `Some((element, Some(len)))` is `[T; N]`; `Some((element, None))` is
+    /// the growable form `[T]`.
+    pub array: Option<(Box<TypeExpr>, Option<usize>)>,
     pub tuple: Option<Vec<TypeExpr>>,
     pub span: Span,
 }

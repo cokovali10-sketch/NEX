@@ -41,6 +41,8 @@ impl IrType {
             Type::String => Self::String,
             Type::Struct(name) => Self::Struct(name),
             Type::Array { llvm, .. } => Self::Array(llvm),
+            // Growable arrays are a three-word struct at the ABI level.
+            Type::DynArray(_) => Self::Array(nex_semantic::DYN_ARRAY_LLVM),
             Type::Enum(_) => Self::I32,
             Type::Void => Self::Void,
             Type::Error => Self::Void,

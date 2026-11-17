@@ -437,7 +437,10 @@ fn param_str(param: &Param) -> String {
 
 fn type_str(ty: &TypeExpr) -> String {
     if let Some((element, len)) = &ty.array {
-        return format!("[{}; {len}]", type_str(element));
+        return match len {
+            Some(len) => format!("[{}; {len}]", type_str(element)),
+            None => format!("[{}]", type_str(element)),
+        };
     }
     if let Some(tuple) = &ty.tuple {
         let parts: Vec<String> = tuple.iter().map(type_str).collect();

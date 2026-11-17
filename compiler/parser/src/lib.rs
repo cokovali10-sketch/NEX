@@ -658,17 +658,14 @@ impl<'a> Parser<'a> {
                     span: start,
                 };
             }
+            // `[T]` is the growable form, `[T; N]` the fixed-size one.
             let size = match self.peek() {
                 TokenKind::Int(value) => {
                     let value = *value;
                     self.advance();
-                    value as usize
+                    Some(value as usize)
                 }
-                _ => {
-                    let span = self.peek_token().span;
-                    self.error("NXP011", "expected an array size", span);
-                    0
-                }
+                _ => None,
             };
             let end_span = if self.check(&TokenKind::RBracket) {
                 let span = self.peek_token().span;
