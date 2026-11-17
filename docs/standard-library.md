@@ -42,6 +42,8 @@ These are global functions, not methods, so no imports are required.
 | `char_code` | `(value: string) -> i64` | Code of the first character, `-1` for an empty string. |
 | `to_string` | `(value: i64 or f64 or bool) -> string` | Decimal representation, `%g` for floats, `true`/`false`. |
 | `parse_i64` | `(value: string) -> i64` | Decimal parse; returns `0` when the text is not a number. |
+| `str_split_count` | `(value: string, separator: string) -> i64` | Number of fields a split would produce. |
+| `str_split_at` | `(value: string, separator: string, index: i64) -> string` | The nth field, or an empty string. |
 | `str_reverse` | `(value: string) -> string` | Byte-wise reverse. |
 
 String builtins that return a string allocate with `malloc`; NEX does not free
@@ -143,6 +145,7 @@ is not valid JSON. Handles are never freed: NEX has no ownership model yet.
 | `json_num` | `(handle: i64) -> f64` | Number value. |
 | `json_bool` | `(handle: i64) -> bool` | Boolean value. |
 | `json_is_null` | `(handle: i64) -> bool` | True for JSON `null` and for handle `0`. |
+| `json_stringify` | `(handle: i64) -> string` | Compact JSON text, with escaping. |
 
 ```nex
 fn main():
@@ -152,7 +155,25 @@ fn main():
     println(json_len(json_get(doc, "tags")))     // 2
 ```
 
-There is no `json_stringify` yet: values are read-only until a builder exists.
+`json_stringify` serialises a handle back to compact JSON; the DOM is still
+read-only, so round-tripping a parsed document works but there is no way to
+construct one from NEX values yet.
+
+### Splitting
+
+`str_split_count` and `str_split_at` locate fields but do not build a collection,
+because a split needs a growable array of strings. Compose them in NEX:
+
+```nex
+fn split(text: string, separator: string) -> [string]:
+    var out: [string] = []
+    var i = 0
+    var total = str_split_count(text, separator)
+    while i < total:
+        push(out, str_split_at(text, separator, i))
+        i = i + 1
+    return out
+```
 
 ### Numeric
 

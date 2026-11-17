@@ -48,6 +48,8 @@
 - JSON parsing: `json_parse`, `json_type`, `json_len`, `json_at`, `json_get`,
   `json_str`, `json_num`, `json_bool`, `json_is_null`.
 
+- `str_split_count` / `str_split_at` for splitting, and `json_stringify`.
+
 ### Fixed
 
 - The lexer now skips a leading UTF-8 BOM instead of reporting `unexpected character`.

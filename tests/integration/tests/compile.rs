@@ -1263,3 +1263,19 @@ fn json_invalid_input_returns_zero_handle() {
     assert_eq!(code, 0, "stderr: {stderr}");
     assert_eq!(stdout, "true\ntrue\n");
 }
+
+#[test]
+fn split_builds_a_growable_array_in_nex() {
+    let source = "fn split(text: string, sep: string) -> [string]:\n    var out: [string] = []\n    var i = 0\n    var total = str_split_count(text, sep)\n    while i < total:\n        push(out, str_split_at(text, sep, i))\n        i = i + 1\n    return out\n\nfn main():\n    var parts = split(\"a,b,c\", \",\")\n    println(len(parts))\n    println(parts[0])\n    println(parts[2])\n";
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "3\na\nc\n");
+}
+
+#[test]
+fn json_stringify_round_trips_with_escaping() {
+    let source = "fn main():\n    var doc = json_parse(\"{\\\"a\\\": [1, 2, 3], \\\"b\\\": \\\"x\\\\ny\\\"}\")\n    println(json_stringify(doc))\n";
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "{\"a\":[1,2,3],\"b\":\"x\\ny\"}\n");
+}

@@ -2441,6 +2441,71 @@ impl<'a> Checker<'a> {
             return Type::I64;
         }
 
+        if callee == "str_split_count" || callee == "str_split_at" {
+            let expected_args = if callee == "str_split_count" { 2 } else { 3 };
+            if args.len() != expected_args {
+                self.error(
+                    "NXS004",
+                    format!(
+                        "`{callee}` expects {expected_args} arguments, found {}",
+                        args.len()
+                    ),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let text_ty = self.infer(&args[0]);
+            let sep_ty = self.infer(&args[1]);
+            let index_ty = if callee == "str_split_at" {
+                self.infer(&args[2])
+            } else {
+                Type::I64
+            };
+            let ok = text_ty == Type::String
+                && sep_ty == Type::String
+                && (callee == "str_split_count" || index_ty == Type::I64);
+            if !ok && text_ty != Type::Error && sep_ty != Type::Error && index_ty != Type::Error {
+                self.error(
+                    "NXS004",
+                    "`str_split_at` expects `(string, string, i64)`",
+                    span,
+                );
+                return Type::Error;
+            }
+            return if callee == "str_split_count" {
+                Type::I64
+            } else {
+                Type::String
+            };
+        }
+
+        if callee == "json_stringify" {
+            if args.len() != 1 {
+                self.error(
+                    "NXS004",
+                    format!("`json_stringify` expects 1 argument, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let handle_ty = self.infer(&args[0]);
+            if handle_ty != Type::I64 && handle_ty != Type::Error {
+                self.error(
+                    "NXS004",
+                    format!("`json_stringify` expects a JSON handle, found `{handle_ty}`"),
+                    span,
+                );
+                return Type::Error;
+            }
+            return Type::String;
+        }
+
         if callee == "push" {
             if args.len() != 2 {
                 self.error(

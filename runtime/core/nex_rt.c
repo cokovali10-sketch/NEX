@@ -1480,3 +1480,211 @@ long long nex_rt_json_is_null(long long handle) {
     }
     return node->kind == NEX_JSON_NULL;
 }
+
+/* ------------------------------------------------------------------------- */
+/* Splitting helpers: the collection itself is built in NEX with growable      */
+/* arrays, so these only locate the nth field.                                 */
+/* ------------------------------------------------------------------------- */
+
+long long nex_rt_str_split_count(const char *value, const char *separator) {
+    if (value == NULL || separator == NULL) {
+        return 0;
+    }
+    size_t step = strlen(separator);
+    if (step == 0) {
+        return 0;
+    }
+    long long count = 1;
+    const char *cursor = value;
+    const char *found;
+    while ((found = strstr(cursor, separator)) != NULL) {
+        count++;
+        cursor = found + step;
+    }
+    return count;
+}
+
+char *nex_rt_str_split_at(const char *value, const char *separator, long long index) {
+    if (value == NULL || separator == NULL || index < 0) {
+        return NULL;
+    }
+    size_t step = strlen(separator);
+    if (step == 0) {
+        return NULL;
+    }
+    long long current = 0;
+    const char *start = value;
+    const char *cursor = value;
+    const char *found;
+    while ((found = strstr(cursor, separator)) != NULL) {
+        if (current == index) {
+            size_t length = (size_t)(found - start);
+            char *token = (char *)malloc(length + 1);
+            if (token == NULL) {
+                return NULL;
+            }
+            memcpy(token, start, length);
+            token[length] = '\0';
+            return token;
+        }
+        current++;
+        cursor = found + step;
+        start = cursor;
+    }
+    if (current == index) {
+        size_t length = strlen(start);
+        char *token = (char *)malloc(length + 1);
+        if (token == NULL) {
+            return NULL;
+        }
+        memcpy(token, start, length);
+        token[length] = '\0';
+        return token;
+    }
+    return NULL;
+}
+
+/* Serialises a JSON node back to compact JSON text. */
+static void nex_json_write_string(const char *text, char **buffer, size_t *length, size_t *capacity) {
+    char escaped[8];
+    for (const unsigned char *cursor = (const unsigned char *)text; *cursor != '\0'; cursor++) {
+        const char *replacement = NULL;
+        switch (*cursor) {
+            case '"': replacement = "\\\""; break;
+            case '\\': replacement = "\\\\"; break;
+            case '\n': replacement = "\\n"; break;
+            case '\r': replacement = "\\r"; break;
+    case '\t': replacement = "\\t"; break;
+            default: break;
+        }
+        if (replacement != NULL) {
+            size_t extra = strlen(replacement);
+            if (*length + extra + 1 >= *capacity) {
+                *capacity = (*capacity + extra + 1) * 2;
+                char *grown = (char *)realloc(*buffer, *capacity);
+                if (grown == NULL) {
+                    return;
+                }
+                *buffer = grown;
+            }
+            memcpy(*buffer + *length, replacement, extra);
+            *length += extra;
+            continue;
+        }
+        (void)escaped;
+        if (*length + 2 >= *capacity) {
+            *capacity *= 2;
+            char *grown = (char *)realloc(*buffer, *capacity);
+            if (grown == NULL) {
+                return;
+            }
+            *buffer = grown;
+        }
+        (*buffer)[(*length)++] = (char)*cursor;
+    }
+}
+
+static void nex_json_write_escaped(const char *text, char **buffer, size_t *length, size_t *capacity) {
+    nex_json_write_string(text, buffer, length, capacity);
+}
+
+static void nex_json_append(char **buffer, size_t *length, size_t *capacity, const char *text) {
+    size_t extra = strlen(text);
+    if (*length + extra + 1 >= *capacity) {
+        while (*capacity < *length + extra + 1) {
+            *capacity *= 2;
+        }
+        char *grown = (char *)realloc(*buffer, *capacity);
+        if (grown == NULL) {
+            return;
+        }
+        *buffer = grown;
+    }
+    memcpy(*buffer + *length, text, extra);
+    *length += extra;
+}
+
+static void nex_json_write_value(nex_json_node *node, char **buffer, size_t *length, size_t *capacity);
+
+static void nex_json_write_number(double value, char **buffer, size_t *length, size_t *capacity) {
+    char text[64];
+    if (value == (double)(long long)value) {
+        snprintf(text, sizeof(text), "%lld", (long long)value);
+    } else {
+        snprintf(text, sizeof(text), "%g", value);
+    }
+    nex_json_append(buffer, length, capacity, text);
+}
+
+static void nex_json_write_value(nex_json_node *node, char **buffer, size_t *length, size_t *capacity) {
+    if (node == NULL) {
+        nex_json_append(buffer, length, capacity, "null");
+        return;
+    }
+    switch (node->kind) {
+        case NEX_JSON_NULL:
+            nex_json_append(buffer, length, capacity, "null");
+            break;
+        case NEX_JSON_BOOL:
+            nex_json_append(buffer, length, capacity, node->boolean ? "true" : "false");
+            break;
+        case NEX_JSON_NUMBER:
+            nex_json_write_number(node->number, buffer, length, capacity);
+            break;
+        case NEX_JSON_STRING:
+            nex_json_append(buffer, length, capacity, "\"");
+            nex_json_write_escaped(node->string, buffer, length, capacity);
+            nex_json_append(buffer, length, capacity, "\"");
+            break;
+        case NEX_JSON_ARRAY:
+            nex_json_append(buffer, length, capacity, "[");
+            for (size_t i = 0; i < node->length; i++) {
+                if (i > 0) {
+                    nex_json_append(buffer, length, capacity, ",");
+                }
+                nex_json_write_value(node->items[i], buffer, length, capacity);
+            }
+            nex_json_append(buffer, length, capacity, "]");
+            break;
+        case NEX_JSON_OBJECT:
+            nex_json_append(buffer, length, capacity, "{");
+            for (size_t i = 0; i < node->length; i++) {
+                if (i > 0) {
+                    nex_json_append(buffer, length, capacity, ",");
+                }
+                nex_json_append(buffer, length, capacity, "\"");
+                nex_json_write_escaped(node->keys[i], buffer, length, capacity);
+                nex_json_append(buffer, length, capacity, "\":");
+                nex_json_write_value(node->items[i], buffer, length, capacity);
+            }
+            nex_json_append(buffer, length, capacity, "}");
+            break;
+    }
+}
+
+char *nex_rt_json_stringify(long long handle) {
+    nex_json_node *node = nex_json_handle(handle);
+    if (node == NULL) {
+        return nex_rt_json_empty_string();
+    }
+    size_t capacity = 64;
+    size_t length = 0;
+    char *buffer = (char *)malloc(capacity);
+    if (buffer == NULL) {
+        return NULL;
+    }
+    nex_json_write_value(node, &buffer, &length, &capacity);
+    if (buffer == NULL) {
+        return NULL;
+    }
+    if (length + 1 >= capacity) {
+        char *grown = (char *)realloc(buffer, length + 1);
+        if (grown != NULL) {
+            buffer = grown;
+        }
+    }
+    if (buffer != NULL) {
+        buffer[length] = '\0';
+    }
+    return buffer;
+}

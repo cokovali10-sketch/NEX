@@ -2032,6 +2032,34 @@ fn lower_expr(
                 return Ok(Operand::Value(dst));
             }
 
+            if callee == "str_split_count" || callee == "str_split_at" || callee == "json_stringify"
+            {
+                let mut call_args = Vec::new();
+                for arg in args {
+                    call_args.push(lower_expr(
+                        builder,
+                        arg,
+                        scopes,
+                        storage,
+                        analysis,
+                        Type::Error,
+                    )?);
+                }
+                let (name, ret) = match callee {
+                    "str_split_count" => ("nex_rt_str_split_count", IrType::I64),
+                    "str_split_at" => ("nex_rt_str_split_at", IrType::String),
+                    _ => ("nex_rt_json_stringify", IrType::String),
+                };
+                let dst = builder.new_value();
+                builder.emit(Inst::Call {
+                    dst: Some(dst),
+                    name: name.to_string(),
+                    args: call_args,
+                    ret,
+                });
+                return Ok(Operand::Value(dst));
+            }
+
             if callee.starts_with("json_") {
                 let mut call_args = Vec::new();
                 for arg in args {
