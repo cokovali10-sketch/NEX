@@ -213,6 +213,15 @@ pub enum Inst {
         index: Operand,
         elem_ty: IrType,
     },
+    /// Compute a pointer into a growable array's data buffer:
+    /// `getelementptr inbounds <elem>, ptr %data, i64 %index`. Bounds checking is
+    /// emitted separately against the length stored in the array header.
+    DynIndexPtr {
+        dst: ValueId,
+        base: ValueId,
+        index: Operand,
+        elem_ty: IrType,
+    },
 }
 
 #[derive(Debug, Clone)]

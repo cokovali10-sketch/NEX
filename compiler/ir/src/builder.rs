@@ -1402,6 +1402,11 @@ fn lower_array_place(
             let ty = analysis
                 .expr_type(expr.span)
                 .ok_or_else(|| "missing type information for array".to_string())?;
+            if let Type::DynArray(display) = ty {
+                return lower_dyn_array_literal(
+                    builder, elements, display, analysis, scopes, storage,
+                );
+            }
             let Type::Array { llvm, display, .. } = ty else {
                 return Err("not an array value".to_string());
             };
@@ -1474,6 +1479,113 @@ fn copy_array(
         });
     }
     Ok(())
+}
+
+/// Lowers a growable array literal into a heap header `{ data, len, cap }`.
+fn lower_dyn_array_literal(
+    builder: &mut FunctionBuilder,
+    elements: &[Expr],
+    display: &'static str,
+    analysis: &Analysis,
+    scopes: &mut Vec<HashMap<String, Slot>>,
+    storage: &HashMap<nex_diagnostics::Span, (ValueId, IrType)>,
+) -> Result<ValueId, String> {
+    let elem = analysis
+        .array_info(display)
+        .map(|info| info.elem)
+        .ok_or_else(|| "missing element type for growable array".to_string())?;
+    let elem_ir = IrType::from_type(elem);
+    let count = elements.len() as i64;
+    let bytes = count.saturating_mul(ir_elem_size(elem_ir).max(1));
+
+    let data_value = builder.new_value();
+    builder.emit(Inst::Call {
+        dst: Some(data_value),
+        name: "nex_rt_array_alloc".to_string(),
+        args: vec![Operand::Const(Const::Int(bytes))],
+        ret: IrType::String,
+    });
+
+    let header = builder.new_value();
+    builder.emit(Inst::Call {
+        dst: Some(header),
+        name: "nex_rt_array_new".to_string(),
+        args: Vec::new(),
+        ret: IrType::String,
+    });
+
+    // data
+    let data_slot = field_ptr(builder, header, 0, IrType::String);
+    builder.emit(Inst::Store {
+        ptr: data_slot,
+        value: Operand::Value(data_value),
+        ty: IrType::String,
+    });
+    // len
+    let len_slot = field_ptr(builder, header, 1, IrType::I64);
+    builder.emit(Inst::Store {
+        ptr: len_slot,
+        value: Operand::Const(Const::Int(count)),
+        ty: IrType::I64,
+    });
+    // cap
+    let cap_slot = field_ptr(builder, header, 2, IrType::I64);
+    builder.emit(Inst::Store {
+        ptr: cap_slot,
+        value: Operand::Const(Const::Int(count)),
+        ty: IrType::I64,
+    });
+
+    for (index, element) in elements.iter().enumerate() {
+        let elem_ptr_value = builder.new_value();
+        builder.emit(Inst::DynIndexPtr {
+            dst: elem_ptr_value,
+            base: data_value,
+            index: Operand::Const(Const::Int(index as i64)),
+            elem_ty: elem_ir,
+        });
+        let value = lower_expr(builder, element, scopes, storage, analysis, elem)?;
+        builder.emit(Inst::Store {
+            ptr: elem_ptr_value,
+            value,
+            ty: elem_ir,
+        });
+    }
+
+    Ok(header)
+}
+
+/// Pointer to a field of the growable array header.
+fn field_ptr(
+    builder: &mut FunctionBuilder,
+    header: ValueId,
+    index: i64,
+    elem_ty: IrType,
+) -> ValueId {
+    let slot = builder.new_value();
+    builder.emit(Inst::IndexPtr {
+        dst: slot,
+        base: header,
+        array_type: DYN_HEADER_LLVM,
+        index: Operand::Const(Const::Int(index)),
+        elem_ty,
+    });
+    slot
+}
+
+/// LLVM spelling of the growable array header.
+const DYN_HEADER_LLVM: &str = "{ ptr, i64, i64 }";
+
+/// Size in bytes of an IR type when stored in memory.
+fn ir_elem_size(ty: IrType) -> i64 {
+    match ty {
+        IrType::I8 | IrType::U8 | IrType::Bool | IrType::Char => 1,
+        IrType::I16 | IrType::U16 => 2,
+        IrType::I32 | IrType::U32 | IrType::F32 => 4,
+        IrType::I64 | IrType::U64 | IrType::F64 | IrType::String | IrType::Array(_) => 8,
+        IrType::Struct(_) => 8,
+        IrType::Void => 0,
+    }
 }
 
 fn lower_expr(

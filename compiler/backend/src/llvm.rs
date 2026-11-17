@@ -64,6 +64,9 @@ const RUNTIME_DECLS: &[&str] = &[
     "declare i64 @nex_rt_str_index_of_from(ptr, ptr, i64)",
     "declare ptr @nex_rt_char_at(ptr, i64)",
     "declare i64 @nex_rt_char_code(ptr)",
+    "declare ptr @nex_rt_array_alloc(i64)",
+    "declare ptr @nex_rt_array_new()",
+    "declare ptr @nex_rt_array_grow(ptr, i64)",
     "declare ptr @nex_rt_i64_to_string(i64)",
     "declare i64 @nex_rt_min_i64(i64, i64)",
     "declare i64 @nex_rt_max_i64(i64, i64)",
@@ -279,6 +282,19 @@ impl<'a> Emitter<'a> {
                 body.push_str(&format!(
                     "  %v{} = getelementptr inbounds {}, ptr %v{}, i64 0, {}\n",
                     dst.0, array_type, base.0, index_str
+                ));
+            }
+            Inst::DynIndexPtr {
+                dst,
+                base,
+                index,
+                elem_ty,
+            } => {
+                let index_str = format!("i64 {}", self.operand_str(index, IrType::I64)?);
+                let elem_type = llvm_type(*elem_ty);
+                body.push_str(&format!(
+                    "  %v{} = getelementptr inbounds {}, ptr %v{}, {}\n",
+                    dst.0, elem_type, base.0, index_str
                 ));
             }
             Inst::Bin {
@@ -624,6 +640,9 @@ fn runtime_signature(name: &str) -> (Vec<IrType>, IrType) {
         "nex_rt_str_index_of_from" => (vec![ptr, ptr, i64], i64),
         "nex_rt_char_at" => (vec![ptr, i64], ptr),
         "nex_rt_char_code" => (vec![ptr], i64),
+        "nex_rt_array_alloc" => (vec![i64], ptr),
+        "nex_rt_array_new" => (vec![], ptr),
+        "nex_rt_array_grow" => (vec![ptr, i64], ptr),
         "nex_rt_i64_to_string" => (vec![i64], ptr),
         "nex_rt_min_i64" | "nex_rt_max_i64" => (vec![i64, i64], i64),
         "nex_rt_min_f64" | "nex_rt_max_f64" => (vec![f64, f64], f64),

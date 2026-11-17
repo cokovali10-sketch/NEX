@@ -984,3 +984,23 @@ long long nex_rt_char_code(const char *value) {
     }
     return (long long)(unsigned char)value[0];
 }
+
+/* Growable arrays: a three-word header { data, len, cap } allocated by the
+   compiler-generated code. Helpers exist so the IR never needs inttoptr. */
+void *nex_rt_array_alloc(long long size) {
+    if (size <= 0) {
+        size = 1;
+    }
+    return malloc((size_t)size);
+}
+
+void *nex_rt_array_new(void) {
+    return calloc(3, sizeof(void *));
+}
+
+void *nex_rt_array_grow(void *data, long long size) {
+    if (size <= 0) {
+        size = 1;
+    }
+    return realloc(data, (size_t)size);
+}
