@@ -2347,6 +2347,100 @@ impl<'a> Checker<'a> {
             return Type::Bool;
         }
 
+        if callee == "json_parse" {
+            if args.len() != 1 {
+                self.error(
+                    "NXS004",
+                    format!("`json_parse` expects 1 argument, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let text_ty = self.infer(&args[0]);
+            if text_ty != Type::String && text_ty != Type::Error {
+                self.error(
+                    "NXS004",
+                    format!("`json_parse` expects a `string`, found `{text_ty}`"),
+                    span,
+                );
+                return Type::Error;
+            }
+            return Type::I64;
+        }
+
+        if callee == "json_type"
+            || callee == "json_len"
+            || callee == "json_str"
+            || callee == "json_num"
+            || callee == "json_bool"
+            || callee == "json_is_null"
+        {
+            if args.len() != 1 {
+                self.error(
+                    "NXS004",
+                    format!("`{callee}` expects 1 argument, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let handle_ty = self.infer(&args[0]);
+            if handle_ty != Type::I64 && handle_ty != Type::Error {
+                self.error(
+                    "NXS004",
+                    format!("`{callee}` expects a JSON handle, found `{handle_ty}`"),
+                    span,
+                );
+                return Type::Error;
+            }
+            return match callee {
+                "json_type" | "json_str" => Type::String,
+                "json_num" => Type::F64,
+                "json_bool" | "json_is_null" => Type::Bool,
+                _ => Type::I64,
+            };
+        }
+
+        if callee == "json_at" || callee == "json_get" {
+            if args.len() != 2 {
+                self.error(
+                    "NXS004",
+                    format!("`{callee}` expects 2 arguments, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let handle_ty = self.infer(&args[0]);
+            let second_ty = self.infer(&args[1]);
+            let second_ok = if callee == "json_at" {
+                second_ty == Type::I64
+            } else {
+                second_ty == Type::String
+            };
+            if (handle_ty != Type::I64 || !second_ok)
+                && (handle_ty != Type::Error && second_ty != Type::Error)
+            {
+                self.error(
+                    "NXS004",
+                    format!(
+                        "`{callee}` expects `(i64, {})`",
+                        if callee == "json_at" { "i64" } else { "string" }
+                    ),
+                    span,
+                );
+                return Type::Error;
+            }
+            return Type::I64;
+        }
+
         if callee == "push" {
             if args.len() != 2 {
                 self.error(

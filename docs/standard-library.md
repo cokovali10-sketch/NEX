@@ -127,6 +127,33 @@ server must loop and handle one connection at a time.
 `unix_time` is the wall clock and is the one to use for `Date` headers and
 timestamps you persist.
 
+### JSON
+
+A read-only JSON DOM. `json_parse` returns a handle (`i64`), or `0` when the text
+is not valid JSON. Handles are never freed: NEX has no ownership model yet.
+
+| Function | Signature | Notes |
+|---|---|---|
+| `json_parse` | `(text: string) -> i64` | Handle, or `0` on invalid input. |
+| `json_type` | `(handle: i64) -> string` | `null`, `bool`, `number`, `string`, `array`, `object`; empty for handle `0`. |
+| `json_len` | `(handle: i64) -> i64` | Array elements or object members. |
+| `json_at` | `(handle: i64, index: i64) -> i64` | Array item; `0` when out of range or not an array. |
+| `json_get` | `(handle: i64, key: string) -> i64` | Object member; `0` when absent. |
+| `json_str` | `(handle: i64) -> string` | String value, or empty. |
+| `json_num` | `(handle: i64) -> f64` | Number value. |
+| `json_bool` | `(handle: i64) -> bool` | Boolean value. |
+| `json_is_null` | `(handle: i64) -> bool` | True for JSON `null` and for handle `0`. |
+
+```nex
+fn main():
+    var doc = json_parse("{\"name\": \"NEX\", \"tags\": [\"a\", \"b\"]}")
+    println(json_type(doc))                      // object
+    println(json_str(json_get(doc, "name")))     // NEX
+    println(json_len(json_get(doc, "tags")))     // 2
+```
+
+There is no `json_stringify` yet: values are read-only until a builder exists.
+
 ### Numeric
 
 | Function | Signature | Notes |

@@ -45,6 +45,9 @@
 - Growable arrays: `[T]`, `push`, `len`, bounds-checked indexing, and
   assignment to elements. See `specs/dynamic-arrays.md`.
 
+- JSON parsing: `json_parse`, `json_type`, `json_len`, `json_at`, `json_get`,
+  `json_str`, `json_num`, `json_bool`, `json_is_null`.
+
 ### Fixed
 
 - The lexer now skips a leading UTF-8 BOM instead of reporting `unexpected character`.

@@ -2032,6 +2032,50 @@ fn lower_expr(
                 return Ok(Operand::Value(dst));
             }
 
+            if callee.starts_with("json_") {
+                let mut call_args = Vec::new();
+                for arg in args {
+                    call_args.push(lower_expr(
+                        builder,
+                        arg,
+                        scopes,
+                        storage,
+                        analysis,
+                        Type::Error,
+                    )?);
+                }
+                let (name, ret) = match callee {
+                    "json_parse" => ("nex_rt_json_parse", IrType::I64),
+                    "json_type" => ("nex_rt_json_type", IrType::String),
+                    "json_len" => ("nex_rt_json_len", IrType::I64),
+                    "json_at" => ("nex_rt_json_at", IrType::I64),
+                    "json_get" => ("nex_rt_json_get", IrType::I64),
+                    "json_str" => ("nex_rt_json_str", IrType::String),
+                    "json_num" => ("nex_rt_json_num", IrType::F64),
+                    "json_bool" => ("nex_rt_json_bool", IrType::I64),
+                    _ => ("nex_rt_json_is_null", IrType::I64),
+                };
+                let raw = builder.new_value();
+                builder.emit(Inst::Call {
+                    dst: Some(raw),
+                    name: name.to_string(),
+                    args: call_args,
+                    ret,
+                });
+                if callee == "json_bool" || callee == "json_is_null" {
+                    let dst = builder.new_value();
+                    builder.emit(Inst::Cast {
+                        dst,
+                        kind: CastKind::Truncate,
+                        from: IrType::I64,
+                        to: IrType::Bool,
+                        operand: Operand::Value(raw),
+                    });
+                    return Ok(Operand::Value(dst));
+                }
+                return Ok(Operand::Value(raw));
+            }
+
             if callee == "push" {
                 if args.len() != 2 {
                     return Err("`push` expects 2 arguments".to_string());

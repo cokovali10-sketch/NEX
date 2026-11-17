@@ -1032,3 +1032,451 @@ void *nex_rt_array_ensure(void *header, long long needed_len, long long elem_siz
     words[2] = new_cap;
     return header;
 }
+
+/* ------------------------------------------------------------------------- */
+/* Minimal JSON DOM. Nodes are heap-allocated and addressed by handle (i64).  */
+/* Handles are never freed in this milestone: NEX has no ownership model yet.  */
+/* ------------------------------------------------------------------------- */
+
+typedef enum {
+    NEX_JSON_NULL = 0,
+    NEX_JSON_BOOL,
+    NEX_JSON_NUMBER,
+    NEX_JSON_STRING,
+    NEX_JSON_ARRAY,
+    NEX_JSON_OBJECT
+} nex_json_kind;
+
+typedef struct nex_json_node {
+    nex_json_kind kind;
+    double number;
+    int boolean;
+    char *string;
+    struct nex_json_node **items;
+    char **keys;
+    size_t length;
+} nex_json_node;
+
+typedef struct {
+    const char *text;
+    size_t position;
+    int failed;
+} nex_json_parser;
+
+static void nex_json_skip(nex_json_parser *parser) {
+    while (parser->text[parser->position] != '\0') {
+        char c = parser->text[parser->position];
+        if (c == ' ' || c == '\t' || c == '\r' || c == '\n') {
+            parser->position++;
+        } else {
+            break;
+        }
+    }
+}
+
+static nex_json_node *nex_json_new(nex_json_kind kind) {
+    nex_json_node *node = (nex_json_node *)calloc(1, sizeof(nex_json_node));
+    if (node != NULL) {
+        node->kind = kind;
+    }
+    return node;
+}
+
+static char *nex_json_parse_string_raw(nex_json_parser *parser) {
+    if (parser->text[parser->position] != '"') {
+        parser->failed = 1;
+        return NULL;
+    }
+    parser->position++;
+    size_t capacity = 16;
+    size_t length = 0;
+    char *buffer = (char *)malloc(capacity);
+    if (buffer == NULL) {
+        parser->failed = 1;
+        return NULL;
+    }
+    while (parser->text[parser->position] != '\0') {
+        char c = parser->text[parser->position];
+        if (c == '"') {
+            parser->position++;
+            buffer[length] = '\0';
+            return buffer;
+        }
+        if (c == '\\') {
+            parser->position++;
+            char escaped = parser->text[parser->position];
+            char decoded;
+            switch (escaped) {
+                case '"': decoded = '"'; break;
+                case '\\': decoded = '\\'; break;
+                case '/': decoded = '/'; break;
+                case 'b': decoded = '\b'; break;
+                case 'f': decoded = '\f'; break;
+                case 'n': decoded = '\n'; break;
+                case 'r': decoded = '\r'; break;
+                case 't': decoded = '\t'; break;
+                case 'u': {
+                    /* Decode a \uXXXX escape into UTF-8. */
+                    if (parser->text[parser->position + 1] == '\0' ||
+                        parser->text[parser->position + 4] == '\0') {
+                        free(buffer);
+                        parser->failed = 1;
+                        return NULL;
+                    }
+                    char hex[5];
+                    for (int i = 0; i < 4; i++) {
+                        hex[i] = parser->text[parser->position + 1 + i];
+                    }
+                    hex[4] = '\0';
+                    unsigned int codepoint = (unsigned int)strtoul(hex, NULL, 16);
+                    parser->position += 4;
+                    if (length + 4 >= capacity) {
+                        capacity *= 2;
+                        char *grown = (char *)realloc(buffer, capacity);
+                        if (grown == NULL) {
+                            free(buffer);
+                            parser->failed = 1;
+                            return NULL;
+                        }
+                        buffer = grown;
+                    }
+                    if (codepoint < 0x80) {
+                        buffer[length++] = (char)codepoint;
+                    } else if (codepoint < 0x800) {
+                        buffer[length++] = (char)(0xC0 | (codepoint >> 6));
+                        buffer[length++] = (char)(0x80 | (codepoint & 0x3F));
+                    } else {
+                        buffer[length++] = (char)(0xE0 | (codepoint >> 12));
+                        buffer[length++] = (char)(0x80 | ((codepoint >> 6) & 0x3F));
+                        buffer[length++] = (char)(0x80 | (codepoint & 0x3F));
+                    }
+                    parser->position++;
+                    continue;
+                }
+                default:
+                    free(buffer);
+                    parser->failed = 1;
+                    return NULL;
+            }
+            parser->position++;
+            if (length + 1 >= capacity) {
+                capacity *= 2;
+                char *grown = (char *)realloc(buffer, capacity);
+                if (grown == NULL) {
+                    free(buffer);
+                    parser->failed = 1;
+                    return NULL;
+                }
+                buffer = grown;
+            }
+            buffer[length++] = decoded;
+            continue;
+        }
+        if (length + 1 >= capacity) {
+            capacity *= 2;
+            char *grown = (char *)realloc(buffer, capacity);
+            if (grown == NULL) {
+                free(buffer);
+                parser->failed = 1;
+                return NULL;
+            }
+            buffer = grown;
+        }
+        buffer[length++] = c;
+        parser->position++;
+    }
+    free(buffer);
+    parser->failed = 1;
+    return NULL;
+}
+
+static nex_json_node *nex_json_parse_value(nex_json_parser *parser);
+
+static nex_json_node *nex_json_parse_array(nex_json_parser *parser) {
+    parser->position++; /* [ */
+    nex_json_node *node = nex_json_new(NEX_JSON_ARRAY);
+    if (node == NULL) {
+        parser->failed = 1;
+        return NULL;
+    }
+    size_t capacity = 4;
+    node->items = (nex_json_node **)malloc(capacity * sizeof(nex_json_node *));
+    nex_json_skip(parser);
+    if (parser->text[parser->position] == ']') {
+        parser->position++;
+        return node;
+    }
+    for (;;) {
+        nex_json_node *item = nex_json_parse_value(parser);
+        if (item == NULL || parser->failed) {
+            parser->failed = 1;
+            return NULL;
+        }
+        if (node->length == capacity) {
+            capacity *= 2;
+            nex_json_node **grown =
+                (nex_json_node **)realloc(node->items, capacity * sizeof(nex_json_node *));
+            if (grown == NULL) {
+                parser->failed = 1;
+                return NULL;
+            }
+            node->items = grown;
+        }
+        node->items[node->length++] = item;
+        nex_json_skip(parser);
+        char c = parser->text[parser->position];
+        parser->position++;
+        if (c == ']') {
+            return node;
+        }
+        if (c != ',') {
+            parser->failed = 1;
+            return NULL;
+        }
+        nex_json_skip(parser);
+    }
+}
+
+static nex_json_node *nex_json_parse_object(nex_json_parser *parser) {
+    parser->position++; /* { */
+    nex_json_node *node = nex_json_new(NEX_JSON_OBJECT);
+    if (node == NULL) {
+        parser->failed = 1;
+        return NULL;
+    }
+    size_t capacity = 4;
+    node->items = (nex_json_node **)malloc(capacity * sizeof(nex_json_node *));
+    node->keys = (char **)malloc(capacity * sizeof(char *));
+    nex_json_skip(parser);
+    if (parser->text[parser->position] == '}') {
+        parser->position++;
+        return node;
+    }
+    for (;;) {
+        char *key = nex_json_parse_string_raw(parser);
+        if (key == NULL || parser->failed) {
+            parser->failed = 1;
+            return NULL;
+        }
+        nex_json_skip(parser);
+        if (parser->text[parser->position] != ':') {
+            parser->failed = 1;
+            return NULL;
+        }
+        parser->position++;
+        nex_json_node *value = nex_json_parse_value(parser);
+        if (value == NULL || parser->failed) {
+            parser->failed = 1;
+            return NULL;
+        }
+        if (node->length == capacity) {
+            capacity *= 2;
+            nex_json_node **grown_items =
+                (nex_json_node **)realloc(node->items, capacity * sizeof(nex_json_node *));
+            char **grown_keys = (char **)realloc(node->keys, capacity * sizeof(char *));
+            if (grown_items == NULL || grown_keys == NULL) {
+                parser->failed = 1;
+                return NULL;
+            }
+            node->items = grown_items;
+            node->keys = grown_keys;
+        }
+        node->keys[node->length] = key;
+        node->items[node->length] = value;
+        node->length++;
+        nex_json_skip(parser);
+        char c = parser->text[parser->position];
+        parser->position++;
+        if (c == '}') {
+            return node;
+        }
+        if (c != ',') {
+            parser->failed = 1;
+            return NULL;
+        }
+        nex_json_skip(parser);
+    }
+}
+
+static nex_json_node *nex_json_parse_value(nex_json_parser *parser) {
+    nex_json_skip(parser);
+    char c = parser->text[parser->position];
+    if (c == '{') {
+        return nex_json_parse_object(parser);
+    }
+    if (c == '[') {
+        return nex_json_parse_array(parser);
+    }
+    if (c == '"') {
+        char *text = nex_json_parse_string_raw(parser);
+        if (text == NULL) {
+            parser->failed = 1;
+            return NULL;
+        }
+        nex_json_node *node = nex_json_new(NEX_JSON_STRING);
+        if (node == NULL) {
+            free(text);
+            parser->failed = 1;
+            return NULL;
+        }
+        node->string = text;
+        return node;
+    }
+    if (c == 't' && strncmp(parser->text + parser->position, "true", 4) == 0) {
+        parser->position += 4;
+        nex_json_node *node = nex_json_new(NEX_JSON_BOOL);
+        if (node != NULL) {
+            node->boolean = 1;
+        }
+        return node;
+    }
+    if (c == 'f' && strncmp(parser->text + parser->position, "false", 5) == 0) {
+        parser->position += 5;
+        return nex_json_new(NEX_JSON_BOOL);
+    }
+    if (c == 'n' && strncmp(parser->text + parser->position, "null", 4) == 0) {
+        parser->position += 4;
+        return nex_json_new(NEX_JSON_NULL);
+    }
+    /* number */
+    char *end = NULL;
+    double value = strtod(parser->text + parser->position, &end);
+    if (end == parser->text + parser->position) {
+        parser->failed = 1;
+        return NULL;
+    }
+    parser->position = (size_t)(end - parser->text);
+    nex_json_node *node = nex_json_new(NEX_JSON_NUMBER);
+    if (node != NULL) {
+        node->number = value;
+    }
+    return node;
+}
+
+long long nex_rt_json_parse(const char *text) {
+    if (text == NULL) {
+        return 0;
+    }
+    nex_json_parser parser;
+    parser.text = text;
+    parser.position = 0;
+    parser.failed = 0;
+    nex_json_node *root = nex_json_parse_value(&parser);
+    if (root == NULL || parser.failed) {
+        return 0;
+    }
+    nex_json_skip(&parser);
+    if (parser.text[parser.position] != '\0') {
+        return 0;
+    }
+    return (long long)root;
+}
+
+static nex_json_node *nex_json_handle(long long handle) {
+    if (handle <= 0) {
+        return NULL;
+    }
+    return (nex_json_node *)handle;
+}
+
+char *nex_rt_json_empty_string(void) {
+    char *empty = (char *)malloc(1);
+    if (empty != NULL) {
+        empty[0] = '\0';
+    }
+    return empty;
+}
+
+char *nex_rt_json_type(long long handle) {
+    static const char *names[] = {"null", "bool", "number", "string", "array", "object"};
+    nex_json_node *node = nex_json_handle(handle);
+    if (node == NULL || node->kind < 0 || node->kind > NEX_JSON_OBJECT) {
+        return nex_rt_json_empty_string();
+    }
+    size_t length = strlen(names[node->kind]);
+    char *copy = (char *)malloc(length + 1);
+    if (copy != NULL) {
+        memcpy(copy, names[node->kind], length + 1);
+    }
+    return copy;
+}
+
+long long nex_rt_json_len(long long handle) {
+    nex_json_node *node = nex_json_handle(handle);
+    if (node == NULL) {
+        return 0;
+    }
+    return (long long)node->length;
+}
+
+long long nex_rt_json_at(long long handle, long long index) {
+    nex_json_node *node = nex_json_handle(handle);
+    if (node == NULL || node->kind != NEX_JSON_ARRAY) {
+        return 0;
+    }
+    if (index < 0 || (size_t)index >= node->length) {
+        return 0;
+    }
+    return (long long)node->items[index];
+}
+
+long long nex_rt_json_get(long long handle, const char *key) {
+    nex_json_node *node = nex_json_handle(handle);
+    if (node == NULL || node->kind != NEX_JSON_OBJECT || key == NULL) {
+        return 0;
+    }
+    for (size_t i = 0; i < node->length; i++) {
+        if (strcmp(node->keys[i], key) == 0) {
+            return (long long)node->items[i];
+        }
+    }
+    return 0;
+}
+
+char *nex_rt_json_key(long long handle) {
+    nex_json_node *node = nex_json_handle(handle);
+    if (node == NULL) {
+        return NULL;
+    }
+    return node->string;
+}
+
+char *nex_rt_json_str(long long handle) {
+    nex_json_node *node = nex_json_handle(handle);
+    if (node == NULL) {
+        return NULL;
+    }
+    if (node->kind == NEX_JSON_STRING) {
+        size_t length = strlen(node->string);
+        char *copy = (char *)malloc(length + 1);
+        if (copy != NULL) {
+            memcpy(copy, node->string, length + 1);
+        }
+        return copy;
+    }
+    return NULL;
+}
+
+double nex_rt_json_num(long long handle) {
+    nex_json_node *node = nex_json_handle(handle);
+    if (node == NULL) {
+        return 0;
+    }
+    return node->number;
+}
+
+long long nex_rt_json_bool(long long handle) {
+    nex_json_node *node = nex_json_handle(handle);
+    if (node == NULL) {
+        return 0;
+    }
+    return node->boolean;
+}
+
+long long nex_rt_json_is_null(long long handle) {
+    nex_json_node *node = nex_json_handle(handle);
+    if (node == NULL) {
+        return 1;
+    }
+    return node->kind == NEX_JSON_NULL;
+}

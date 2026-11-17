@@ -1247,3 +1247,19 @@ fn growable_array_of_strings() {
     assert_eq!(code, 0, "stderr: {stderr}");
     assert_eq!(stdout, "2\ntwo\n");
 }
+
+#[test]
+fn json_parse_and_query() {
+    let source = "fn main():\n    var doc = json_parse(\"{\\\"name\\\": \\\"NEX\\\", \\\"tags\\\": [\\\"lang\\\", \\\"llvm\\\"], \\\"n\\\": 3, \\\"ok\\\": true}\")\n    println(json_type(doc))\n    println(json_str(json_get(doc, \"name\")))\n    println(json_type(json_get(doc, \"tags\")))\n    println(json_len(json_get(doc, \"tags\")))\n    println(json_str(json_at(json_get(doc, \"tags\"), 1)))\n    println(json_num(json_get(doc, \"n\")))\n    println(json_bool(json_get(doc, \"ok\")))\n    println(json_is_null(json_get(doc, \"missing\")))\n";
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "object\nNEX\narray\n2\nllvm\n3\ntrue\ntrue\n");
+}
+
+#[test]
+fn json_invalid_input_returns_zero_handle() {
+    let source = "fn main():\n    println(json_parse(\"{not json}\") == 0)\n    println(json_type(0) == \"\")\n";
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "true\ntrue\n");
+}
