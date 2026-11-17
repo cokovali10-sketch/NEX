@@ -2188,10 +2188,13 @@ typedef struct {
     nex_route *routes;
     size_t length;
     size_t capacity;
-    char *params[NEX_ROUTER_MAX_PARAMS];
-    char *values[NEX_ROUTER_MAX_PARAMS];
-    int param_count;
 } nex_router;
+
+/* Captured params are per thread: two connections matched at the same time must
+   not overwrite each other's values. */
+static _Thread_local char *nex_tls_params[NEX_ROUTER_MAX_PARAMS];
+static _Thread_local char *nex_tls_values[NEX_ROUTER_MAX_PARAMS];
+static _Thread_local int nex_tls_param_count;
 
 static char **nex_router_split(const char *text, size_t *count) {
     size_t capacity = 8;
@@ -2311,16 +2314,12 @@ long long nex_rt_router_match(long long handle, const char *method, const char *
             }
         }
         if (matched && strcmp(route->method, method) == 0) {
-            for (int i = 0; i < router->param_count; i++) {
-                free(router->params[i]);
-                free(router->values[i]);
-            }
-            router->param_count = 0;
+            nex_tls_param_count = 0;
             for (int i = 0; i < param_count; i++) {
-                router->params[i] = params[i];
-                router->values[i] = values[i];
+                nex_tls_params[nex_tls_param_count] = params[i];
+                nex_tls_values[nex_tls_param_count] = values[i];
+                nex_tls_param_count++;
             }
-            router->param_count = param_count;
             /* Ownership of the split parts moves to the router for params. */
             for (size_t i = 0; i < pattern_count; i++) {
                 if (pattern_parts[i][0] != ':') {
@@ -2360,13 +2359,13 @@ char *nex_rt_router_param(long long handle, const char *name) {
     if (router == NULL || name == NULL) {
         return nex_rt_json_empty_string();
     }
-    for (int i = 0; i < router->param_count; i++) {
-        const char *key = router->params[i];
+    for (int i = 0; i < nex_tls_param_count; i++) {
+        const char *key = nex_tls_params[i];
         if (key != NULL && key[0] == ':') {
             key++;
         }
         if (key != NULL && strcmp(key, name) == 0) {
-            return nex_map_copy(router->values[i]);
+            return nex_map_copy(nex_tls_values[i]);
         }
     }
     return nex_rt_json_empty_string();
