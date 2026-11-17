@@ -1941,8 +1941,16 @@ long long nex_rt_thread_running(long long handle) {
 #else
 #include <pthread.h>
 
-static void *nex_thread_trampoline(void *entry) {
-    ((void (*)(void))entry)();
+typedef struct nex_thread_state {
+    pthread_t thread;
+    void (*entry)(void);
+    int done;
+} nex_thread_state;
+
+static void *nex_thread_trampoline(void *argument) {
+    nex_thread_state *state = (nex_thread_state *)argument;
+    state->entry();
+    state->done = 1;
     return NULL;
 }
 
@@ -1950,33 +1958,34 @@ long long nex_rt_thread_spawn(long long entry) {
     if (entry == 0) {
         return 0;
     }
-    pthread_t *thread = (pthread_t *)malloc(sizeof(pthread_t));
-    if (thread == NULL) {
+    nex_thread_state *state = (nex_thread_state *)calloc(1, sizeof(nex_thread_state));
+    if (state == NULL) {
         return 0;
     }
-    if (pthread_create(thread, NULL, nex_thread_trampoline, (void *)entry) != 0) {
-        free(thread);
+    state->entry = (void (*)(void))entry;
+    if (pthread_create(&state->thread, NULL, nex_thread_trampoline, state) != 0) {
+        free(state);
         return 0;
     }
-    return (long long)thread;
+    return (long long)state;
 }
 
 long long nex_rt_thread_join(long long handle) {
     if (handle == 0) {
         return 0;
     }
-    pthread_t *thread = (pthread_t *)handle;
-    int result = pthread_join(*thread, NULL);
-    free(thread);
-    return result == 0;
+    nex_thread_state *state = (nex_thread_state *)handle;
+    int result = pthread_join(state->thread, NULL);
+    int done = state->done;
+    free(state);
+    return result == 0 && done;
 }
 
 long long nex_rt_thread_running(long long handle) {
     if (handle == 0) {
         return 0;
     }
-    pthread_t *thread = (pthread_t *)handle;
-    int result = pthread_kill(*thread, 0);
-    return result == 0;
+    nex_thread_state *state = (nex_thread_state *)handle;
+    return state->done ? 0 : 1;
 }
 #endif
