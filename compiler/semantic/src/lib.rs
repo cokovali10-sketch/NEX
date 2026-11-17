@@ -2506,6 +2506,96 @@ impl<'a> Checker<'a> {
             return Type::String;
         }
 
+        if callee == "map_new" {
+            if !args.is_empty() {
+                self.error("NXS004", "`map_new` takes no arguments", span);
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            return Type::I64;
+        }
+
+        if callee == "map_len" || callee == "map_key_at" {
+            let expected = if callee == "map_len" { 1 } else { 2 };
+            if args.len() != expected {
+                self.error(
+                    "NXS004",
+                    format!(
+                        "`{callee}` expects {expected} arguments, found {}",
+                        args.len()
+                    ),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let map_ty = self.infer(&args[0]);
+            if map_ty != Type::I64 && map_ty != Type::Error {
+                self.error(
+                    "NXS004",
+                    format!("`{callee}` expects a map handle, found `{map_ty}`"),
+                    span,
+                );
+                return Type::Error;
+            }
+            if callee == "map_key_at" {
+                let index_ty = self.infer(&args[1]);
+                if index_ty != Type::I64 && index_ty != Type::Error {
+                    self.error("NXS004", "`map_key_at` expects an `i64` index", span);
+                    return Type::Error;
+                }
+                return Type::String;
+            }
+            return Type::I64;
+        }
+
+        if callee == "map_set"
+            || callee == "map_get"
+            || callee == "map_has"
+            || callee == "map_remove"
+        {
+            let expected = if callee == "map_set" { 3 } else { 2 };
+            if args.len() != expected {
+                self.error(
+                    "NXS004",
+                    format!(
+                        "`{callee}` expects {expected} arguments, found {}",
+                        args.len()
+                    ),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let map_ty = self.infer(&args[0]);
+            let key_ty = self.infer(&args[1]);
+            let value_ok = if callee == "map_set" {
+                let value_ty = self.infer(&args[2]);
+                value_ty == Type::String || value_ty == Type::Error
+            } else {
+                true
+            };
+            let types_ok = map_ty == Type::I64
+                && key_ty == Type::String
+                && value_ok
+                && (map_ty != Type::Error && key_ty != Type::Error);
+            if !types_ok {
+                self.error("NXS004", "`map_set` expects `(i64, string, string)`", span);
+                return Type::Error;
+            }
+            return match callee {
+                "map_get" => Type::String,
+                "map_has" | "map_remove" => Type::Bool,
+                _ => Type::Bool,
+            };
+        }
+
         if callee == "push" {
             if args.len() != 2 {
                 self.error(

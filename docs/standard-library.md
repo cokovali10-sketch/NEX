@@ -175,6 +175,28 @@ fn split(text: string, separator: string) -> [string]:
     return out
 ```
 
+### Maps
+
+A string-keyed, string-valued hash map. `map_new` returns a handle (`i64`);
+entries are never freed until the process exits.
+
+| Function | Signature | Notes |
+|---|---|---|
+| `map_new` | `() -> i64` | New empty map. |
+| `map_set` | `(handle: i64, key: string, value: string) -> bool` | Insert or overwrite. |
+| `map_get` | `(handle: i64, key: string) -> string` | Empty string when absent. |
+| `map_has` | `(handle: i64, key: string) -> bool` | Membership test. |
+| `map_remove` | `(handle: i64, key: string) -> bool` | True when a key was removed. |
+| `map_len` | `(handle: i64) -> i64` | Number of entries. |
+| `map_key_at` | `(handle: i64, index: i64) -> string` | nth key, or empty. Iteration order is unspecified. |
+
+```nex
+fn main():
+    var headers = map_new()
+    map_set(headers, "content-type", "application/json")
+    println(map_get(headers, "content-type"))
+```
+
 ### Numeric
 
 | Function | Signature | Notes |

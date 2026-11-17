@@ -2060,6 +2060,60 @@ fn lower_expr(
                 return Ok(Operand::Value(dst));
             }
 
+            if callee.starts_with("map_") {
+                let mut call_args = Vec::new();
+                for arg in args {
+                    call_args.push(lower_expr(
+                        builder,
+                        arg,
+                        scopes,
+                        storage,
+                        analysis,
+                        Type::Error,
+                    )?);
+                }
+                let (name, ret) = match callee {
+                    "map_new" => ("nex_rt_map_new", IrType::I64),
+                    "map_set" => ("nex_rt_map_set", IrType::I64),
+                    "map_get" => ("nex_rt_map_get", IrType::String),
+                    "map_has" => ("nex_rt_map_has", IrType::I64),
+                    "map_remove" => ("nex_rt_map_remove", IrType::I64),
+                    "map_len" => ("nex_rt_map_len", IrType::I64),
+                    _ => ("nex_rt_map_key_at", IrType::String),
+                };
+                let dst = builder.new_value();
+                builder.emit(Inst::Call {
+                    dst: Some(dst),
+                    name: name.to_string(),
+                    args: call_args,
+                    ret,
+                });
+                if callee == "map_set" {
+                    // map_set reports success; NEX sees it as a bool.
+                    let bool_dst = builder.new_value();
+                    builder.emit(Inst::Cast {
+                        dst: bool_dst,
+                        kind: CastKind::Truncate,
+                        from: IrType::I64,
+                        to: IrType::Bool,
+                        operand: Operand::Value(dst),
+                    });
+                    return Ok(Operand::Value(bool_dst));
+                }
+                if callee == "map_has" || callee == "map_remove" {
+                    let bool_dst = builder.new_value();
+                    builder.emit(Inst::Cast {
+                        dst: bool_dst,
+                        kind: CastKind::Truncate,
+                        from: IrType::I64,
+                        to: IrType::Bool,
+                        operand: Operand::Value(dst),
+                    });
+                    return Ok(Operand::Value(bool_dst));
+                }
+                return Ok(Operand::Value(dst));
+            }
+
             if callee.starts_with("json_") {
                 let mut call_args = Vec::new();
                 for arg in args {

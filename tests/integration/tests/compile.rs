@@ -1279,3 +1279,19 @@ fn json_stringify_round_trips_with_escaping() {
     assert_eq!(code, 0, "stderr: {stderr}");
     assert_eq!(stdout, "{\"a\":[1,2,3],\"b\":\"x\\ny\"}\n");
 }
+
+#[test]
+fn map_set_get_has_remove_and_len() {
+    let source = "fn main():\n    var m = map_new()\n    map_set(m, \"a\", \"1\")\n    map_set(m, \"b\", \"2\")\n    println(map_len(m))\n    println(map_get(m, \"a\"))\n    println(map_has(m, \"b\"))\n    println(map_has(m, \"zz\"))\n    map_set(m, \"a\", \"9\")\n    println(map_get(m, \"a\"))\n    println(map_len(m))\n    println(map_remove(m, \"a\"))\n    println(map_len(m))\n";
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "2\n1\ntrue\nfalse\n9\n2\ntrue\n1\n");
+}
+
+#[test]
+fn map_handles_many_keys_and_enumeration() {
+    let source = "fn main():\n    var m = map_new()\n    var i = 0\n    while i < 50:\n        var key = concat(\"k\", to_string(i))\n        map_set(m, key, to_string(i))\n        i = i + 1\n    println(map_len(m))\n    println(map_key_at(m, 0) != \"\")\n    var missing = 0\n    i = 0\n    while i < 50:\n        if not map_has(m, concat(\"k\", to_string(i))):\n            missing = missing + 1\n        i = i + 1\n    println(missing)\n";
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "50\ntrue\n0\n");
+}

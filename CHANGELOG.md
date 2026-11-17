@@ -50,6 +50,9 @@
 
 - `str_split_count` / `str_split_at` for splitting, and `json_stringify`.
 
+- String-keyed hash maps: `map_new`, `map_set`, `map_get`, `map_has`, `map_remove`,
+  `map_len`, `map_key_at`.
+
 ### Fixed
 
 - The lexer now skips a leading UTF-8 BOM instead of reporting `unexpected character`.

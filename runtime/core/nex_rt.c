@@ -1688,3 +1688,215 @@ char *nex_rt_json_stringify(long long handle) {
     }
     return buffer;
 }
+
+/* ------------------------------------------------------------------------- */
+/* String-keyed string-valued hash map.                                       */
+/* Handles are pointers; entries are never freed (no ownership model yet).      */
+/* ------------------------------------------------------------------------- */
+
+typedef struct nex_map_entry {
+    char *key;
+    char *value;
+    int occupied;
+} nex_map_entry;
+
+typedef struct nex_map {
+    nex_map_entry *entries;
+    size_t capacity;
+    size_t length;
+} nex_map;
+
+static unsigned long long nex_map_hash(const char *key) {
+    unsigned long long hash = 1469598103934665603ULL;
+    for (const unsigned char *cursor = (const unsigned char *)key; *cursor != '\0'; cursor++) {
+        hash ^= *cursor;
+        hash *= 1099511628211ULL;
+    }
+    return hash;
+}
+
+long long nex_rt_map_new(long long capacity) {
+    if (capacity < 8) {
+        capacity = 8;
+    }
+    nex_map *map = (nex_map *)calloc(1, sizeof(nex_map));
+    if (map == NULL) {
+        return 0;
+    }
+    map->capacity = (size_t)capacity;
+    map->entries = (nex_map_entry *)calloc(map->capacity, sizeof(nex_map_entry));
+    if (map->entries == NULL) {
+        free(map);
+        return 0;
+    }
+    return (long long)map;
+}
+
+static nex_map *nex_map_handle(long long handle) {
+    if (handle <= 0) {
+        return NULL;
+    }
+    return (nex_map *)handle;
+}
+
+static char *nex_map_copy(const char *text) {
+    if (text == NULL) {
+        text = "";
+    }
+    size_t length = strlen(text);
+    char *copy = (char *)malloc(length + 1);
+    if (copy != NULL) {
+        memcpy(copy, text, length + 1);
+    }
+    return copy;
+}
+
+static void nex_map_grow(nex_map *map);
+
+long long nex_rt_map_set(long long handle, const char *key, const char *value) {
+    nex_map *map = nex_map_handle(handle);
+    if (map == NULL || key == NULL) {
+        return 0;
+    }
+    if (map->length * 2 >= map->capacity) {
+        nex_map_grow(map);
+    }
+    unsigned long long hash = nex_map_hash(key);
+    for (;;) {
+        size_t index = (size_t)(hash & (map->capacity - 1));
+        nex_map_entry *entry = &map->entries[index];
+        if (!entry->occupied) {
+            entry->occupied = 1;
+            entry->key = nex_map_copy(key);
+            entry->value = nex_map_copy(value);
+            map->length++;
+            return 1;
+        }
+        if (strcmp(entry->key, key) == 0) {
+            char *copy = nex_map_copy(value);
+            if (copy == NULL) {
+                return 0;
+            }
+            free(entry->value);
+            entry->value = copy;
+            return 1;
+        }
+        hash++;
+    }
+}
+
+char *nex_rt_map_get(long long handle, const char *key) {
+    nex_map *map = nex_map_handle(handle);
+    if (map == NULL || key == NULL) {
+        return nex_rt_json_empty_string();
+    }
+    unsigned long long hash = nex_map_hash(key);
+    for (;;) {
+        size_t index = (size_t)(hash & (map->capacity - 1));
+        nex_map_entry *entry = &map->entries[index];
+        if (!entry->occupied) {
+            return nex_rt_json_empty_string();
+        }
+        if (strcmp(entry->key, key) == 0) {
+            return nex_map_copy(entry->value);
+        }
+        hash++;
+    }
+}
+
+long long nex_rt_map_has(long long handle, const char *key) {
+    nex_map *map = nex_map_handle(handle);
+    if (map == NULL || key == NULL) {
+        return 0;
+    }
+    unsigned long long hash = nex_map_hash(key);
+    for (;;) {
+        size_t index = (size_t)(hash & (map->capacity - 1));
+        nex_map_entry *entry = &map->entries[index];
+        if (!entry->occupied) {
+            return 0;
+        }
+        if (strcmp(entry->key, key) == 0) {
+            return 1;
+        }
+        hash++;
+    }
+}
+
+long long nex_rt_map_remove(long long handle, const char *key) {
+    nex_map *map = nex_map_handle(handle);
+    if (map == NULL || key == NULL) {
+        return 0;
+    }
+    unsigned long long hash = nex_map_hash(key);
+    for (;;) {
+        size_t index = (size_t)(hash & (map->capacity - 1));
+        nex_map_entry *entry = &map->entries[index];
+        if (!entry->occupied) {
+            return 0;
+        }
+        if (strcmp(entry->key, key) == 0) {
+            free(entry->key);
+            free(entry->value);
+            entry->key = NULL;
+            entry->value = NULL;
+            entry->occupied = 0;
+            map->length--;
+            return 1;
+        }
+        hash++;
+    }
+}
+
+long long nex_rt_map_len(long long handle) {
+    nex_map *map = nex_map_handle(handle);
+    if (map == NULL) {
+        return 0;
+    }
+    return (long long)map->length;
+}
+
+char *nex_rt_map_key_at(long long handle, long long index) {
+    nex_map *map = nex_map_handle(handle);
+    if (map == NULL || index < 0) {
+        return nex_rt_json_empty_string();
+    }
+    long long current = 0;
+    for (size_t i = 0; i < map->capacity; i++) {
+        if (!map->entries[i].occupied) {
+            continue;
+        }
+        if (current == index) {
+            return nex_map_copy(map->entries[i].key);
+        }
+        current++;
+    }
+    return nex_rt_json_empty_string();
+}
+
+static void nex_map_grow(nex_map *map) {
+    size_t old_capacity = map->capacity;
+    nex_map_entry *old_entries = map->entries;
+    map->capacity *= 2;
+    map->entries = (nex_map_entry *)calloc(map->capacity, sizeof(nex_map_entry));
+    if (map->entries == NULL) {
+        map->entries = old_entries;
+        map->capacity = old_capacity;
+        return;
+    }
+    for (size_t i = 0; i < old_capacity; i++) {
+        if (!old_entries[i].occupied) {
+            continue;
+        }
+        unsigned long long hash = nex_map_hash(old_entries[i].key);
+        for (;;) {
+            size_t index = (size_t)(hash & (map->capacity - 1));
+            if (!map->entries[index].occupied) {
+                map->entries[index] = old_entries[i];
+                break;
+            }
+            hash++;
+        }
+    }
+    free(old_entries);
+}
