@@ -1320,3 +1320,19 @@ fn mutex_lock_and_unlock_work() {
     assert_eq!(code, 0, "stderr: {stderr}");
     assert_eq!(stdout, "true\nin-critical-section");
 }
+
+#[test]
+fn globals_are_shared_between_functions() {
+    let source = "var total = 0\n\nfn bump():\n    total = total + 1\n\nfn main():\n    bump()\n    bump()\n    println(total)\n";
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "2\n");
+}
+
+#[test]
+fn two_threads_incrementing_a_global_with_a_mutex_do_not_race() {
+    let source = "var counter = 0\nvar lock = 0\n\nfn bump():\n    var i = 0\n    while i < 1000:\n        mutex_lock(lock)\n        counter = counter + 1\n        mutex_unlock(lock)\n        i = i + 1\n\nfn main():\n    lock = mutex_new()\n    var a = thread_spawn(\"bump\")\n    var b = thread_spawn(\"bump\")\n    thread_join(a)\n    thread_join(b)\n    println(counter)\n";
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "2000\n");
+}

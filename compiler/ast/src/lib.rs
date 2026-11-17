@@ -9,11 +9,23 @@ use nex_diagnostics::Span;
 #[derive(Debug, Clone)]
 pub struct Program {
     pub modules: Vec<String>,
+    pub globals: Vec<GlobalDecl>,
     pub uses: Vec<UseDecl>,
     pub structs: Vec<StructDecl>,
     pub enums: Vec<EnumDecl>,
     pub consts: Vec<ConstDecl>,
     pub functions: Vec<FnDecl>,
+    pub span: Span,
+}
+
+/// A module-level `var` binding. Globals are shared by every function, so
+/// threads can use them (with a mutex) for shared state.
+#[derive(Debug, Clone)]
+pub struct GlobalDecl {
+    pub name: String,
+    pub mutable: bool,
+    pub ty: Option<TypeExpr>,
+    pub init: Expr,
     pub span: Span,
 }
 

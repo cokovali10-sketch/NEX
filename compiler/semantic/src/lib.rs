@@ -52,6 +52,8 @@ pub struct Analysis {
     /// Variant name to the interned name of the enum that declares it.
     pub variant_map: HashMap<String, &'static str>,
     pub consts: BTreeMap<String, Type>,
+    /// Module-level `var` bindings, available to every function and thread.
+    pub globals: BTreeMap<String, GlobalInfo>,
     pub const_exprs: BTreeMap<String, Expr>,
     pub functions: BTreeMap<String, FnSig>,
     pub expr_types: HashMap<Span, Type>,
@@ -109,10 +111,18 @@ impl Analysis {
 
 pub use types::Type as NexType;
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 struct VarInfo {
     ty: Type,
     mutable: bool,
+}
+
+/// A module-level `var`: its type plus the runtime slot the compiler assigns.
+#[derive(Debug, Clone)]
+pub struct GlobalInfo {
+    pub ty: Type,
+    pub mutable: bool,
+    pub slot: i64,
 }
 
 struct Checker<'a> {
@@ -141,6 +151,7 @@ impl<'a> Checker<'a> {
                 externs: std::collections::HashSet::new(),
                 variant_map: HashMap::new(),
                 consts: BTreeMap::new(),
+                globals: BTreeMap::new(),
                 const_exprs: BTreeMap::new(),
                 functions: BTreeMap::new(),
                 expr_types: HashMap::new(),
@@ -158,11 +169,51 @@ impl<'a> Checker<'a> {
         checker.collect_structs();
         checker.collect_enums();
         checker.collect_consts();
+        checker.collect_globals();
         checker.collect_functions();
         checker.check_uses();
         checker.check_main();
         checker.check_functions();
         checker.analysis
+    }
+
+    /// Registers module-level `var` bindings and type-checks their initialisers.
+    fn collect_globals(&mut self) {
+        for (slot, global) in self.program.globals.iter().enumerate() {
+            let declared = global
+                .ty
+                .as_ref()
+                .map(|annotation| self.resolve_type(annotation));
+            let inferred = self.infer(&global.init);
+            let ty = match declared {
+                Some(expected) => {
+                    if expected == Type::Error || inferred == Type::Error {
+                        Type::Error
+                    } else {
+                        self.check_expected(&global.init, expected);
+                        expected
+                    }
+                }
+                None => inferred,
+            };
+            if !global.mutable {
+                self.error(
+                    "NXS007",
+                    format!("module-level `{}` must be declared with `var`", global.name),
+                    global.span,
+                );
+            }
+            if ty != Type::Error {
+                self.analysis.globals.insert(
+                    global.name.clone(),
+                    GlobalInfo {
+                        ty,
+                        mutable: true,
+                        slot: slot as i64,
+                    },
+                );
+            }
+        }
     }
 
     fn collect_functions(&mut self) {
@@ -3164,7 +3215,12 @@ impl<'a> Checker<'a> {
                 return Some(var.clone());
             }
         }
-        None
+        // Globals live outside every scope: functions and spawned threads share
+        // them, which is why `mutable` matters here.
+        self.analysis.globals.get(name).map(|info| VarInfo {
+            ty: info.ty,
+            mutable: info.mutable,
+        })
     }
 
     fn block_returns(&self, block: &nex_ast::Block) -> bool {

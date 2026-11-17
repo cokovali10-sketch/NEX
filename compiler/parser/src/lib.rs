@@ -5,8 +5,8 @@
 //! the compiler report more than one independent error per file.
 
 use nex_ast::{
-    BinOp, Block, ConstDecl, EnumDecl, Expr, ExprKind, FieldDecl, FnDecl, MatchArm, Param, Program,
-    Stmt, StmtKind, StructDecl, TypeExpr, UnaryOp, UseDecl, VariantDecl,
+    BinOp, Block, ConstDecl, EnumDecl, Expr, ExprKind, FieldDecl, FnDecl, GlobalDecl, MatchArm,
+    Param, Program, Stmt, StmtKind, StructDecl, TypeExpr, UnaryOp, UseDecl, VariantDecl,
 };
 use nex_diagnostics::{Diagnostic, Span};
 use nex_lexer::{Token, TokenKind};
@@ -43,6 +43,7 @@ impl<'a> Parser<'a> {
         let mut structs = Vec::new();
         let mut enums = Vec::new();
         let mut consts = Vec::new();
+        let mut globals: Vec<GlobalDecl> = Vec::new();
         let mut functions = Vec::new();
 
         while !self.check(&TokenKind::Eof) {
@@ -52,7 +53,12 @@ impl<'a> Parser<'a> {
 
             let is_public = self.eat(&TokenKind::Pub);
 
-            if self.check(&TokenKind::Struct) {
+            if self.check(&TokenKind::Var) || self.check(&TokenKind::Let) {
+                match self.parse_global() {
+                    Some(global) => globals.push(global),
+                    None => self.synchronize_item(),
+                }
+            } else if self.check(&TokenKind::Struct) {
                 if let Some(mut definition) = self.parse_struct() {
                     definition.public = is_public;
                     structs.push(definition);
@@ -128,6 +134,7 @@ impl<'a> Parser<'a> {
         ParseResult {
             program: Program {
                 modules,
+                globals,
                 uses,
                 structs,
                 enums,
@@ -800,6 +807,33 @@ impl<'a> Parser<'a> {
             }
             _ => Some(self.parse_expression_or_assignment()),
         }
+    }
+
+    /// Parses a module-level `var name: T = value` declaration.
+    fn parse_global(&mut self) -> Option<GlobalDecl> {
+        let keyword = self.advance();
+        let mutable = keyword.kind == TokenKind::Var;
+        let start = keyword.span;
+        let (name, _name_span) = self.expect_ident("after binding keyword")?;
+        let ty = if self.eat(&TokenKind::Colon) {
+            Some(self.parse_type())
+        } else {
+            None
+        };
+        if !self.expect(&TokenKind::Eq, "in global declaration") {
+            self.recover_statement();
+            return None;
+        }
+        let init = self.parse_expr();
+        let span = start.merge(init.span);
+        self.expect_line_end();
+        Some(GlobalDecl {
+            name,
+            mutable,
+            ty,
+            init,
+            span,
+        })
     }
 
     fn parse_let(&mut self) -> Stmt {

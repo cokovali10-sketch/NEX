@@ -213,6 +213,7 @@ pub enum Inst {
         index: Operand,
         elem_ty: IrType,
     },
+
     /// Address of a function symbol as an integer:
     /// `ptrtoint ptr @name to i64`. Used by `thread_spawn`.
     FuncPtr {

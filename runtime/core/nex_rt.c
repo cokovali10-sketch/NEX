@@ -2040,3 +2040,66 @@ void nex_rt_mutex_unlock(long long handle) {
     }
 }
 #endif
+
+/* ------------------------------------------------------------------------- */
+/* Global slots. NEX has module-level `var` bindings; the compiler assigns    */
+/* each one a slot index and accesses it through these typed accessors.        */
+/* ------------------------------------------------------------------------- */
+
+#define NEX_MAX_GLOBALS 1024
+
+static long long nex_globals_i64[NEX_MAX_GLOBALS];
+static double nex_globals_f64[NEX_MAX_GLOBALS];
+static char *nex_globals_str[NEX_MAX_GLOBALS];
+
+void nex_rt_global_set_i64(long long slot, long long value) {
+    if (slot >= 0 && slot < NEX_MAX_GLOBALS) {
+        nex_globals_i64[slot] = value;
+    }
+}
+
+long long nex_rt_global_get_i64(long long slot) {
+    if (slot >= 0 && slot < NEX_MAX_GLOBALS) {
+        return nex_globals_i64[slot];
+    }
+    return 0;
+}
+
+void nex_rt_global_set_f64(long long slot, double value) {
+    if (slot >= 0 && slot < NEX_MAX_GLOBALS) {
+        nex_globals_f64[slot] = value;
+    }
+}
+
+double nex_rt_global_get_f64(long long slot) {
+    if (slot >= 0 && slot < NEX_MAX_GLOBALS) {
+        return nex_globals_f64[slot];
+    }
+    return 0;
+}
+
+void nex_rt_global_set_str(long long slot, const char *value) {
+    if (slot < 0 || slot >= NEX_MAX_GLOBALS) {
+        return;
+    }
+    free(nex_globals_str[slot]);
+    size_t length = strlen(value);
+    char *copy = (char *)malloc(length + 1);
+    if (copy != NULL) {
+        memcpy(copy, value, length + 1);
+        nex_globals_str[slot] = copy;
+    }
+}
+
+char *nex_rt_global_get_str(long long slot) {
+    static char empty[1] = {0};
+    if (slot >= 0 && slot < NEX_MAX_GLOBALS && nex_globals_str[slot] != NULL) {
+        size_t length = strlen(nex_globals_str[slot]);
+        char *copy = (char *)malloc(length + 1);
+        if (copy != NULL) {
+            memcpy(copy, nex_globals_str[slot], length + 1);
+            return copy;
+        }
+    }
+    return empty;
+}

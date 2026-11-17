@@ -57,6 +57,8 @@
 
 - Mutexes: `mutex_new`, `mutex_lock`, `mutex_unlock`.
 
+- Module-level `var` globals, shared by functions and threads.
+
 ### Fixed
 
 - The lexer now skips a leading UTF-8 BOM instead of reporting `unexpected character`.

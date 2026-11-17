@@ -75,3 +75,29 @@ fn main():
 `[T; N]` (fixed size) is a different type and keeps its length in the type.
 Assigning one name to another copies the header, so both names see the same
 elements; see `docs/memory-model.md`.
+
+## Global variables
+
+A `var` at the top level is a module-level binding. Globals are shared by every
+function and every thread, which is what makes shared state possible:
+
+```nex
+var counter = 0
+var lock = 0
+
+fn bump():
+    mutex_lock(lock)
+    counter = counter + 1
+    mutex_unlock(lock)
+
+fn main():
+    lock = mutex_new()
+    var a = thread_spawn("bump")
+    var b = thread_spawn("bump")
+    thread_join(a)
+    thread_join(b)
+    println(counter)   // 2000
+```
+
+Globals have no type annotation requirement: the type is inferred from the
+initialiser. They must be declared with `var`, never `let`.

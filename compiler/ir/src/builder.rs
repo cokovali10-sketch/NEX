@@ -293,6 +293,11 @@ fn lower_statement(
             Ok(())
         }
         StmtKind::Assign { name, value } => {
+            if let Some(global) = analysis.globals.get(name) {
+                let new_value = lower_expr(builder, value, scopes, storage, analysis, global.ty)?;
+                lower_global_set(builder, global.slot, global.ty, new_value);
+                return Ok(());
+            }
             let slot = lookup_slot(scopes, name)
                 .ok_or_else(|| format!("unknown variable `{name}` during code generation"))?;
             match (slot.ptr, slot.ty) {
@@ -1736,6 +1741,65 @@ fn operand_value_id(builder: &mut FunctionBuilder, operand: Operand) -> Result<V
     }
 }
 
+/// Loads a module-level global from its runtime slot.
+fn lower_global_get(builder: &mut FunctionBuilder, slot: i64, ty: Type) -> Result<Operand, String> {
+    let slot_operand = Operand::Const(Const::Int(slot));
+    let dst = builder.new_value();
+    let (name, ret) = match ty {
+        Type::F64 => ("nex_rt_global_get_f64", IrType::F64),
+        Type::String => ("nex_rt_global_get_str", IrType::String),
+        Type::Bool => ("nex_rt_global_get_i64", IrType::I64),
+        _ => ("nex_rt_global_get_i64", IrType::I64),
+    };
+    builder.emit(Inst::Call {
+        dst: Some(dst),
+        name: name.to_string(),
+        args: vec![slot_operand],
+        ret,
+    });
+    if ty == Type::Bool {
+        let narrow = builder.new_value();
+        builder.emit(Inst::Cast {
+            dst: narrow,
+            kind: CastKind::Truncate,
+            from: IrType::I64,
+            to: IrType::Bool,
+            operand: Operand::Value(dst),
+        });
+        return Ok(Operand::Value(narrow));
+    }
+    Ok(Operand::Value(dst))
+}
+
+/// Stores a module-level global into its runtime slot.
+fn lower_global_set(builder: &mut FunctionBuilder, slot: i64, ty: Type, value: Operand) {
+    let slot_operand = Operand::Const(Const::Int(slot));
+    let (name, cast) = match ty {
+        Type::F64 => ("nex_rt_global_set_f64", None),
+        Type::String => ("nex_rt_global_set_str", None),
+        _ => ("nex_rt_global_set_i64", Some(true)),
+    };
+    let value = if cast == Some(true) && ty == Type::Bool {
+        let wide = builder.new_value();
+        builder.emit(Inst::Cast {
+            dst: wide,
+            kind: CastKind::ZeroExtend,
+            from: IrType::Bool,
+            to: IrType::I64,
+            operand: value,
+        });
+        Operand::Value(wide)
+    } else {
+        value
+    };
+    builder.emit(Inst::Call {
+        dst: None,
+        name: name.to_string(),
+        args: vec![slot_operand, value],
+        ret: IrType::Void,
+    });
+}
+
 fn lower_expr(
     builder: &mut FunctionBuilder,
     expr: &Expr,
@@ -1764,6 +1828,9 @@ fn lower_expr(
                 .unwrap_or_else(|| name.clone());
             if let Some(init) = analysis.const_exprs.get(&resolved) {
                 return lower_expr(builder, init, scopes, storage, analysis, Type::Error);
+            }
+            if let Some(global) = analysis.globals.get(name) {
+                return lower_global_get(builder, global.slot, global.ty);
             }
             let slot = lookup_slot(scopes, name)
                 .ok_or_else(|| format!("unknown variable `{name}` during code generation"))?;
