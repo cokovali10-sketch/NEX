@@ -939,3 +939,48 @@ char *nex_rt_http_date(void) {
     memcpy(result, buffer, length + 1);
     return result;
 }
+
+long long nex_rt_str_index_of_from(const char *haystack, const char *needle, long long start) {
+    if (haystack == NULL || needle == NULL) {
+        return -1;
+    }
+    size_t haystack_length = strlen(haystack);
+    if (start < 0) {
+        return -1;
+    }
+    if ((size_t)start >= haystack_length) {
+        return (*needle == '\0') ? (long long)haystack_length : -1;
+    }
+    const char *found = strstr(haystack + start, needle);
+    if (found == NULL) {
+        return -1;
+    }
+    return (long long)(found - haystack);
+}
+
+char *nex_rt_char_at(const char *value, long long index) {
+    if (value == NULL || index < 0) {
+        return NULL;
+    }
+    size_t length = strlen(value);
+    if ((size_t)index >= length) {
+        return NULL;
+    }
+    char buffer[2];
+    buffer[0] = value[index];
+    buffer[1] = '\0';
+    char *result = (char *)malloc(2);
+    if (result == NULL) {
+        return NULL;
+    }
+    result[0] = buffer[0];
+    result[1] = '\0';
+    return result;
+}
+
+long long nex_rt_char_code(const char *value) {
+    if (value == NULL || value[0] == '\0') {
+        return -1;
+    }
+    return (long long)(unsigned char)value[0];
+}

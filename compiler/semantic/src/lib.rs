@@ -1942,6 +1942,80 @@ impl<'a> Checker<'a> {
             return value_ty;
         }
 
+        if callee == "str_index_of_from" {
+            if args.len() != 3 {
+                self.error(
+                    "NXS004",
+                    format!(
+                        "`str_index_of_from` expects 3 arguments, found {}",
+                        args.len()
+                    ),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let value_ty = self.infer(&args[0]);
+            let needle_ty = self.infer(&args[1]);
+            let start_ty = self.infer(&args[2]);
+            if (value_ty != Type::String || needle_ty != Type::String || start_ty != Type::I64)
+                && (value_ty != Type::Error && needle_ty != Type::Error && start_ty != Type::Error)
+            {
+                self.error(
+                    "NXS004",
+                    "`str_index_of_from` expects `(string, string, i64)`",
+                    span,
+                );
+                return Type::Error;
+            }
+            return Type::I64;
+        }
+
+        if callee == "char_at" || callee == "char_code" {
+            if callee == "char_at" && args.len() != 2 {
+                self.error(
+                    "NXS004",
+                    format!("`char_at` expects 2 arguments, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            if callee == "char_code" && args.len() != 1 {
+                self.error(
+                    "NXS004",
+                    format!("`char_code` expects 1 argument, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let value_ty = self.infer(&args[0]);
+            if value_ty != Type::String && value_ty != Type::Error {
+                self.error(
+                    "NXS004",
+                    format!("`{callee}` expects a `string`, found `{value_ty}`"),
+                    span,
+                );
+                return Type::Error;
+            }
+            if callee == "char_at" {
+                let index_ty = self.infer(&args[1]);
+                if index_ty != Type::I64 && index_ty != Type::Error {
+                    self.error("NXS004", "`char_at` expects an `i64` index", span);
+                    return Type::Error;
+                }
+                return Type::String;
+            }
+            return Type::I64;
+        }
+
         if callee == "unix_time" || callee == "now_ms" || callee == "http_date" {
             if !args.is_empty() {
                 self.error("NXS004", format!("`{callee}` takes no arguments"), span);

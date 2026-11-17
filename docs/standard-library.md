@@ -37,6 +37,9 @@ These are global functions, not methods, so no imports are required.
 | `str_ends_with` | `(value: string, suffix: string) -> bool` | Suffix test. |
 | `str_repeat` | `(value: string, count: i64) -> string` | Repeats `count` times; `0` or less gives an empty string. |
 | `str_replace` | `(value: string, from: string, to: string) -> string` | Replaces every occurrence; an empty `from` returns a copy. |
+| `str_index_of_from` | `(value: string, needle: string, start: i64) -> i64` | Index of the first match at or after `start`, or `-1`. Use it with `str_substring` to split. |
+| `char_at` | `(value: string, index: i64) -> string` | One-character string, or empty when the index is out of range. |
+| `char_code` | `(value: string) -> i64` | Code of the first character, `-1` for an empty string. |
 | `to_string` | `(value: i64 or f64 or bool) -> string` | Decimal representation, `%g` for floats, `true`/`false`. |
 | `parse_i64` | `(value: string) -> i64` | Decimal parse; returns `0` when the text is not a number. |
 | `str_reverse` | `(value: string) -> string` | Byte-wise reverse. |

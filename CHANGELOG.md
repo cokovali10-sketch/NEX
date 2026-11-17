@@ -40,6 +40,8 @@
 - Time helpers: `unix_time`, `now_ms` (monotonic), `sleep_ms`, and `http_date`
   (RFC 7231 IMF-fixdate).
 
+- `str_index_of_from`, `char_at`, and `char_code` for parsing and splitting.
+
 ### Fixed
 
 - The lexer now skips a leading UTF-8 BOM instead of reporting `unexpected character`.

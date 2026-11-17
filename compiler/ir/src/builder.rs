@@ -1995,6 +1995,33 @@ fn lower_expr(
                 return Ok(Operand::Value(dst));
             }
 
+            if callee == "str_index_of_from" || callee == "char_at" || callee == "char_code" {
+                let mut call_args = Vec::new();
+                for arg in args {
+                    call_args.push(lower_expr(
+                        builder,
+                        arg,
+                        scopes,
+                        storage,
+                        analysis,
+                        Type::Error,
+                    )?);
+                }
+                let (name, ret) = match callee {
+                    "str_index_of_from" => ("nex_rt_str_index_of_from", IrType::I64),
+                    "char_at" => ("nex_rt_char_at", IrType::String),
+                    _ => ("nex_rt_char_code", IrType::I64),
+                };
+                let dst = builder.new_value();
+                builder.emit(Inst::Call {
+                    dst: Some(dst),
+                    name: name.to_string(),
+                    args: call_args,
+                    ret,
+                });
+                return Ok(Operand::Value(dst));
+            }
+
             if callee == "unix_time"
                 || callee == "now_ms"
                 || callee == "http_date"

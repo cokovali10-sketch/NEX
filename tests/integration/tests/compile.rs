@@ -1191,3 +1191,19 @@ fn http_date_is_an_imf_fixdate() {
     assert!(rest.ends_with(" GMT"), "{line}");
     assert_eq!(rest.len(), 24, "{line}");
 }
+
+#[test]
+fn splitting_a_string_with_index_of_from() {
+    let source = "fn main():\n    var line = \"host=example.com,port=8080\"\n    var comma = str_index_of_from(line, \",\", 0)\n    println(comma)\n    println(str_substring(line, 0, comma))\n    println(str_substring(line, comma + 1, len(line)))\n";
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "16\nhost=example.com\nport=8080\n");
+}
+
+#[test]
+fn char_at_and_char_code() {
+    let source = "fn main():\n    println(char_at(\"abc\", 1))\n    println(char_code(\"A\"))\n    println(char_at(\"abc\", 9))\n";
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "b\n65\n\n");
+}
