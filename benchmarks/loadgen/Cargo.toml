@@ -1,0 +1,15 @@
+﻿[package]
+name = "nex-bench-loadgen"
+version = "0.1.0"
+edition = "2021"
+
+# Standalone crate: run `cargo build --release` from this directory, or use the
+# [workspace] key below when it sits inside the NEX workspace.
+[workspace]
+
+[dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
+reqwest = { version = "0.12" }
+
+[profile.release]
+opt-level = 3
