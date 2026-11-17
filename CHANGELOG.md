@@ -63,6 +63,8 @@
 
 - `thread_spawn(name, arg)` passes a single `i64` argument to the worker.
 
+- Thread pool: `pool_new`, `pool_submit`, `pool_workers` (bounded queue, fixed workers).
+
 ### Fixed
 
 - The lexer now skips a leading UTF-8 BOM instead of reporting `unexpected character`.

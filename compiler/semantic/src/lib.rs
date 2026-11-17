@@ -2804,6 +2804,78 @@ impl<'a> Checker<'a> {
             return Type::String;
         }
 
+        if callee == "pool_new" {
+            if args.len() != 2 {
+                self.error(
+                    "NXS004",
+                    format!("`pool_new` expects 2 arguments, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let workers = self.infer(&args[0]);
+            let capacity = self.infer(&args[1]);
+            if (workers != Type::I64 || capacity != Type::I64)
+                && (workers != Type::Error && capacity != Type::Error)
+            {
+                self.error(
+                    "NXS004",
+                    "`pool_new` expects `(workers: i64, capacity: i64)`",
+                    span,
+                );
+                return Type::Error;
+            }
+            return Type::I64;
+        }
+
+        if callee == "pool_submit" {
+            if args.len() != 3 {
+                self.error(
+                    "NXS004",
+                    format!("`pool_submit` expects 3 arguments, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let pool_ty = self.infer(&args[0]);
+            let name_ty = self.infer(&args[1]);
+            let arg_ty = self.infer(&args[2]);
+            if (pool_ty != Type::I64 || name_ty != Type::String || arg_ty != Type::I64)
+                && (pool_ty != Type::Error && name_ty != Type::Error && arg_ty != Type::Error)
+            {
+                self.error("NXS004", "`pool_submit` expects `(i64, string, i64)`", span);
+                return Type::Error;
+            }
+            if let ExprKind::Str(name) = &args[1].kind {
+                if !self.analysis.functions.contains_key(name) {
+                    self.error("NXS004", format!("unknown function `{name}`"), args[1].span);
+                    return Type::Error;
+                }
+            }
+            return Type::Bool;
+        }
+
+        if callee == "pool_workers" {
+            if args.len() != 1 {
+                self.error(
+                    "NXS004",
+                    format!("`pool_workers` expects 1 argument, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            return Type::I64;
+        }
+
         if callee == "push" {
             if args.len() != 2 {
                 self.error(

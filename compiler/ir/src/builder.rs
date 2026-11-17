@@ -2252,6 +2252,59 @@ fn lower_expr(
                 return Ok(Operand::Value(dst));
             }
 
+            if callee == "pool_new" {
+                let mut call_args = Vec::new();
+                for arg in args {
+                    call_args.push(lower_expr(
+                        builder,
+                        arg,
+                        scopes,
+                        storage,
+                        analysis,
+                        Type::Error,
+                    )?);
+                }
+                let dst = builder.new_value();
+                builder.emit(Inst::Call {
+                    dst: Some(dst),
+                    name: "nex_rt_pool_new".to_string(),
+                    args: call_args,
+                    ret: IrType::I64,
+                });
+                return Ok(Operand::Value(dst));
+            }
+
+            if callee == "pool_submit" {
+                let pool = lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
+                let name = match &args[1].kind {
+                    ExprKind::Str(name) => name.clone(),
+                    _ => return Err("`pool_submit` expects a function name literal".to_string()),
+                };
+                let argument =
+                    lower_expr(builder, &args[2], scopes, storage, analysis, Type::Error)?;
+                let entry = builder.new_value();
+                builder.emit(Inst::FuncPtr {
+                    dst: entry,
+                    name: format!("nex.fn.{name}"),
+                });
+                let raw = builder.new_value();
+                builder.emit(Inst::Call {
+                    dst: Some(raw),
+                    name: "nex_rt_pool_submit".to_string(),
+                    args: vec![pool, Operand::Value(entry), argument],
+                    ret: IrType::I32,
+                });
+                let dst = builder.new_value();
+                builder.emit(Inst::Cast {
+                    dst,
+                    kind: CastKind::Truncate,
+                    from: IrType::I32,
+                    to: IrType::Bool,
+                    operand: Operand::Value(raw),
+                });
+                return Ok(Operand::Value(dst));
+            }
+
             if callee.starts_with("map_") {
                 let mut call_args = Vec::new();
                 for arg in args {

@@ -2370,3 +2370,184 @@ char *nex_rt_router_param(long long handle, const char *name) {
     }
     return nex_rt_json_empty_string();
 }
+
+/* ------------------------------------------------------------------------- */
+/* Thread pool: fixed worker threads pulling {entry, argument} tasks.          */
+/* Used instead of thread-per-connection so a server does not create a thread  */
+/* for every socket.                                                          */
+/* ------------------------------------------------------------------------- */
+
+typedef struct nex_task {
+    void (*entry)(long long);
+    long long argument;
+} nex_task;
+
+typedef struct nex_pool {
+    nex_task *tasks;
+    size_t capacity;
+    size_t head;
+    size_t tail;
+    size_t count;
+    size_t workers;
+    int shutdown;
+#ifdef _WIN32
+    CRITICAL_SECTION mutex;
+    CONDITION_VARIABLE not_empty;
+#else
+    pthread_mutex_t mutex;
+    pthread_cond_t not_empty;
+#endif
+} nex_pool;
+
+#ifdef _WIN32
+
+static DWORD WINAPI nex_pool_worker(LPVOID parameter) {
+    nex_pool *pool = (nex_pool *)parameter;
+    for (;;) {
+        EnterCriticalSection(&pool->mutex);
+        while (pool->count == 0 && !pool->shutdown) {
+            SleepConditionVariableCS(&pool->not_empty, &pool->mutex, INFINITE);
+        }
+        if (pool->shutdown && pool->count == 0) {
+            LeaveCriticalSection(&pool->mutex);
+            return 0;
+        }
+        nex_task task = pool->tasks[pool->head];
+        pool->head = (pool->head + 1) % pool->capacity;
+        pool->count--;
+        LeaveCriticalSection(&pool->mutex);
+        task.entry(task.argument);
+    }
+}
+
+long long nex_rt_pool_new(long long workers, long long capacity) {
+    if (workers <= 0 || capacity <= 0) {
+        return 0;
+    }
+    nex_pool *pool = (nex_pool *)calloc(1, sizeof(nex_pool));
+    if (pool == NULL) {
+        return 0;
+    }
+    pool->capacity = (size_t)capacity;
+    pool->tasks = (nex_task *)calloc(pool->capacity, sizeof(nex_task));
+    if (pool->tasks == NULL) {
+        free(pool);
+        return 0;
+    }
+    InitializeCriticalSection(&pool->mutex);
+    InitializeConditionVariable(&pool->not_empty);
+    for (long long i = 0; i < workers; i++) {
+        HANDLE thread = CreateThread(NULL, 0, nex_pool_worker, pool, 0, NULL);
+        if (thread == NULL) {
+            break;
+        }
+        pool->workers++;
+        CloseHandle(thread);
+    }
+    if (pool->workers == 0) {
+        free(pool->tasks);
+        free(pool);
+        return 0;
+    }
+    return (long long)pool;
+}
+
+int nex_rt_pool_submit(long long handle, long long entry, long long argument) {
+    if (handle == 0 || entry == 0) {
+        return 0;
+    }
+    nex_pool *pool = (nex_pool *)handle;
+    EnterCriticalSection(&pool->mutex);
+    if (pool->count == pool->capacity) {
+        LeaveCriticalSection(&pool->mutex);
+        return 0;
+    }
+    pool->tasks[pool->tail].entry = (void (*)(long long))entry;
+    pool->tasks[pool->tail].argument = argument;
+    pool->tail = (pool->tail + 1) % pool->capacity;
+    pool->count++;
+    WakeConditionVariable(&pool->not_empty);
+    LeaveCriticalSection(&pool->mutex);
+    return 1;
+}
+
+#else
+
+static void *nex_pool_worker(void *parameter) {
+    nex_pool *pool = (nex_pool *)parameter;
+    for (;;) {
+        pthread_mutex_lock(&pool->mutex);
+        while (pool->count == 0 && !pool->shutdown) {
+            pthread_cond_wait(&pool->not_empty, &pool->mutex);
+        }
+        if (pool->shutdown && pool->count == 0) {
+            pthread_mutex_unlock(&pool->mutex);
+            return NULL;
+        }
+        nex_task task = pool->tasks[pool->head];
+        pool->head = (pool->head + 1) % pool->capacity;
+        pool->count--;
+        pthread_mutex_unlock(&pool->mutex);
+        task.entry(task.argument);
+    }
+}
+
+long long nex_rt_pool_new(long long workers, long long capacity) {
+    if (workers <= 0 || capacity <= 0) {
+        return 0;
+    }
+    nex_pool *pool = (nex_pool *)calloc(1, sizeof(nex_pool));
+    if (pool == NULL) {
+        return 0;
+    }
+    pool->capacity = (size_t)capacity;
+    pool->tasks = (nex_task *)calloc(pool->capacity, sizeof(nex_task));
+    if (pool->tasks == NULL) {
+        free(pool);
+        return 0;
+    }
+    pthread_mutex_init(&pool->mutex, NULL);
+    pthread_cond_init(&pool->not_empty, NULL);
+    for (long long i = 0; i < workers; i++) {
+        pthread_t thread;
+        if (pthread_create(&thread, NULL, nex_pool_worker, pool) != 0) {
+            break;
+        }
+        pthread_detach(thread);
+        pool->workers++;
+    }
+    if (pool->workers == 0) {
+        free(pool->tasks);
+        free(pool);
+        return 0;
+    }
+    return (long long)pool;
+}
+
+int nex_rt_pool_submit(long long handle, long long entry, long long argument) {
+    if (handle == 0 || entry == 0) {
+        return 0;
+    }
+    nex_pool *pool = (nex_pool *)handle;
+    pthread_mutex_lock(&pool->mutex);
+    if (pool->count == pool->capacity) {
+        pthread_mutex_unlock(&pool->mutex);
+        return 0;
+    }
+    pool->tasks[pool->tail].entry = (void (*)(long long))entry;
+    pool->tasks[pool->tail].argument = argument;
+    pool->tail = (pool->tail + 1) % pool->capacity;
+    pool->count++;
+    pthread_cond_signal(&pool->not_empty);
+    pthread_mutex_unlock(&pool->mutex);
+    return 1;
+}
+
+#endif
+
+long long nex_rt_pool_workers(long long handle) {
+    if (handle == 0) {
+        return 0;
+    }
+    return (long long)((nex_pool *)handle)->workers;
+}

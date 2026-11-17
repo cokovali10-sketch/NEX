@@ -258,6 +258,28 @@ fn main():
         println(router_param(r, "id"))   // 42
 ```
 
+### Thread pool
+
+A fixed set of worker threads with a bounded queue. Use it instead of one thread
+per connection.
+
+| Function | Signature | Notes |
+|---|---|---|
+| `pool_new` | `(workers: i64, capacity: i64) -> i64` | Handle, or `0` on failure. |
+| `pool_submit` | `(handle: i64, "name": string, arg: i64) -> bool` | `false` when the queue is full. |
+| `pool_workers` | `(handle: i64) -> i64` | Number of worker threads. |
+
+```nex
+var pool = pool_new(8, 256)
+
+fn serve(client: i64):
+    ...
+
+while true:
+    var client = tcp_accept(server)
+    pool_submit(pool, "serve", client)
+```
+
 ### Numeric
 
 | Function | Signature | Notes |

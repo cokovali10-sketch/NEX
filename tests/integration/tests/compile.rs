@@ -1368,3 +1368,14 @@ fn threads_with_arguments_share_a_mutex_protected_counter() {
     assert_eq!(code, 0, "stderr: {stderr}");
     assert_eq!(stdout, "2000\n");
 }
+
+#[test]
+fn thread_pool_runs_every_submitted_task() {
+    let source = "var lock = 0\nvar total = 0\n\nfn worker(times: i64):\n    var i = 0\n    while i < times:\n        mutex_lock(lock)\n        total = total + 1\n        mutex_unlock(lock)\n        i = i + 1\n\nfn main():\n    lock = mutex_new()\n    var pool = pool_new(4, 128)\n    println(pool > 0)\n    var i = 0\n    while i < 8:\n        println(pool_submit(pool, \"worker\", 1000))\n        i = i + 1\n    sleep_ms(300)\n    println(total)\n";
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(
+        stdout,
+        "true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\n8000\n"
+    );
+}
