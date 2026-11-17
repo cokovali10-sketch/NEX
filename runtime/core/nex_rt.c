@@ -1903,55 +1903,112 @@ static void nex_map_grow(nex_map *map) {
 
 /* ------------------------------------------------------------------------- */
 /* Threads. NEX passes a function symbol as an integer handle; the runtime     */
-/* trampoline calls it. Arguments are not supported yet.                      */
+/* trampoline calls it. One optional i64 argument is supported.                */
 /* ------------------------------------------------------------------------- */
 
+long long nex_rt_thread_spawn_arg(long long entry, long long argument);
+
+typedef struct nex_thread_state {
 #ifdef _WIN32
-static DWORD WINAPI nex_thread_trampoline(LPVOID entry) {
-    ((void (*)(void))entry)();
+    HANDLE handle;
+#else
+    pthread_t thread;
+#endif
+    void (*entry)(void);
+    void (*entry_arg)(long long);
+    long long argument;
+    int done;
+} nex_thread_state;
+
+#ifdef _WIN32
+static DWORD WINAPI nex_thread_trampoline(LPVOID parameter) {
+    nex_thread_state *state = (nex_thread_state *)parameter;
+    if (state->entry != NULL) {
+        state->entry();
+    } else if (state->entry_arg != NULL) {
+        state->entry_arg(state->argument);
+    }
+    state->done = 1;
     return 0;
 }
 
+static long long nex_thread_start(nex_thread_state *state) {
+    state->handle = CreateThread(NULL, 0, nex_thread_trampoline, state, 0, NULL);
+    if (state->handle == NULL) {
+        free(state);
+        return 0;
+    }
+    return (long long)state;
+}
+
 long long nex_rt_thread_spawn(long long entry) {
+    return nex_rt_thread_spawn_arg(entry, 0);
+}
+
+long long nex_rt_thread_spawn_arg(long long entry, long long argument) {
     if (entry == 0) {
         return 0;
     }
-    HANDLE handle = CreateThread(NULL, 0, nex_thread_trampoline, (LPVOID)entry, 0, NULL);
-    if (handle == NULL) {
+    nex_thread_state *state = (nex_thread_state *)calloc(1, sizeof(nex_thread_state));
+    if (state == NULL) {
         return 0;
     }
-    return (long long)handle;
+    state->entry = (void (*)(void))entry;
+    return nex_thread_start(state);
+}
+
+long long nex_rt_thread_spawn_with_arg(long long entry, long long argument) {
+    if (entry == 0) {
+        return 0;
+    }
+    nex_thread_state *state = (nex_thread_state *)calloc(1, sizeof(nex_thread_state));
+    if (state == NULL) {
+        return 0;
+    }
+    state->entry_arg = (void (*)(long long))entry;
+    state->argument = argument;
+    return nex_thread_start(state);
 }
 
 long long nex_rt_thread_join(long long handle) {
     if (handle == 0) {
         return 0;
     }
-    WaitForSingleObject((HANDLE)handle, INFINITE);
-    CloseHandle((HANDLE)handle);
-    return 1;
+    nex_thread_state *state = (nex_thread_state *)handle;
+    WaitForSingleObject(state->handle, INFINITE);
+    CloseHandle(state->handle);
+    int done = state->done;
+    free(state);
+    return done;
 }
 
 long long nex_rt_thread_running(long long handle) {
     if (handle == 0) {
         return 0;
     }
-    return WaitForSingleObject((HANDLE)handle, 0) == WAIT_TIMEOUT;
+    nex_thread_state *state = (nex_thread_state *)handle;
+    return WaitForSingleObject(state->handle, 0) == WAIT_TIMEOUT;
 }
 #else
 #include <pthread.h>
 
-typedef struct nex_thread_state {
-    pthread_t thread;
-    void (*entry)(void);
-    int done;
-} nex_thread_state;
-
-static void *nex_thread_trampoline(void *argument) {
-    nex_thread_state *state = (nex_thread_state *)argument;
-    state->entry();
+static void *nex_thread_trampoline(void *parameter) {
+    nex_thread_state *state = (nex_thread_state *)parameter;
+    if (state->entry != NULL) {
+        state->entry();
+    } else if (state->entry_arg != NULL) {
+        state->entry_arg(state->argument);
+    }
     state->done = 1;
     return NULL;
+}
+
+static long long nex_thread_start(nex_thread_state *state) {
+    if (pthread_create(&state->thread, NULL, nex_thread_trampoline, state) != 0) {
+        free(state);
+        return 0;
+    }
+    return (long long)state;
 }
 
 long long nex_rt_thread_spawn(long long entry) {
@@ -1963,11 +2020,20 @@ long long nex_rt_thread_spawn(long long entry) {
         return 0;
     }
     state->entry = (void (*)(void))entry;
-    if (pthread_create(&state->thread, NULL, nex_thread_trampoline, state) != 0) {
-        free(state);
+    return nex_thread_start(state);
+}
+
+long long nex_rt_thread_spawn_arg(long long entry, long long argument) {
+    if (entry == 0) {
         return 0;
     }
-    return (long long)state;
+    nex_thread_state *state = (nex_thread_state *)calloc(1, sizeof(nex_thread_state));
+    if (state == NULL) {
+        return 0;
+    }
+    state->entry_arg = (void (*)(long long))entry;
+    state->argument = argument;
+    return nex_thread_start(state);
 }
 
 long long nex_rt_thread_join(long long handle) {
