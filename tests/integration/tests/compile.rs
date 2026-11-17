@@ -1336,3 +1336,19 @@ fn two_threads_incrementing_a_global_with_a_mutex_do_not_race() {
     assert_eq!(code, 0, "stderr: {stderr}");
     assert_eq!(stdout, "2000\n");
 }
+
+#[test]
+fn router_matches_paths_and_captures_params() {
+    let source = "fn main():\n    var r = router_new()\n    router_add(r, \"GET\", \"/\")\n    router_add(r, \"GET\", \"/user/:id\")\n    router_add(r, \"POST\", \"/user/:id\")\n    println(router_match(r, \"GET\", \"/\"))\n    println(router_match(r, \"GET\", \"/user/42\"))\n    println(router_param(r, \"id\"))\n    println(router_match(r, \"POST\", \"/user/7\"))\n    println(router_param(r, \"id\"))\n";
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "1\n2\n42\n3\n7\n");
+}
+
+#[test]
+fn router_reports_404_and_405() {
+    let source = "fn main():\n    var r = router_new()\n    router_add(r, \"GET\", \"/user/:id\")\n    println(router_match(r, \"GET\", \"/nope\"))\n    println(router_match(r, \"PUT\", \"/user/1\"))\n";
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "0\n-1\n");
+}

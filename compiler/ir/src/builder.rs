@@ -2208,6 +2208,34 @@ fn lower_expr(
                 return Ok(Operand::Value(dst));
             }
 
+            if callee.starts_with("router_") {
+                let mut call_args = Vec::new();
+                for arg in args {
+                    call_args.push(lower_expr(
+                        builder,
+                        arg,
+                        scopes,
+                        storage,
+                        analysis,
+                        Type::Error,
+                    )?);
+                }
+                let (name, ret) = match callee {
+                    "router_new" => ("nex_rt_router_new", IrType::I64),
+                    "router_add" => ("nex_rt_router_add", IrType::I64),
+                    "router_match" => ("nex_rt_router_match", IrType::I64),
+                    _ => ("nex_rt_router_param", IrType::String),
+                };
+                let dst = builder.new_value();
+                builder.emit(Inst::Call {
+                    dst: Some(dst),
+                    name: name.to_string(),
+                    args: call_args,
+                    ret,
+                });
+                return Ok(Operand::Value(dst));
+            }
+
             if callee.starts_with("map_") {
                 let mut call_args = Vec::new();
                 for arg in args {

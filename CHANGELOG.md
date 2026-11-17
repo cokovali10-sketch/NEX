@@ -59,6 +59,8 @@
 
 - Module-level `var` globals, shared by functions and threads.
 
+- Router: `router_new`, `router_add`, `router_match`, `router_param` with `:param` capture and 404/405 results.
+
 ### Fixed
 
 - The lexer now skips a leading UTF-8 BOM instead of reporting `unexpected character`.

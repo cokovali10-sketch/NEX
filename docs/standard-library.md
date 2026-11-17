@@ -236,6 +236,28 @@ fn bump():
         mutex_unlock(lock)
 ```
 
+### Router
+
+Matches a method and a path pattern like `/user/:id`. Params are captured and
+read back by name.
+
+| Function | Signature | Notes |
+|---|---|---|
+| `router_new` | `() -> i64` | New empty router. |
+| `router_add` | `(handle: i64, method: string, pattern: string) -> i64` | Route id (1-based). |
+| `router_match` | `(handle: i64, method: string, path: string) -> i64` | `0` = no route (404), `-1` = path exists under another method (405), otherwise the route id. |
+| `router_param` | `(handle: i64, name: string) -> string` | Captured `:name`, or empty. |
+
+```nex
+var r = router_new()
+router_add(r, "GET", "/user/:id")
+
+fn main():
+    var id = router_match(r, "GET", "/user/42")
+    if id > 0:
+        println(router_param(r, "id"))   // 42
+```
+
 ### Numeric
 
 | Function | Signature | Notes |

@@ -2103,3 +2103,204 @@ char *nex_rt_global_get_str(long long slot) {
     }
     return empty;
 }
+
+/* ------------------------------------------------------------------------- */
+/* Router: method + pattern matching with `:param` capture.                    */
+/* nex_rt_router_match returns 0 for no match, -1 for a path that exists under */
+/* a different method (405), and a 1-based route id otherwise.                 */
+/* ------------------------------------------------------------------------- */
+
+#define NEX_ROUTER_MAX_PARAMS 16
+
+typedef struct {
+    char *method;
+    char *pattern;
+} nex_route;
+
+typedef struct {
+    nex_route *routes;
+    size_t length;
+    size_t capacity;
+    char *params[NEX_ROUTER_MAX_PARAMS];
+    char *values[NEX_ROUTER_MAX_PARAMS];
+    int param_count;
+} nex_router;
+
+static char **nex_router_split(const char *text, size_t *count) {
+    size_t capacity = 8;
+    char **parts = (char **)malloc(capacity * sizeof(char *));
+    size_t length = 0;
+    const char *cursor = text;
+    while (*cursor != '\0') {
+        const char *end = cursor;
+        while (*end != '\0' && *end != '/') {
+            end++;
+        }
+        if (length == capacity) {
+            capacity *= 2;
+            char **grown = (char **)realloc(parts, capacity * sizeof(char *));
+            if (grown == NULL) {
+                break;
+            }
+            parts = grown;
+        }
+        size_t size = (size_t)(end - cursor);
+        char *part = (char *)malloc(size + 1);
+        if (part != NULL) {
+            memcpy(part, cursor, size);
+            part[size] = '\0';
+        }
+        parts[length++] = part;
+        if (*end == '\0') {
+            break;
+        }
+        cursor = end + 1;
+    }
+    *count = length;
+    return parts;
+}
+
+static void nex_router_free_parts(char **parts, size_t count) {
+    if (parts == NULL) {
+        return;
+    }
+    for (size_t i = 0; i < count; i++) {
+        free(parts[i]);
+    }
+    free(parts);
+}
+
+long long nex_rt_router_new(void) {
+    nex_router *router = (nex_router *)calloc(1, sizeof(nex_router));
+    return (long long)router;
+}
+
+static nex_router *nex_router_handle(long long handle) {
+    if (handle <= 0) {
+        return NULL;
+    }
+    return (nex_router *)handle;
+}
+
+long long nex_rt_router_add(long long handle, const char *method, const char *pattern) {
+    nex_router *router = nex_router_handle(handle);
+    if (router == NULL || method == NULL || pattern == NULL) {
+        return 0;
+    }
+    if (router->length == router->capacity) {
+        size_t capacity = router->capacity == 0 ? 8 : router->capacity * 2;
+        nex_route *grown = (nex_route *)realloc(router->routes, capacity * sizeof(nex_route));
+        if (grown == NULL) {
+            return 0;
+        }
+        router->routes = grown;
+        router->capacity = capacity;
+    }
+    size_t length = strlen(pattern);
+    char *copy = (char *)malloc(length + 1);
+    if (copy == NULL) {
+        return 0;
+    }
+    memcpy(copy, pattern, length + 1);
+    router->routes[router->length].method = nex_map_copy(method);
+    router->routes[router->length].pattern = copy;
+    router->length++;
+    return (long long)router->length;
+}
+
+long long nex_rt_router_match(long long handle, const char *method, const char *path) {
+    nex_router *router = nex_router_handle(handle);
+    if (router == NULL || method == NULL || path == NULL) {
+        return 0;
+    }
+    size_t path_count = 0;
+    char **path_parts = nex_router_split(path, &path_count);
+    int path_matched = 0;
+
+    for (size_t route_index = 0; route_index < router->length; route_index++) {
+        nex_route *route = &router->routes[route_index];
+        size_t pattern_count = 0;
+        char **pattern_parts = nex_router_split(route->pattern, &pattern_count);
+        if (pattern_count != path_count) {
+            nex_router_free_parts(pattern_parts, pattern_count);
+            continue;
+        }
+        char *params[NEX_ROUTER_MAX_PARAMS];
+        char *values[NEX_ROUTER_MAX_PARAMS];
+        int param_count = 0;
+        int matched = 1;
+        for (size_t i = 0; i < pattern_count; i++) {
+            if (pattern_parts[i][0] == ':') {
+                if (param_count < NEX_ROUTER_MAX_PARAMS) {
+                    params[param_count] = pattern_parts[i];
+                    values[param_count] = path_parts[i];
+                    param_count++;
+                }
+                continue;
+            }
+            if (strcmp(pattern_parts[i], path_parts[i]) != 0) {
+                matched = 0;
+                break;
+            }
+        }
+        if (matched && strcmp(route->method, method) == 0) {
+            for (int i = 0; i < router->param_count; i++) {
+                free(router->params[i]);
+                free(router->values[i]);
+            }
+            router->param_count = 0;
+            for (int i = 0; i < param_count; i++) {
+                router->params[i] = params[i];
+                router->values[i] = values[i];
+            }
+            router->param_count = param_count;
+            /* Ownership of the split parts moves to the router for params. */
+            for (size_t i = 0; i < pattern_count; i++) {
+                if (pattern_parts[i][0] != ':') {
+                    free(pattern_parts[i]);
+                }
+            }
+            free(pattern_parts);
+            for (size_t i = 0; i < path_count; i++) {
+                int is_value = 0;
+                for (int p = 0; p < param_count; p++) {
+                    if (values[p] == path_parts[i]) {
+                        is_value = 1;
+                        break;
+                    }
+                }
+                if (!is_value) {
+                    free(path_parts[i]);
+                }
+            }
+            free(path_parts);
+            return (long long)(route_index + 1);
+        }
+        nex_router_free_parts(pattern_parts, pattern_count);
+        if (matched) {
+            path_matched = 1;
+        }
+    }
+    nex_router_free_parts(path_parts, path_count);
+    if (path_matched) {
+        return -1;
+    }
+    return 0;
+}
+
+char *nex_rt_router_param(long long handle, const char *name) {
+    nex_router *router = nex_router_handle(handle);
+    if (router == NULL || name == NULL) {
+        return nex_rt_json_empty_string();
+    }
+    for (int i = 0; i < router->param_count; i++) {
+        const char *key = router->params[i];
+        if (key != NULL && key[0] == ':') {
+            key++;
+        }
+        if (key != NULL && strcmp(key, name) == 0) {
+            return nex_map_copy(router->values[i]);
+        }
+    }
+    return nex_rt_json_empty_string();
+}

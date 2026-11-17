@@ -2736,6 +2736,67 @@ impl<'a> Checker<'a> {
             return Type::Void;
         }
 
+        if callee == "router_new" {
+            if !args.is_empty() {
+                self.error("NXS004", "`router_new` takes no arguments", span);
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            return Type::I64;
+        }
+
+        if callee == "router_add" || callee == "router_match" {
+            if args.len() != 3 {
+                self.error(
+                    "NXS004",
+                    format!("`{callee}` expects 3 arguments, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let router_ty = self.infer(&args[0]);
+            let a_ty = self.infer(&args[1]);
+            let b_ty = self.infer(&args[2]);
+            let ok = router_ty == Type::I64 && a_ty == Type::String && b_ty == Type::String;
+            if !ok && router_ty != Type::Error && a_ty != Type::Error && b_ty != Type::Error {
+                self.error(
+                    "NXS004",
+                    format!("`{callee}` expects `(i64, string, string)`"),
+                    span,
+                );
+                return Type::Error;
+            }
+            return Type::I64;
+        }
+
+        if callee == "router_param" {
+            if args.len() != 2 {
+                self.error(
+                    "NXS004",
+                    format!("`router_param` expects 2 arguments, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let router_ty = self.infer(&args[0]);
+            let name_ty = self.infer(&args[1]);
+            if (router_ty != Type::I64 || name_ty != Type::String)
+                && (router_ty != Type::Error && name_ty != Type::Error)
+            {
+                self.error("NXS004", "`router_param` expects `(i64, string)`", span);
+                return Type::Error;
+            }
+            return Type::String;
+        }
+
         if callee == "push" {
             if args.len() != 2 {
                 self.error(
