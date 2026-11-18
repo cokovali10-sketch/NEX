@@ -69,7 +69,7 @@ pub fn compile_source(
 ) -> Result<CompileResult, DriverError> {
     let source_name = name.into();
     let mut visited = std::collections::HashSet::new();
-    let (program, sources, mut diagnostics) =
+    let (mut program, sources, mut diagnostics) =
         load_program_text(&source_name, source_text, &mut visited)?;
 
     let source = sources
@@ -78,6 +78,7 @@ pub fn compile_source(
         .unwrap_or_else(|| SourceFile::new(source_name.clone(), String::new()));
 
     let analysis: Analysis = analyze(&program);
+    program.functions.retain(|f| !analysis.generic_functions.contains(&f.name));
     diagnostics.extend(analysis.diagnostics.clone());
 
     let (build_dir, stem) = resolve_output(&options, &source_name);

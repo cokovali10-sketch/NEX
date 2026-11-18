@@ -36,6 +36,9 @@ pub enum Type {
     /// to find the element type in `Analysis::arrays`. See
     /// `specs/dynamic-arrays.md`.
     DynArray(&'static str),
+    /// Generic type parameter. Used only during semantic analysis of generic
+    /// declarations; concrete instantiations replace it with a real type.
+    TypeParam(&'static str),
     Void,
     Error,
 }
@@ -80,6 +83,7 @@ impl Type {
             Self::Enum(name) => name,
             Self::Array { display, .. } => display,
             Self::DynArray(display) => display,
+            Self::TypeParam(name) => name,
             Self::Void => "void",
             Self::Error => "<error>",
         }

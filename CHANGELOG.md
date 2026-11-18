@@ -21,6 +21,8 @@
 - Traits: `trait` declarations, `impl Trait for Type`, `self`, and
   `receiver.method(...)` calls dispatched statically to `Type.method`.
 
+- Generics: parameterized functions with monomorphization.
+
 - `unsafe:` blocks for grouping low-level operations.
 - `nex add <path>` copies a local package into `deps/` and records it in `nex.toml`.
 

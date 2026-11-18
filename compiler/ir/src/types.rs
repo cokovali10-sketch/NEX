@@ -44,6 +44,7 @@ impl IrType {
             // Growable arrays are handled through a header pointer: the value is a\n            // plain pointer to `{ ptr, i64, i64 }`, so variables store one word.
             Type::DynArray(_) => Self::String,
             Type::Enum(_) => Self::I32,
+            Type::TypeParam(_) => Self::Void, // should never reach IR
             Type::Void => Self::Void,
             Type::Error => Self::Void,
         }

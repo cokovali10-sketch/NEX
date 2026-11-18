@@ -9,6 +9,7 @@ use std::collections::{BTreeMap, HashMap};
 #[derive(Debug, Clone)]
 pub struct FnSig {
     pub name: String,
+    pub type_params: Vec<String>,
     pub params: Vec<Type>,
     pub ret: Type,
     pub public: bool,
@@ -18,6 +19,7 @@ pub struct FnSig {
 #[derive(Debug, Clone)]
 pub struct StructInfo {
     pub name: String,
+    pub type_params: Vec<String>,
     /// Interned copy of `name`, used by [`Type::Struct`].
     pub name_static: &'static str,
     pub fields: Vec<(String, Type)>,
@@ -90,6 +92,12 @@ pub struct Analysis {
     pub variant_values: HashMap<Span, (&'static str, u32)>,
     /// Method calls keyed by the full call expression span.
     pub method_calls: HashMap<Span, MethodCallInfo>,
+    /// Monomorphized generic functions produced during semantic analysis.
+    /// Monomorphized generic functions produced during semantic analysis.
+    pub mono_functions: Vec<nex_ast::FnDecl>,
+    /// Names of generic (un-monomorphized) functions that must not be compiled.
+    pub generic_functions: Vec<String>,
+    pub mono_calls: HashMap<Span, String>,
     pub diagnostics: Vec<Diagnostic>,
 }
 
@@ -130,6 +138,10 @@ impl Analysis {
         self.method_calls.get(&span)
     }
 
+    pub fn mono_call(&self, span: Span) -> Option<&String> {
+        self.mono_calls.get(&span)
+    }
+
     pub fn expr_type(&self, span: Span) -> Option<Type> {
         self.expr_types.get(&span).copied()
     }
@@ -160,6 +172,7 @@ struct Checker<'a> {
     analysis: Analysis,
     scopes: Vec<HashMap<String, VarInfo>>,
     current_fn: Option<FnSig>,
+    current_type_params: Vec<String>,
     loop_depth: usize,
 }
 
@@ -191,10 +204,14 @@ impl<'a> Checker<'a> {
                 field_writes: HashMap::new(),
                 variant_values: HashMap::new(),
                 method_calls: HashMap::new(),
+                mono_functions: Vec::new(),
+                generic_functions: Vec::new(),
+                mono_calls: HashMap::new(),
                 diagnostics: Vec::new(),
             },
             scopes: Vec::new(),
             current_fn: None,
+            current_type_params: Vec::new(),
             loop_depth: 0,
         };
         checker.collect_modules();
@@ -296,6 +313,7 @@ impl<'a> Checker<'a> {
                 continue;
             }
 
+            self.current_type_params = function.type_params.clone();
             let mut params = Vec::with_capacity(function.params.len());
             for param in &function.params {
                 let ty = self.resolve_type(&param.ty);
@@ -315,16 +333,22 @@ impl<'a> Checker<'a> {
                 .map(|ty| self.resolve_type(ty))
                 .unwrap_or(Type::Void);
 
+            self.current_type_params.clear();
+
             self.analysis.functions.insert(
                 function.name.clone(),
                 FnSig {
                     name: function.name.clone(),
+                    type_params: function.type_params.clone(),
                     params,
                     ret,
                     public: function.public,
                     span: function.span,
                 },
             );
+            if !function.type_params.is_empty() {
+                self.analysis.generic_functions.push(function.name.clone());
+            }
         }
     }
 
@@ -605,6 +629,7 @@ impl<'a> Checker<'a> {
                     symbol.clone(),
                     FnSig {
                         name: symbol,
+                        type_params: Vec::new(),
                         params,
                         ret,
                         public: struct_info.public,
@@ -703,6 +728,7 @@ impl<'a> Checker<'a> {
                 definition.name.clone(),
                 StructInfo {
                     name: definition.name.clone(),
+                    type_params: definition.type_params.clone(),
                     name_static,
                     fields: Vec::new(),
                     public: definition.public,
@@ -904,6 +930,54 @@ impl<'a> Checker<'a> {
         }
     }
 
+    fn check_one_function(&mut self, function: &nex_ast::FnDecl) {
+        if self.analysis.externs.contains(&function.name) {
+            return;
+        }
+        let Some(sig) = self.analysis.functions.get(&function.name).cloned() else {
+            return;
+        };
+        if !sig.type_params.is_empty() {
+            return;
+        }
+        self.current_fn = Some(sig.clone());
+        self.scopes.clear();
+        let mut param_scope = HashMap::new();
+        for (param, ty) in function.params.iter().zip(sig.params.iter()) {
+            if param_scope.contains_key(&param.name) {
+                self.error(
+                    "NXS018",
+                    format!("duplicate parameter `{}`", param.name),
+                    param.span,
+                );
+            }
+            param_scope.insert(
+                param.name.clone(),
+                VarInfo {
+                    ty: *ty,
+                    mutable: false,
+                },
+            );
+        }
+        self.scopes.push(param_scope);
+        self.loop_depth = 0;
+        self.check_block(&function.body, true);
+
+        if sig.ret != Type::Void && !self.block_returns(&function.body) {
+            self.error(
+                "NXS010",
+                format!(
+                    "function `{}` may exit without returning a value of type `{}`",
+                    function.name, sig.ret
+                ),
+                function.span,
+            );
+        }
+
+        self.current_fn = None;
+        self.scopes.clear();
+    }
+
     fn check_functions(&mut self) {
         let mut functions = self.program.functions.clone();
         for block in &self.program.impls {
@@ -914,48 +988,7 @@ impl<'a> Checker<'a> {
             }
         }
         for function in functions {
-            if self.analysis.externs.contains(&function.name) {
-                continue;
-            }
-            let Some(sig) = self.analysis.functions.get(&function.name).cloned() else {
-                continue;
-            };
-            self.current_fn = Some(sig.clone());
-            self.scopes.clear();
-            let mut param_scope = HashMap::new();
-            for (param, ty) in function.params.iter().zip(sig.params.iter()) {
-                if param_scope.contains_key(&param.name) {
-                    self.error(
-                        "NXS018",
-                        format!("duplicate parameter `{}`", param.name),
-                        param.span,
-                    );
-                }
-                param_scope.insert(
-                    param.name.clone(),
-                    VarInfo {
-                        ty: *ty,
-                        mutable: false,
-                    },
-                );
-            }
-            self.scopes.push(param_scope);
-            self.loop_depth = 0;
-            self.check_block(&function.body, true);
-
-            if sig.ret != Type::Void && !self.block_returns(&function.body) {
-                self.error(
-                    "NXS010",
-                    format!(
-                        "function `{}` may exit without returning a value of type `{}`",
-                        function.name, sig.ret
-                    ),
-                    function.span,
-                );
-            }
-
-            self.current_fn = None;
-            self.scopes.clear();
+            self.check_one_function(&function);
         }
     }
 
@@ -1971,6 +2004,7 @@ impl<'a> Checker<'a> {
                                 name.to_string(),
                                 StructInfo {
                                     name: name.to_string(),
+                                    type_params: Vec::new(),
                                     name_static: name,
                                     fields,
                                     public: false,
@@ -3841,6 +3875,82 @@ impl<'a> Checker<'a> {
             return Type::Error;
         }
 
+        if sig.type_params.is_empty() {
+            // normal
+        } else {
+            // monomorphize
+            let arg_types: Vec<Type> = args.iter().map(|a| self.infer(a)).collect();
+            // map type params to concrete types: assume one type param, infer from first param type
+            // Simple: type param -> type of first argument if first param uses it.
+            let mut mapping: std::collections::HashMap<String, Type> = std::collections::HashMap::new();
+            for (param_ty, arg_ty) in sig.params.iter().zip(arg_types.iter()) {
+                if let Type::TypeParam(name) = param_ty {
+                    mapping.insert(name.to_string(), *arg_ty);
+                }
+            }
+            // build mono name
+            let mut concrete_names = Vec::new();
+            for tp in &sig.type_params {
+                let ct = mapping.get(tp).copied().unwrap_or(Type::Error);
+                concrete_names.push(ct.name());
+            }
+            let mono_name = format!("{}_{}", callee, concrete_names.join("_"));
+            if !self.analysis.functions.contains_key(&mono_name) {
+                let program_functions = self.program.functions.clone();
+                let generic_fn = program_functions.iter().find(|f| f.name == callee).cloned();
+                if let Some(generic_fn) = generic_fn {
+                    let mut mono_fn = generic_fn.clone();
+                    mono_fn.name = mono_name.clone();
+                    for param in &mut mono_fn.params {
+                        if sig.type_params.contains(&param.ty.name) {
+                            if let Some(ct) = mapping.get(&param.ty.name) {
+                                param.ty.name = ct.name().to_string();
+                            }
+                        }
+                    }
+                    if let Some(ret) = &mut mono_fn.ret {
+                        if sig.type_params.contains(&ret.name) {
+                            if let Some(ct) = mapping.get(&ret.name) {
+                                ret.name = ct.name().to_string();
+                            }
+                        }
+                    }
+                    let mut mono_params = Vec::new();
+                    for param in &mono_fn.params {
+                        mono_params.push(self.resolve_type(&param.ty));
+                    }
+                    let mono_ret = if let Some(ret) = &mono_fn.ret {
+                        self.resolve_type(ret)
+                    } else {
+                        Type::Void
+                    };
+                    self.analysis.functions.insert(mono_name.clone(), FnSig {
+                        name: mono_name.clone(),
+                        type_params: Vec::new(),
+                        params: mono_params.clone(),
+                        ret: mono_ret,
+                        public: sig.public,
+                        span: mono_fn.span,
+                    });
+                    self.analysis.mono_functions.push(mono_fn.clone());
+                    self.check_one_function(&mono_fn);
+                }
+            }
+            // now use mono_name as callee
+            let mono_sig = self.analysis.functions.get(&mono_name).cloned().unwrap_or(sig.clone());
+            // check args against mono_sig
+            if args.len() != mono_sig.params.len() {
+                self.error("NXS004", format!("unknown function `{}`", callee), callee_span);
+                for arg in args { self.infer(arg); }
+                return Type::Error;
+            }
+            for (arg, expected) in args.iter().zip(mono_sig.params.iter()) {
+                self.check_expected(arg, *expected);
+            }
+            self.analysis.mono_calls.insert(span, mono_name.clone());
+            return mono_sig.ret;
+        }
+
         if args.len() != sig.params.len() {
             self.error(
                 "NXS004",
@@ -3851,6 +3961,10 @@ impl<'a> Checker<'a> {
                 ),
                 span,
             );
+            for arg in args {
+                self.infer(arg);
+            }
+            return Type::Error;
         }
 
         for (index, arg) in args.iter().enumerate() {
@@ -3948,6 +4062,7 @@ impl<'a> Checker<'a> {
                     name.to_string(),
                     StructInfo {
                         name: name.to_string(),
+                        type_params: Vec::new(),
                         name_static: name,
                         fields,
                         public: false,
@@ -4012,6 +4127,10 @@ impl<'a> Checker<'a> {
                 // accept it; parameter/variable checks happen at the call site.
             }
             return resolved;
+        }
+        if self.current_type_params.contains(&ty.name) {
+            let name = Box::leak(ty.name.clone().into_boxed_str());
+            return Type::TypeParam(name);
         }
         if let Some(info) = self.analysis.structs.get(&ty.name) {
             return Type::Struct(info.name_static);

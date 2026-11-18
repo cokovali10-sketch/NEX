@@ -1645,3 +1645,18 @@ fn pattern_match_requires_else_for_scalars() {
     let boolean = compile("fn main():\n    var x = true\n    match x:\n        case true:\n            print(\"yes\")\n");
     assert!(boolean.diagnostics.iter().any(|d| d.code == "NXS033"));
 }
+
+#[test]
+fn generic_functions_monomorphize() {
+    let source = r#"
+fn identity<T>(x: T) -> T:
+    return x
+
+fn main():
+    print(identity(42))
+    print(identity("hi"))
+"#;
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "42hi");
+}

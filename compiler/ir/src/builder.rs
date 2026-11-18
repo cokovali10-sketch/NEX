@@ -118,6 +118,18 @@ pub fn build(program: &Program, analysis: &Analysis) -> Result<IrModule, String>
     };
 
     let mut functions = program.functions.clone();
+    functions.extend(analysis.mono_functions.clone());
+    // Skip generic (un-monomorphized) functions.
+    functions.retain(|f| {
+        if analysis.generic_functions.contains(&f.name) {
+            return false;
+        }
+        analysis
+            .functions
+            .get(&f.name)
+            .map(|s| s.type_params.is_empty())
+            .unwrap_or(false)
+    });
     for block in &program.impls {
         for method in &block.methods {
             let mut method = method.clone();
@@ -127,6 +139,12 @@ pub fn build(program: &Program, analysis: &Analysis) -> Result<IrModule, String>
     }
 
     for function in &functions {
+        if analysis.generic_functions.contains(&function.name) {
+            continue;
+        }
+        if analysis.functions.get(&function.name).is_none() {
+            continue;
+        }
         if analysis.externs.contains(&function.name) {
             let signature = analysis.functions.get(&function.name).ok_or_else(|| {
                 format!("missing type information for function `{}`", function.name)
@@ -2181,11 +2199,15 @@ fn lower_expr(
                 };
             }
 
-            let callee = analysis
-                .aliases
-                .get(callee)
-                .cloned()
-                .unwrap_or_else(|| callee.clone());
+            let callee = if let Some(mono_name) = analysis.mono_call(expr.span).cloned() {
+                mono_name
+            } else {
+                analysis
+                    .aliases
+                    .get(callee)
+                    .cloned()
+                    .unwrap_or_else(|| callee.to_string())
+            };
             let callee = callee.as_str();
             if callee == "print" || callee == "println" {
                 if args.len() != 1 {

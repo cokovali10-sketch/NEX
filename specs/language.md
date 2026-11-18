@@ -43,6 +43,7 @@ planned and are not yet implemented.
 - File-based imports (`use alias from "file.nex"`).
 - Explicit casts with `as`.
 - `unsafe:` blocks for low-level operations.
+- Generics for functions (monomorphization).
 - Top-level `const` declarations with compile-time constant initializers.
 
 ## Planned
