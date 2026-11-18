@@ -1739,3 +1739,20 @@ fn main():
     assert_eq!(code, 0, "stderr: {stderr}");
     assert_eq!(stdout, "10x");
 }
+
+#[test]
+fn for_each_over_arrays() {
+    let source = r#"
+fn main():
+    var a = [10, 20, 30]
+    for x in a:
+        print(x)
+    var d: [i64] = [1, 2]
+    push(d, 3)
+    for y in d:
+        print(y)
+"#;
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "102030123");
+}

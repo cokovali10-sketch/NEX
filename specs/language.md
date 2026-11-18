@@ -22,6 +22,7 @@ planned and are not yet implemented.
 - `if`, `elif`, `else`.
 - `while`.
 - `for ... in ... .. ...`.
+- `for x in array` iteration over fixed and growable arrays.
 - `return`, `break`, `continue`.
 - Function calls.
 - Built-in `print` and `println`.

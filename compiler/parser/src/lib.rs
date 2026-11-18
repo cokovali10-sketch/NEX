@@ -1395,33 +1395,80 @@ impl<'a> Parser<'a> {
             };
         }
 
-        let range_start = self.parse_expr();
-        if !self.eat(&TokenKind::DotDot) {
-            self.error(
-                "NXP012",
-                "expected `..` in `for` range",
-                self.peek_token().span,
-            );
-            self.recover_statement();
-            return Stmt {
-                kind: StmtKind::Expr(Expr {
-                    kind: ExprKind::Error,
-                    span: start,
-                }),
-                span: start,
-            };
-        }
-        let range_end = self.parse_expr();
+        let first = self.parse_expr();
+        let range_end = if self.eat(&TokenKind::DotDot) {
+            Some(self.parse_expr())
+        } else {
+            None
+        };
+
         let body = self.parse_block();
         let span = start.merge(body.span);
-        Stmt {
-            kind: StmtKind::For {
-                var,
-                start: range_start,
-                end: range_end,
-                body,
-            },
-            span,
+
+        if let Some(end) = range_end {
+            Stmt {
+                kind: StmtKind::For {
+                    var,
+                    start: first,
+                    end,
+                    body,
+                },
+                span,
+            }
+        } else {
+            // `for x in collection`: desugar to an index loop plus a binding.
+            let iterable = first;
+            let iterable_span = iterable.span;
+            let index_var = "__nex_index".to_string();
+            let synthetic_base = 1_000_000_000usize;
+            let zero = Expr {
+                kind: ExprKind::Int(0),
+                span: Span::new(synthetic_base, synthetic_base + 1),
+            };
+            let len_span = Span::new(synthetic_base + 2, synthetic_base + 3);
+            let len_call = Expr {
+                kind: ExprKind::Call {
+                    callee: "len".to_string(),
+                    callee_span: len_span,
+                    args: vec![iterable.clone()],
+                },
+                span: len_span,
+            };
+            let index_expr = Expr {
+                kind: ExprKind::Ident(index_var.clone()),
+                span: Span::new(synthetic_base + 4, synthetic_base + 5),
+            };
+            let element_span = Span::new(synthetic_base + 6, synthetic_base + 7);
+            let element = Expr {
+                kind: ExprKind::Index {
+                    base: Box::new(iterable),
+                    index: Box::new(index_expr),
+                },
+                span: element_span,
+            };
+            let mut stmts = vec![Stmt {
+                kind: StmtKind::Let {
+                    name: var,
+                    names: None,
+                    mutable: false,
+                    ty: None,
+                    init: element,
+                },
+                span: body.span,
+            }];
+            stmts.extend(body.stmts);
+            Stmt {
+                kind: StmtKind::For {
+                    var: index_var,
+                    start: zero,
+                    end: len_call,
+                    body: Block {
+                        stmts,
+                        span: body.span,
+                    },
+                },
+                span,
+            }
         }
     }
 

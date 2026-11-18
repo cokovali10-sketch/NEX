@@ -25,6 +25,7 @@
 - String interpolation (`f"value {expr}"`).
 - Tuple destructuring in `let`/`var` bindings.
 - Cross-platform target selection (`--target`) and `nex doctor --target`.
+- `for x in array` iteration syntax.
 
 - Extended `match`: literal patterns, guards (`case X if cond:`), and
   inclusive range patterns (`case 1..5:`).
