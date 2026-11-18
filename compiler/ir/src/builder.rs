@@ -2305,6 +2305,55 @@ fn lower_expr(
                 return Ok(Operand::Value(dst));
             }
 
+            if callee.starts_with("builder_") {
+                let mut call_args = Vec::new();
+                for arg in args {
+                    call_args.push(lower_expr(
+                        builder,
+                        arg,
+                        scopes,
+                        storage,
+                        analysis,
+                        Type::Error,
+                    )?);
+                }
+                let (name, ret) = match callee {
+                    "builder_new" => ("nex_rt_builder_new", IrType::I64),
+                    "builder_append" => ("nex_rt_builder_append", IrType::I32),
+                    "builder_len" => ("nex_rt_builder_len", IrType::I64),
+                    "builder_string" => ("nex_rt_builder_string", IrType::String),
+                    _ => ("nex_rt_builder_clear", IrType::Void),
+                };
+                if ret == IrType::Void {
+                    builder.emit(Inst::Call {
+                        dst: None,
+                        name: name.to_string(),
+                        args: call_args,
+                        ret,
+                    });
+                    return Ok(Operand::Const(Const::Bool(true)));
+                }
+                let raw = builder.new_value();
+                builder.emit(Inst::Call {
+                    dst: Some(raw),
+                    name: name.to_string(),
+                    args: call_args,
+                    ret,
+                });
+                if callee == "builder_append" {
+                    let dst = builder.new_value();
+                    builder.emit(Inst::Cast {
+                        dst,
+                        kind: CastKind::Truncate,
+                        from: IrType::I32,
+                        to: IrType::Bool,
+                        operand: Operand::Value(raw),
+                    });
+                    return Ok(Operand::Value(dst));
+                }
+                return Ok(Operand::Value(raw));
+            }
+
             if callee.starts_with("map_") {
                 let mut call_args = Vec::new();
                 for arg in args {

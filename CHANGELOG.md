@@ -65,6 +65,9 @@
 
 - Thread pool: `pool_new`, `pool_submit`, `pool_workers` (bounded queue, fixed workers).
 
+- String builder: `builder_new`, `builder_append`, `builder_len`, `builder_string`,
+  `builder_clear` (amortised O(1) appends instead of quadratic `concat`).
+
 ### Fixed
 
 - The lexer now skips a leading UTF-8 BOM instead of reporting `unexpected character`.

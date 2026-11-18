@@ -1379,3 +1379,19 @@ fn thread_pool_runs_every_submitted_task() {
         "true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\n8000\n"
     );
 }
+
+#[test]
+fn builder_matches_repeated_concat() {
+    let source = "fn main():\n    var builder = builder_new()\n    println(builder_append(builder, \"ab\"))\n    println(builder_append(builder, \"cd\"))\n    println(builder_len(builder))\n    println(builder_string(builder))\n    builder_clear(builder)\n    println(builder_len(builder))\n";
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "true\ntrue\n4\nabcd\n0\n");
+}
+
+#[test]
+fn builder_produces_the_same_string_as_concat() {
+    let source = "fn main():\n    var a = \"\"\n    var b = builder_new()\n    var i = 0\n    while i < 2000:\n        a = concat(a, \"x\")\n        builder_append(b, \"x\")\n        i = i + 1\n    println(len(a) == builder_len(b))\n    println(builder_len(b))\n";
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "true\n2000\n");
+}

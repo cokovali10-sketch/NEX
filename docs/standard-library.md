@@ -280,6 +280,23 @@ while true:
     pool_submit(pool, "serve", client)
 ```
 
+### String builder
+
+`concat` allocates a new buffer on every call, so appending in a loop is
+quadratic: 50 000 appends copy ~1.25 GB. Use a builder when building a string
+piece by piece — appending is amortised O(1).
+
+| Function | Signature | Notes |
+|---|---|---|
+| `builder_new` | `() -> i64` | New empty builder. |
+| `builder_append` | `(handle: i64, text: string) -> bool` | Appends; `false` when out of memory. |
+| `builder_len` | `(handle: i64) -> i64` | Length so far. |
+| `builder_string` | `(handle: i64) -> string` | Materialises a copy. |
+| `builder_clear` | `(handle: i64) -> void` | Empties without freeing the buffer. |
+
+Measured on `examples/bench_strings` (50 000 appends of one byte):
+`concat` 761 ms, `builder` 1 ms, identical results.
+
 ### Numeric
 
 | Function | Signature | Notes |

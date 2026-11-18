@@ -2911,6 +2911,68 @@ impl<'a> Checker<'a> {
             return Type::I64;
         }
 
+        if callee == "builder_new" {
+            if !args.is_empty() {
+                self.error("NXS004", "`builder_new` takes no arguments", span);
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            return Type::I64;
+        }
+
+        if callee == "builder_len" || callee == "builder_string" || callee == "builder_clear" {
+            if args.len() != 1 {
+                self.error(
+                    "NXS004",
+                    format!("`{callee}` expects 1 argument, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let handle_ty = self.infer(&args[0]);
+            if handle_ty != Type::I64 && handle_ty != Type::Error {
+                self.error(
+                    "NXS004",
+                    format!("`{callee}` expects a builder handle, found `{handle_ty}`"),
+                    span,
+                );
+                return Type::Error;
+            }
+            return match callee {
+                "builder_string" => Type::String,
+                "builder_clear" => Type::Void,
+                _ => Type::I64,
+            };
+        }
+
+        if callee == "builder_append" {
+            if args.len() != 2 {
+                self.error(
+                    "NXS004",
+                    format!("`builder_append` expects 2 arguments, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let handle_ty = self.infer(&args[0]);
+            let text_ty = self.infer(&args[1]);
+            if (handle_ty != Type::I64 || text_ty != Type::String)
+                && (handle_ty != Type::Error && text_ty != Type::Error)
+            {
+                self.error("NXS004", "`builder_append` expects `(i64, string)`", span);
+                return Type::Error;
+            }
+            return Type::Bool;
+        }
+
         if callee == "push" {
             if args.len() != 2 {
                 self.error(

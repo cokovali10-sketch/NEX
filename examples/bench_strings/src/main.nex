@@ -1,0 +1,31 @@
+# String building: `concat` is O(n) per call, a builder is amortised O(1).
+
+fn build_concat() -> string:
+    var out = ""
+    var i = 0
+    while i < 50000:
+        out = concat(out, "x")
+        i = i + 1
+    return out
+
+fn build_builder() -> string:
+    var builder = builder_new()
+    var i = 0
+    while i < 50000:
+        builder_append(builder, "x")
+        i = i + 1
+    return builder_string(builder)
+
+fn main():
+    var start = now_ms()
+    var a = build_concat()
+    var mid = now_ms()
+    var b = build_builder()
+    var late = now_ms()
+
+    print("concat: ")
+    println(mid - start)
+    print("builder: ")
+    println(late - mid)
+    print("lengths equal: ")
+    println(len(a) == len(b))

@@ -2621,3 +2621,91 @@ long long nex_rt_tcp_set_timeout(long long socket, long long milliseconds) {
     return 1;
 #endif
 }
+
+/* ------------------------------------------------------------------------- */
+/* Growable string builder: amortised O(1) append.                            */
+/* `concat` is O(n) per call, so building a string in a loop with it copies    */
+/* the whole prefix every iteration. A builder keeps one buffer and doubles.   */
+/* ------------------------------------------------------------------------- */
+
+typedef struct nex_builder {
+    char *data;
+    size_t length;
+    size_t capacity;
+} nex_builder;
+
+long long nex_rt_builder_new(void) {
+    nex_builder *builder = (nex_builder *)calloc(1, sizeof(nex_builder));
+    if (builder == NULL) {
+        return 0;
+    }
+    builder->capacity = 64;
+    builder->data = (char *)malloc(builder->capacity);
+    if (builder->data == NULL) {
+        free(builder);
+        return 0;
+    }
+    builder->data[0] = '\0';
+    return (long long)builder;
+}
+
+static nex_builder *nex_builder_handle(long long handle) {
+    if (handle <= 0) {
+        return NULL;
+    }
+    return (nex_builder *)handle;
+}
+
+int nex_rt_builder_append(long long handle, const char *text) {
+    nex_builder *builder = nex_builder_handle(handle);
+    if (builder == NULL || text == NULL) {
+        return 0;
+    }
+    size_t extra = strlen(text);
+    if (builder->length + extra + 1 > builder->capacity) {
+        size_t capacity = builder->capacity;
+        while (capacity < builder->length + extra + 1) {
+            capacity *= 2;
+        }
+        char *grown = (char *)realloc(builder->data, capacity);
+        if (grown == NULL) {
+            return 0;
+        }
+        builder->data = grown;
+        builder->capacity = capacity;
+    }
+    memcpy(builder->data + builder->length, text, extra);
+    builder->length += extra;
+    builder->data[builder->length] = '\0';
+    return 1;
+}
+
+long long nex_rt_builder_len(long long handle) {
+    nex_builder *builder = nex_builder_handle(handle);
+    if (builder == NULL) {
+        return 0;
+    }
+    return (long long)builder->length;
+}
+
+char *nex_rt_builder_string(long long handle) {
+    static char empty[1] = {0};
+    nex_builder *builder = nex_builder_handle(handle);
+    if (builder == NULL) {
+        return empty;
+    }
+    char *copy = (char *)malloc(builder->length + 1);
+    if (copy == NULL) {
+        return empty;
+    }
+    memcpy(copy, builder->data, builder->length + 1);
+    return copy;
+}
+
+void nex_rt_builder_clear(long long handle) {
+    nex_builder *builder = nex_builder_handle(handle);
+    if (builder != NULL) {
+        builder->length = 0;
+        builder->data[0] = '\0';
+    }
+}
