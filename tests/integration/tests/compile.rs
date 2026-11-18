@@ -1660,3 +1660,20 @@ fn main():
     assert_eq!(code, 0, "stderr: {stderr}");
     assert_eq!(stdout, "42hi");
 }
+
+#[test]
+fn generic_structs_monomorphize() {
+    let source = r#"
+struct Box<T>:
+    value: T
+
+fn main():
+    var b = Box(42)
+    print(b.value)
+    var s = Box("hi")
+    print(s.value)
+"#;
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "42hi");
+}

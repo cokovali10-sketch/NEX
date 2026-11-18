@@ -97,6 +97,7 @@ pub struct Analysis {
     pub mono_functions: Vec<nex_ast::FnDecl>,
     /// Names of generic (un-monomorphized) functions that must not be compiled.
     pub generic_functions: Vec<String>,
+    pub mono_structs: HashMap<Span, String>,
     pub mono_calls: HashMap<Span, String>,
     pub diagnostics: Vec<Diagnostic>,
 }
@@ -136,6 +137,10 @@ impl Analysis {
 
     pub fn method_call(&self, span: Span) -> Option<&MethodCallInfo> {
         self.method_calls.get(&span)
+    }
+
+    pub fn mono_struct(&self, span: Span) -> Option<&String> {
+        self.mono_structs.get(&span)
     }
 
     pub fn mono_call(&self, span: Span) -> Option<&String> {
@@ -206,6 +211,7 @@ impl<'a> Checker<'a> {
                 method_calls: HashMap::new(),
                 mono_functions: Vec::new(),
                 generic_functions: Vec::new(),
+                mono_structs: HashMap::new(),
                 mono_calls: HashMap::new(),
                 diagnostics: Vec::new(),
             },
@@ -749,6 +755,7 @@ impl<'a> Checker<'a> {
                 continue;
             }
 
+            self.current_type_params = definition.type_params.clone();
             let mut fields = Vec::with_capacity(definition.fields.len());
             let mut seen = std::collections::HashSet::new();
             for field in &definition.fields {
@@ -791,6 +798,8 @@ impl<'a> Checker<'a> {
                 }
                 fields.push((field.name.clone(), ty));
             }
+
+            self.current_type_params.clear();
 
             if let Some(info) = self.analysis.structs.get_mut(&definition.name) {
                 info.fields = fields;
@@ -3829,6 +3838,70 @@ impl<'a> Checker<'a> {
                     self.infer(arg);
                 }
                 return Type::Error;
+            }
+            // Generic struct monomorphization.
+            if !info.type_params.is_empty() {
+                let arg_types: Vec<Type> = args.iter().map(|a| self.infer(a)).collect();
+                let mut mapping: std::collections::HashMap<String, Type> =
+                    std::collections::HashMap::new();
+                for ((_, field_ty), arg_ty) in info.fields.iter().zip(arg_types.iter()) {
+                    if let Type::TypeParam(name) = field_ty {
+                        mapping.insert(name.to_string(), *arg_ty);
+                    }
+                }
+                let mut concrete_names = Vec::new();
+                for tp in &info.type_params {
+                    let ct = mapping.get(tp).copied().unwrap_or(Type::Error);
+                    concrete_names.push(ct.name().to_string());
+                }
+                let mono_name = format!("{}_{}", callee, concrete_names.join("_"));
+                if !self.analysis.structs.contains_key(&mono_name) {
+                    // find generic struct decl
+                    let generic_struct = self.program.structs.iter().find(|s| s.name == callee).cloned();
+                    if let Some(mut gs) = generic_struct {
+                        gs.name = mono_name.clone();
+                        // substitute fields
+                        for field in &mut gs.fields {
+                            // field ty is TypeExpr; substitute by name
+                            if info.type_params.contains(&field.ty.name) {
+                                if let Some(ct) = mapping.get(&field.ty.name) {
+                                    field.ty.name = ct.name().to_string();
+                                }
+                            }
+                        }
+                        // register
+                        let mut fields = Vec::new();
+                        for field in &gs.fields {
+                            let ty = self.resolve_type(&field.ty);
+                            fields.push((field.name.clone(), ty));
+                        }
+                        // intern name
+                        let name_static = Box::leak(mono_name.clone().into_boxed_str());
+                        self.analysis.structs.insert(mono_name.clone(), StructInfo {
+                            name: mono_name.clone(),
+                            type_params: Vec::new(),
+                            name_static,
+                            fields,
+                            public: info.public,
+                        });
+                    }
+                }
+                // check args against mono struct
+                let mono_info = self.analysis.structs.get(&mono_name).cloned().unwrap_or(info.clone());
+                if args.len() != mono_info.fields.len() {
+                    self.error("NXS004", format!("struct `{mono_name}` expects {} field value(s), found {}", mono_info.fields.len(), args.len()), span);
+                    for arg in args { self.infer(arg); }
+                    return Type::Error;
+                }
+                for (index, arg) in args.iter().enumerate() {
+                    if let Some((_, ty)) = mono_info.fields.get(index) {
+                        self.check_expected(arg, *ty);
+                    } else {
+                        self.infer(arg);
+                    }
+                }
+                self.analysis.mono_structs.insert(span, mono_name.clone());
+                return Type::Struct(self.analysis.structs.get(&mono_name).unwrap().name_static);
             }
             if args.len() != info.fields.len() {
                 self.error(

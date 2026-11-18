@@ -101,6 +101,7 @@ pub fn build(program: &Program, analysis: &Analysis) -> Result<IrModule, String>
     let structs = analysis
         .structs
         .values()
+        .filter(|info| info.type_params.is_empty())
         .map(|info| StructDef {
             name: info.name_static,
             fields: info
@@ -766,7 +767,11 @@ fn lower_struct_place(
                 .get(callee)
                 .cloned()
                 .unwrap_or_else(|| callee.clone());
-            let callee = resolved.as_str();
+            let callee = if let Some(mono_name) = analysis.mono_struct(expr.span) {
+                mono_name.as_str()
+            } else {
+                callee
+            };
             if let Some(info) = analysis.struct_info(callee) {
                 let ptr = builder.alloca_at_entry(IrType::Struct(info.name_static));
                 for (index, arg) in args.iter().enumerate() {
@@ -2248,6 +2253,19 @@ fn lower_expr(
                 return Ok(Operand::Const(Const::Bool(false)));
             }
 
+            if let Some(mono_name) = analysis.mono_struct(expr.span).cloned() {
+                let mono_callee = mono_name.as_str();
+                if let Some(info) = analysis.struct_info(mono_callee) {
+                    let ptr = lower_struct_place(builder, expr, scopes, storage, analysis)?;
+                    let dst = builder.new_value();
+                    builder.emit(Inst::Load {
+                        dst,
+                        ptr,
+                        ty: IrType::Struct(info.name_static),
+                    });
+                    return Ok(Operand::Value(dst));
+                }
+            }
             if let Some(info) = analysis.struct_info(callee) {
                 let ptr = lower_struct_place(builder, expr, scopes, storage, analysis)?;
                 let dst = builder.new_value();
