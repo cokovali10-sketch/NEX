@@ -21,8 +21,8 @@
 - Traits: `trait` declarations, `impl Trait for Type`, `self`, and
   `receiver.method(...)` calls dispatched statically to `Type.method`.
 
-- Pattern matching beyond enums: `match` now accepts integer, boolean,
-  character, and string patterns. Scalar matches require an `else` arm.
+- File-based imports via `use alias from "file.nex"`; imported declarations are
+  available under the alias as a module.
 
 - `pass`, an explicitly empty statement, for empty function bodies, `else`
   branches, and `match` arms. The formatter emits it for empty blocks.

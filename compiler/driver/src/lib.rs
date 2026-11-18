@@ -50,6 +50,7 @@ impl std::error::Error for DriverError {}
 pub struct CompileResult {
     pub source_name: String,
     pub source: SourceFile,
+    pub sources: Vec<SourceFile>,
     pub diagnostics: Vec<Diagnostic>,
     pub llvm_ir: Option<String>,
     pub artifacts: Option<BuildArtifacts>,
@@ -67,17 +68,16 @@ pub fn compile_source(
     options: CompileOptions,
 ) -> Result<CompileResult, DriverError> {
     let source_name = name.into();
-    let source = SourceFile::new(source_name.clone(), source_text.clone());
+    let mut visited = std::collections::HashSet::new();
+    let (program, sources, mut diagnostics) =
+        load_program_text(&source_name, source_text, &mut visited)?;
 
-    let mut diagnostics = Vec::new();
+    let source = sources
+        .first()
+        .cloned()
+        .unwrap_or_else(|| SourceFile::new(source_name.clone(), String::new()));
 
-    let lexed = Lexer::new(&source_text).lex();
-    diagnostics.extend(lexed.diagnostics.clone());
-
-    let parsed = parse(&lexed.tokens);
-    diagnostics.extend(parsed.diagnostics.clone());
-
-    let analysis: Analysis = analyze(&parsed.program);
+    let analysis: Analysis = analyze(&program);
     diagnostics.extend(analysis.diagnostics.clone());
 
     let (build_dir, stem) = resolve_output(&options, &source_name);
@@ -85,6 +85,7 @@ pub fn compile_source(
     let mut result = CompileResult {
         source_name,
         source,
+        sources,
         diagnostics,
         llvm_ir: None,
         artifacts: None,
@@ -94,12 +95,12 @@ pub fn compile_source(
         return Ok(result);
     }
 
-    let ir = match nex_ir::build(&parsed.program, &analysis) {
+    let ir = match nex_ir::build(&program, &analysis) {
         Ok(ir) => ir,
         Err(message) => {
             result
                 .diagnostics
-                .push(Diagnostic::error("NXC001", message, parsed.program.span));
+                .push(Diagnostic::error("NXC001", message, program.span));
             return Ok(result);
         }
     };
@@ -109,7 +110,7 @@ pub fn compile_source(
         Err(message) => {
             result
                 .diagnostics
-                .push(Diagnostic::error("NXC002", message, parsed.program.span));
+                .push(Diagnostic::error("NXC002", message, program.span));
             return Ok(result);
         }
     };
@@ -126,6 +127,106 @@ pub fn compile_source(
     result.artifacts = Some(artifacts);
 
     Ok(result)
+}
+
+fn load_program_text(
+    name: &str,
+    text: String,
+    visited: &mut std::collections::HashSet<std::path::PathBuf>,
+) -> Result<(nex_ast::Program, Vec<SourceFile>, Vec<Diagnostic>), DriverError> {
+    let source = SourceFile::new(name.to_string(), text.clone());
+    let lexed = Lexer::new(&text).lex();
+    let mut diagnostics = lexed.diagnostics.clone();
+    let parsed = parse(&lexed.tokens);
+    diagnostics.extend(parsed.diagnostics.clone());
+
+    let mut program = parsed.program;
+    let mut sources = vec![source];
+
+    // Resolve file-based imports.
+    let mut retained_uses = Vec::new();
+    for use_decl in program.uses.clone() {
+        if let Some(file) = &use_decl.file {
+            let base_dir = std::path::Path::new(name)
+                .parent()
+                .unwrap_or_else(|| std::path::Path::new("."));
+            let imported_path = base_dir.join(file);
+            let (imported_program, imported_sources, imported_diagnostics) =
+                load_program_file(&imported_path, visited)?;
+            diagnostics.extend(imported_diagnostics);
+
+            let alias = if use_decl.path.len() == 1 {
+                use_decl.path[0].clone()
+            } else {
+                use_decl.path.join(".")
+            };
+            let prefixed = prefix_program(imported_program, &alias);
+            program.modules.push(alias);
+            program.structs.extend(prefixed.structs);
+            program.enums.extend(prefixed.enums);
+            program.traits.extend(prefixed.traits);
+            program.impls.extend(prefixed.impls);
+            program.consts.extend(prefixed.consts);
+            program.globals.extend(prefixed.globals);
+            program.functions.extend(prefixed.functions);
+            sources.extend(imported_sources);
+        } else {
+            retained_uses.push(use_decl);
+        }
+    }
+    program.uses = retained_uses;
+
+    Ok((program, sources, diagnostics))
+}
+
+fn load_program_file(
+    path: &std::path::Path,
+    visited: &mut std::collections::HashSet<std::path::PathBuf>,
+) -> Result<(nex_ast::Program, Vec<SourceFile>, Vec<Diagnostic>), DriverError> {
+    let canonical = path
+        .canonicalize()
+        .unwrap_or_else(|_| path.to_path_buf());
+    if !visited.insert(canonical.clone()) {
+        return Err(DriverError::Io(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("cyclic file import: {}", canonical.display()),
+        )));
+    }
+    let text = fs::read_to_string(&canonical).map_err(DriverError::Io)?;
+    let name = canonical.display().to_string();
+    let result = load_program_text(&name, text, visited);
+    visited.remove(&canonical);
+    result
+}
+
+fn prefix_program(mut program: nex_ast::Program, prefix: &str) -> nex_ast::Program {
+    for item in &mut program.structs {
+        item.name = format!("{prefix}.{}", item.name);
+    }
+    for item in &mut program.enums {
+        item.name = format!("{prefix}.{}", item.name);
+    }
+    for item in &mut program.traits {
+        item.name = format!("{prefix}.{}", item.name);
+    }
+    for item in &mut program.impls {
+        item.trait_name = format!("{prefix}.{}", item.trait_name);
+        item.type_name = format!("{prefix}.{}", item.type_name);
+        for method in &mut item.methods {
+            method.name = format!("{prefix}.{}", method.name);
+        }
+    }
+    for item in &mut program.consts {
+        item.name = format!("{prefix}.{}", item.name);
+    }
+    for item in &mut program.globals {
+        item.name = format!("{prefix}.{}", item.name);
+    }
+    for item in &mut program.functions {
+        item.name = format!("{prefix}.{}", item.name);
+    }
+    program.modules.push(prefix.to_string());
+    program
 }
 
 pub fn compile_file(path: &Path, options: CompileOptions) -> Result<CompileResult, DriverError> {
@@ -165,6 +266,30 @@ fn resolve_output(options: &CompileOptions, source_name: &str) -> (PathBuf, Stri
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn imports_a_file_module() {
+        let dir = std::env::temp_dir().join("nex-driver-import");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("src")).unwrap();
+        std::fs::write(dir.join("src").join("math.nex"), "pub fn add(a: i64, b: i64) -> i64:\n    return a + b\n").unwrap();
+        std::fs::write(
+            dir.join("src").join("main.nex"),
+            "use math from \"math.nex\"\n\nfn main():\n    print(math.add(2, 3))\n",
+        )
+        .unwrap();
+        let result = compile_file(
+            &dir.join("src").join("main.nex"),
+            CompileOptions {
+                emit: Emit::Executable,
+                build_dir: Some(dir.join("build")),
+                ..CompileOptions::default()
+            },
+        )
+        .expect("compilation should not fail at toolchain level");
+        assert!(!result.has_errors(), "{:?}", result.diagnostics);
+        assert!(result.artifacts.as_ref().unwrap().executable.is_some());
+    }
 
     #[test]
     fn compiles_hello_world() {

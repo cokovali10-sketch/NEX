@@ -40,6 +40,7 @@ planned and are not yet implemented.
 - Array literals and indexing reads/writes.
 - Tuple literals and positional field access.
 - Nested modules (`module name:`), `use` aliases, and `pub` visibility.
+- File-based imports (`use alias from "file.nex"`).
 - Explicit casts with `as`.
 - Top-level `const` declarations with compile-time constant initializers.
 

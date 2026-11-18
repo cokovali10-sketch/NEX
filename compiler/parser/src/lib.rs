@@ -867,11 +867,27 @@ impl<'a> Parser<'a> {
             };
             path.push(next);
         }
+        let file = if self.eat(&TokenKind::From) {
+            match self.peek().clone() {
+                TokenKind::Str(value) => {
+                    self.advance();
+                    Some(value)
+                }
+                _ => {
+                    let span = self.peek_token().span;
+                    self.error("NXP010", "expected a string literal after `from`", span);
+                    self.synchronize_item();
+                    return None;
+                }
+            }
+        } else {
+            None
+        };
         let span = start.merge(self.peek_token().span);
         self.expect_line_end();
         Some(UseDecl {
             path,
-            file: None,
+            file,
             span,
         })
     }
