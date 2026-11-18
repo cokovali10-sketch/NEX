@@ -517,13 +517,44 @@ impl<'a> Checker<'a> {
         let mut implemented: std::collections::HashSet<(String, String)> =
             std::collections::HashSet::new();
         for block in &self.program.impls {
-            let Some(trait_info) = self.analysis.traits.get(&block.trait_name).cloned() else {
-                self.error(
-                    "NXS041",
-                    format!("unknown trait `{}` in impl block", block.trait_name),
-                    block.span,
-                );
-                continue;
+            let trait_info = if block.trait_name.is_empty() {
+                let methods: Vec<TraitMethodSig> = block
+                    .methods
+                    .iter()
+                    .map(|method| {
+                        let params = method
+                            .params
+                            .iter()
+                            .skip(1)
+                            .map(|param| self.resolve_type(&param.ty))
+                            .collect();
+                        let ret = method
+                            .ret
+                            .as_ref()
+                            .map(|ty| self.resolve_type(ty))
+                            .unwrap_or(Type::Void);
+                        TraitMethodSig {
+                            name: method.name.clone(),
+                            params,
+                            ret,
+                        }
+                    })
+                    .collect();
+                TraitInfo {
+                    name: String::new(),
+                    methods,
+                    public: false,
+                }
+            } else {
+                let Some(info) = self.analysis.traits.get(&block.trait_name).cloned() else {
+                    self.error(
+                        "NXS041",
+                        format!("unknown trait `{}` in impl block", block.trait_name),
+                        block.span,
+                    );
+                    continue;
+                };
+                info
             };
             let Some(struct_info) = self.analysis.structs.get(&block.type_name).cloned() else {
                 self.error(

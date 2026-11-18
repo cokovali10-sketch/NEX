@@ -393,12 +393,16 @@ impl<'a> Parser<'a> {
 
     fn parse_impl(&mut self) -> Option<ImplBlock> {
         let start = self.advance().span; // impl
-        let trait_name = self.parse_path_name("after `impl`")?;
-        if !self.expect(&TokenKind::For, "after trait name in `impl`") {
-            self.synchronize_item();
-            return None;
-        }
-        let type_name = self.parse_path_name("after `for`")?;
+        let first = self.parse_path_name("after `impl`")?;
+        let (trait_name, type_name) = if self.check(&TokenKind::Colon) {
+            (String::new(), first)
+        } else {
+            if !self.expect(&TokenKind::For, "after trait name in `impl`") {
+                self.synchronize_item();
+                return None;
+            }
+            (first, self.parse_path_name("after `for`")?)
+        };
 
         if !self.expect(&TokenKind::Colon, "after impl target") {
             self.synchronize_item();

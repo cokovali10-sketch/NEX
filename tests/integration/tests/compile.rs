@@ -1817,3 +1817,26 @@ fn main():
     assert_eq!(code, 0, "stderr: {stderr}");
     assert_eq!(stdout, "hello\nworld\nhello\n");
 }
+
+#[test]
+fn inherent_impl_methods() {
+    let source = r#"
+struct Counter:
+    value: i64
+
+impl Counter:
+    fn get(self) -> i64:
+        return self.value
+
+    fn bump(self, by: i64) -> i64:
+        return self.value + by
+
+fn main():
+    var c = Counter(5)
+    println(c.get())
+    println(c.bump(3))
+"#;
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "5\n8\n");
+}

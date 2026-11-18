@@ -43,7 +43,8 @@ planned and are not yet implemented.
   field assignment (see `specs/types.md`).
 - Enum declarations and `match` over enum values.
 - `match` over integers, booleans, characters, strings, with guards and ranges.
-- Trait declarations, `impl Trait for Type`, and static-dispatch method calls.
+- Trait declarations, `impl Trait for Type`, inherent `impl Type:` methods,
+  and static-dispatch method calls.
 - Array literals and indexing reads/writes.
 - Tuple literals and positional field access.
 - Tuple destructuring (`let (a, b) = pair`).

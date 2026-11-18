@@ -277,7 +277,12 @@ impl<'a> Printer<'a> {
     }
 
     fn impl_block(&mut self, item: &ImplBlock) {
-        self.push(format!("impl {} for {}:", item.trait_name, item.type_name));
+        let head = if item.trait_name.is_empty() {
+            format!("impl {}:", item.type_name)
+        } else {
+            format!("impl {} for {}:", item.trait_name, item.type_name)
+        };
+        self.push(head);
         self.indent += 1;
         if item.methods.is_empty() {
             self.push("pass");

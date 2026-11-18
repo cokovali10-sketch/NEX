@@ -24,6 +24,7 @@
 
 - Traits: `trait` declarations, `impl Trait for Type`, `self`, and
   `receiver.method(...)` calls dispatched statically to `Type.method`.
+- Inherent methods via `impl Type:`.
 
 - Type aliases (`type Name = Type`).
 - String interpolation (`f"value {expr}"`).
