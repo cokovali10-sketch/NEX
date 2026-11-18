@@ -1348,6 +1348,33 @@ fn lower_match(
                         });
                         Operand::Value(cmp_dst)
                     }
+                    nex_ast::Pattern::Range(start, end) => {
+                        let ge_dst = builder.new_value();
+                        builder.emit(Inst::Bin {
+                            dst: ge_dst,
+                            op: BinOp::Ge,
+                            ty: scrut_ir,
+                            lhs: scrut.clone(),
+                            rhs: Operand::Const(Const::Int(*start)),
+                        });
+                        let le_dst = builder.new_value();
+                        builder.emit(Inst::Bin {
+                            dst: le_dst,
+                            op: BinOp::Le,
+                            ty: scrut_ir,
+                            lhs: scrut.clone(),
+                            rhs: Operand::Const(Const::Int(*end)),
+                        });
+                        let and_dst = builder.new_value();
+                        builder.emit(Inst::Bin {
+                            dst: and_dst,
+                            op: BinOp::Mul,
+                            ty: IrType::Bool,
+                            lhs: Operand::Value(ge_dst),
+                            rhs: Operand::Value(le_dst),
+                        });
+                        Operand::Value(and_dst)
+                    }
                     nex_ast::Pattern::Bool(value) => {
                         let cmp_dst = builder.new_value();
                         builder.emit(Inst::Bin {

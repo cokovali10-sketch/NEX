@@ -486,6 +486,7 @@ impl<'a> Printer<'a> {
             nex_ast::Pattern::Else => "else".to_string(),
             nex_ast::Pattern::Variant(name) => format!("case {name}"),
             nex_ast::Pattern::Int(value) => format!("case {value}"),
+            nex_ast::Pattern::Range(start, end) => format!("case {start}..{end}"),
             nex_ast::Pattern::Bool(value) => format!("case {value}"),
             nex_ast::Pattern::Char(value) => format!("case {value:?}"),
             nex_ast::Pattern::Str(value) => format!("case {value:?}"),

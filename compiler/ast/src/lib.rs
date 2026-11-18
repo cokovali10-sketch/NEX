@@ -224,6 +224,8 @@ pub enum Pattern {
     Else,
     Variant(String),
     Int(i64),
+    /// Inclusive integer range (`case 1..5` matches 1 through 5).
+    Range(i64, i64),
     Bool(bool),
     Char(char),
     Str(String),

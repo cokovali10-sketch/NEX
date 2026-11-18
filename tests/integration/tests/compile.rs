@@ -1691,3 +1691,21 @@ fn main():
     assert_eq!(code, 0, "stderr: {stderr}");
     assert_eq!(stdout, "42");
 }
+
+#[test]
+fn range_patterns_match_inclusive() {
+    let source = r#"
+fn main():
+    var x = 7
+    match x:
+        case 1..3:
+            print("low")
+        case 4..9:
+            print("mid")
+        else:
+            print("high")
+"#;
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "mid");
+}

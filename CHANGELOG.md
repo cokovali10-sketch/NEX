@@ -23,6 +23,9 @@
 
 - Type aliases (`type Name = Type`).
 
+- Extended `match`: literal patterns, guards (`case X if cond:`), and
+  inclusive range patterns (`case 1..5:`).
+
 - `unsafe:` blocks for grouping low-level operations.
 - `nex add <path>` copies a local package into `deps/` and records it in `nex.toml`.
 

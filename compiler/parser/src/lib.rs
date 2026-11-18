@@ -672,7 +672,17 @@ impl<'a> Parser<'a> {
             let pattern = match self.peek().clone() {
                 TokenKind::Int(value) => {
                     self.advance();
-                    nex_ast::Pattern::Int(value)
+                    if self.eat(&TokenKind::DotDot) {
+                        let TokenKind::Int(end) = self.peek().clone() else {
+                            let span = self.peek_token().span;
+                            self.error("NXP013", "expected an integer after `..` in a range pattern", span);
+                            return None;
+                        };
+                        self.advance();
+                        nex_ast::Pattern::Range(value, end)
+                    } else {
+                        nex_ast::Pattern::Int(value)
+                    }
                 }
                 TokenKind::Minus => {
                     self.advance();

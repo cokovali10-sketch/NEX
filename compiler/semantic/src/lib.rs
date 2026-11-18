@@ -1378,6 +1378,30 @@ impl<'a> Checker<'a> {
                                 );
                             }
                         }
+                        nex_ast::Pattern::Range(start, end) => {
+                            if else_seen {
+                                self.error(
+                                    "NXS034",
+                                    "case arm cannot follow an `else` arm".to_string(),
+                                    arm.span,
+                                );
+                            }
+                            if !is_int {
+                                if scrut_ty != Type::Error {
+                                    self.error(
+                                        "NXS030",
+                                        "range patterns require an integer scrutinee".to_string(),
+                                        arm.span,
+                                    );
+                                }
+                            } else if start > end {
+                                self.error(
+                                    "NXS030",
+                                    format!("invalid range `{start}..{end}`"),
+                                    arm.span,
+                                );
+                            }
+                        }
                         nex_ast::Pattern::Bool(value) => {
                             if else_seen {
                                 self.error(
