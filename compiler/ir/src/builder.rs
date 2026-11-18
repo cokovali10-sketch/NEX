@@ -2305,6 +2305,23 @@ fn lower_expr(
                 return Ok(Operand::Value(dst));
             }
 
+            if callee == "json_escape" || callee == "json_quote" {
+                let value = lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
+                let name = if callee == "json_escape" {
+                    "nex_rt_json_escape"
+                } else {
+                    "nex_rt_json_quote"
+                };
+                let dst = builder.new_value();
+                builder.emit(Inst::Call {
+                    dst: Some(dst),
+                    name: name.to_string(),
+                    args: vec![value],
+                    ret: IrType::String,
+                });
+                return Ok(Operand::Value(dst));
+            }
+
             if callee.starts_with("builder_") {
                 let mut call_args = Vec::new();
                 for arg in args {

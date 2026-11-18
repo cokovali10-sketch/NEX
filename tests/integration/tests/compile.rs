@@ -1428,3 +1428,32 @@ fn split_handles_empty_and_trailing_fields() {
     assert_eq!(code, 0, "stderr: {stderr}");
     assert_eq!(stdout, "3\n1\n\n");
 }
+
+#[test]
+fn json_escape_quotes_backslashes_and_control_chars() {
+    let source = r#"fn main():
+    println(json_escape("a\"b\\c"))
+    println(json_escape("line1\nline2"))
+"#;
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "a\\\"b\\\\c\nline1\\nline2\n");
+}
+
+#[test]
+fn built_json_parses_back() {
+    let source = r#"fn main():
+    var b = builder_new()
+    builder_append(b, "{")
+    builder_append(b, concat("\"n\": ", json_quote("a\"b")))
+    builder_append(b, "}")
+    var text = builder_string(b)
+    println(text)
+    var doc = json_parse(text)
+    println(json_type(doc))
+    println(json_str(json_get(doc, "n")))
+"#;
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "{\"n\": \"a\\\"b\"}\nobject\na\"b\n");
+}

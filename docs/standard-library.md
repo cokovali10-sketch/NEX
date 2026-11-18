@@ -304,6 +304,29 @@ fn main():
 `str_split_count` and `str_split_at` are backed by `strstr`, so this is O(n) in
 the number of fields for the count and O(n) per field lookup.
 
+### Writing JSON
+
+`json_parse` reads a document. To produce one, escape strings and assemble with a
+builder:
+
+| Function | Signature | Notes |
+|---|---|---|
+| `json_escape` | `(value: string) -> string` | Escapes `"`, `\`, CR, LF, TAB and control chars. |
+| `json_quote` | `(value: string) -> string` | `json_escape` plus surrounding quotes. |
+
+```nex
+fn record(name: string, age: i64) -> string:
+    var b = builder_new()
+    builder_append(b, "{")
+    builder_append(b, concat("\"name\": ", json_quote(name)))
+    builder_append(b, concat(", \"age\": ", to_string(age)))
+    builder_append(b, "}")
+    return builder_string(b)
+```
+
+Numbers use `to_string` (integers) or the default `print` formatting for floats;
+`json_stringify` serialises a parsed document back to compact JSON.
+
 ### String builder
 
 `concat` allocates a new buffer on every call, so appending in a loop is

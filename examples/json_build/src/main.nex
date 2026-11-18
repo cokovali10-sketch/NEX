@@ -1,0 +1,24 @@
+# Building JSON in NEX: escape strings, then assemble with a builder.
+# `json_parse` reads JSON; this is the missing half — writing it safely.
+
+fn record(name: string, age: i64) -> string:
+    var b = builder_new()
+    builder_append(b, "{")
+    builder_append(b, concat("\"name\": ", json_quote(name)))
+    builder_append(b, concat(", \"age\": ", to_string(age)))
+    builder_append(b, "}")
+    return builder_string(b)
+
+fn main():
+    var name = "Ali \"NEX\" \\ dev"
+    var json = record(name, 25)
+    println(json)
+
+    # It must still parse back.
+    var parsed = json_parse(json)
+    println(json_type(parsed))
+    println(json_str(json_get(parsed, "name")))
+    println(json_num(json_get(parsed, "age")))
+
+    # Round-trip through the DOM serialiser.
+    println(json_stringify(parsed))

@@ -2709,3 +2709,77 @@ void nex_rt_builder_clear(long long handle) {
         builder->data[0] = '\0';
     }
 }
+
+/* ------------------------------------------------------------------------- */
+/* JSON output helpers.                                                       */
+/* `nex_rt_json_escape` escapes a string for embedding inside JSON quotes;     */
+/* `nex_rt_json_quote` does both (quotes plus escaping).                       */
+/* ------------------------------------------------------------------------- */
+
+char *nex_rt_json_escape(const char *value) {
+    if (value == NULL) {
+        value = "";
+    }
+    size_t length = strlen(value);
+    char *buffer = (char *)malloc(length * 2 + 1);
+    if (buffer == NULL) {
+        return NULL;
+    }
+    size_t written = 0;
+    for (const unsigned char *cursor = (const unsigned char *)value; *cursor != '\0'; cursor++) {
+        switch (*cursor) {
+            case '"':
+                buffer[written++] = '\\';
+                buffer[written++] = '"';
+                break;
+            case '\\':
+                buffer[written++] = '\\';
+                buffer[written++] = '\\';
+                break;
+            case '\n':
+                buffer[written++] = '\\';
+                buffer[written++] = 'n';
+                break;
+            case '\r':
+                buffer[written++] = '\\';
+                buffer[written++] = 'r';
+                break;
+            case '\t':
+                buffer[written++] = '\\';
+                buffer[written++] = 't';
+                break;
+            default:
+                if (*cursor < 0x20) {
+                    /* Control characters become \u00XX. */
+                    char digits[7];
+                    snprintf(digits, sizeof(digits), "\\u%04x", (unsigned int)*cursor);
+                    memcpy(buffer + written, digits, 6);
+                    written += 6;
+                } else {
+                    buffer[written++] = (char)*cursor;
+                }
+                break;
+        }
+    }
+    buffer[written] = '\0';
+    return buffer;
+}
+
+char *nex_rt_json_quote(const char *value) {
+    char *escaped = nex_rt_json_escape(value);
+    if (escaped == NULL) {
+        return NULL;
+    }
+    size_t length = strlen(escaped);
+    char *quoted = (char *)malloc(length + 3);
+    if (quoted == NULL) {
+        free(escaped);
+        return NULL;
+    }
+    quoted[0] = '"';
+    memcpy(quoted + 1, escaped, length);
+    quoted[length + 1] = '"';
+    quoted[length + 2] = '\0';
+    free(escaped);
+    return quoted;
+}

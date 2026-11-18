@@ -68,6 +68,8 @@
 - String builder: `builder_new`, `builder_append`, `builder_len`, `builder_string`,
   `builder_clear` (amortised O(1) appends instead of quadratic `concat`).
 
+- JSON output helpers: `json_escape` and `json_quote`, plus an example that builds JSON and parses it back.
+
 ### Fixed
 
 - The lexer now skips a leading UTF-8 BOM instead of reporting `unexpected character`.

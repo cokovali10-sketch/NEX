@@ -2911,6 +2911,30 @@ impl<'a> Checker<'a> {
             return Type::I64;
         }
 
+        if callee == "json_escape" || callee == "json_quote" {
+            if args.len() != 1 {
+                self.error(
+                    "NXS004",
+                    format!("`{callee}` expects 1 argument, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let value_ty = self.infer(&args[0]);
+            if value_ty != Type::String && value_ty != Type::Error {
+                self.error(
+                    "NXS004",
+                    format!("`{callee}` expects a `string`, found `{value_ty}`"),
+                    span,
+                );
+                return Type::Error;
+            }
+            return Type::String;
+        }
+
         if callee == "builder_new" {
             if !args.is_empty() {
                 self.error("NXS004", "`builder_new` takes no arguments", span);
