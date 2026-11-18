@@ -1795,3 +1795,11 @@ fn octal_integer_literals() {
     assert_eq!(code, 0, "stderr: {stderr}");
     assert_eq!(stdout, "15\n");
 }
+
+#[test]
+fn string_indexing() {
+    let source = "fn main():\n    var s = \"abc\"\n    print(s[1])\n";
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "b");
+}

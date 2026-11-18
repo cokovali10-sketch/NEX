@@ -36,6 +36,7 @@ planned and are not yet implemented.
 - Built-in `peek` and `poke` for raw `i64` memory access.
 - Built-in `concat` and `to_string`.
 - String comparison (`==`, `!=`, `<`, `<=`, `>`, `>=`) comparing contents.
+- String indexing (`s[1]`) returns a one-character string.
 - String interpolation with `f"..."`.
 - Struct declarations with scalar fields, construction, field access, and
   field assignment (see `specs/types.md`).

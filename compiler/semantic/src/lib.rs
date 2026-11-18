@@ -2119,6 +2119,8 @@ impl<'a> Checker<'a> {
                         .get(display)
                         .map(|info| info.elem)
                         .unwrap_or(Type::Error)
+                } else if base_ty == Type::String {
+                    Type::String
                 } else {
                     self.error(
                         "NXS036",

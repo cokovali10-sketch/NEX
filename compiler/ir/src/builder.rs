@@ -3598,6 +3598,18 @@ fn lower_expr(
             if let Type::DynArray(_) = base_ty {
                 return lower_dyn_index(builder, base, index, expr, scopes, storage, analysis);
             }
+            if base_ty == Type::String {
+                let value = lower_expr(builder, base, scopes, storage, analysis, Type::Error)?;
+                let idx = lower_expr(builder, index, scopes, storage, analysis, Type::Error)?;
+                let dst = builder.new_value();
+                builder.emit(Inst::Call {
+                    dst: Some(dst),
+                    name: "nex_rt_char_at".to_string(),
+                    args: vec![value, idx],
+                    ret: IrType::String,
+                });
+                return Ok(Operand::Value(dst));
+            }
             let elem_ty = analysis.expr_type(expr.span).unwrap_or(Type::Error);
             let elem_ir = IrType::from_type(elem_ty);
             let base_ptr = lower_array_place(builder, base, scopes, storage, analysis)?;
