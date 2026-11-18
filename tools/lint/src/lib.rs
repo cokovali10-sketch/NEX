@@ -164,6 +164,9 @@ fn check_block(block: &Block, warnings: &mut Vec<Warning>) {
             StmtKind::For { body, .. } => check_block(body, warnings),
             StmtKind::Match { arms, .. } => {
                 for arm in arms {
+                    if let Some(guard) = &arm.guard {
+                        check_expr(guard, warnings);
+                    }
                     check_block(&arm.body, warnings);
                 }
             }
@@ -285,6 +288,9 @@ fn collect_stmt_idents(stmt: &Stmt, out: &mut HashSet<String>) {
         StmtKind::Match { scrutinee, arms } => {
             collect_expr_idents(scrutinee, out);
             for arm in arms {
+                if let Some(guard) = &arm.guard {
+                    collect_expr_idents(guard, out);
+                }
                 collect_block_idents(&arm.body, out);
             }
         }
@@ -336,6 +342,9 @@ fn collect_stmt_calls(stmt: &Stmt, out: &mut HashSet<String>) {
         StmtKind::Match { scrutinee, arms } => {
             collect_expr_calls(scrutinee, out);
             for arm in arms {
+                if let Some(guard) = &arm.guard {
+                    collect_expr_calls(guard, out);
+                }
                 collect_block_calls(&arm.body, out);
             }
         }

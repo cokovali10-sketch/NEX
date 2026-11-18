@@ -201,6 +201,8 @@ pub enum StmtKind {
 pub struct MatchArm {
     /// `Pattern::Else` is the fallback arm.
     pub pattern: Pattern,
+    /// Optional guard: the arm matches only when this expression is true.
+    pub guard: Option<Expr>,
     pub body: Block,
     pub span: Span,
 }

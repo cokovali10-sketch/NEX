@@ -1367,6 +1367,20 @@ fn lower_match(
                     }
                     nex_ast::Pattern::Else => Operand::Const(Const::Bool(true)),
                 };
+                let mut cond = cond;
+
+                if let Some(guard) = &arm.guard {
+                    let guard_val = lower_expr(builder, guard, scopes, storage, analysis, Type::Error)?;
+                    let and_dst = builder.new_value();
+                    builder.emit(Inst::Bin {
+                        dst: and_dst,
+                        op: BinOp::Mul,
+                        ty: IrType::Bool,
+                        lhs: cond,
+                        rhs: guard_val,
+                    });
+                    cond = Operand::Value(and_dst);
+                }
 
                 let next_bb = builder.new_block();
                 builder.terminate(Terminator::CondBr {

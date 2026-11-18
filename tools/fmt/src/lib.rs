@@ -466,14 +466,20 @@ impl<'a> Printer<'a> {
     }
 
     fn match_arm(&mut self, arm: &MatchArm) {
-        match &arm.pattern {
-            nex_ast::Pattern::Else => self.push("else:".to_string()),
-            nex_ast::Pattern::Variant(name) => self.push(format!("case {name}:")),
-            nex_ast::Pattern::Int(value) => self.push(format!("case {value}:")),
-            nex_ast::Pattern::Bool(value) => self.push(format!("case {value}:")),
-            nex_ast::Pattern::Char(value) => self.push(format!("case {value:?}:")),
-            nex_ast::Pattern::Str(value) => self.push(format!("case {:?}:", value)),
-        }
+        let head = match &arm.pattern {
+            nex_ast::Pattern::Else => "else".to_string(),
+            nex_ast::Pattern::Variant(name) => format!("case {name}"),
+            nex_ast::Pattern::Int(value) => format!("case {value}"),
+            nex_ast::Pattern::Bool(value) => format!("case {value}"),
+            nex_ast::Pattern::Char(value) => format!("case {value:?}"),
+            nex_ast::Pattern::Str(value) => format!("case {value:?}"),
+        };
+        let text = if let Some(guard) = &arm.guard {
+            format!("{head} if {}:", expr_str(guard))
+        } else {
+            format!("{head}:")
+        };
+        self.push(text);
         self.indent += 1;
         self.block(&arm.body);
         self.indent -= 1;

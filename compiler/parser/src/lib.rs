@@ -693,10 +693,17 @@ impl<'a> Parser<'a> {
                 continue;
             };
 
+            let guard = if self.eat(&TokenKind::If) {
+                Some(self.parse_expr())
+            } else {
+                None
+            };
+
             let body = self.parse_arm_body();
             let span = arm_start.merge(body.span);
             arms.push(MatchArm {
                 pattern,
+                guard,
                 body,
                 span,
             });

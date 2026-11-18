@@ -22,6 +22,7 @@
   `receiver.method(...)` calls dispatched statically to `Type.method`.
 
 - `unsafe:` blocks for grouping low-level operations.
+- Match guards (`case X if cond:`).
 
 - `pass`, an explicitly empty statement, for empty function bodies, `else`
   branches, and `match` arms. The formatter emits it for empty blocks.

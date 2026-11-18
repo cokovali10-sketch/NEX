@@ -1389,6 +1389,16 @@ impl<'a> Checker<'a> {
                             }
                         }
                     }
+                    if let Some(guard) = &arm.guard {
+                        let ty = self.infer(guard);
+                        if ty != Type::Error && ty != Type::Bool {
+                            self.error(
+                                "NXS014",
+                                format!("match guard must be `bool`, found `{ty}`"),
+                                guard.span,
+                            );
+                        }
+                    }
                     self.check_block(&arm.body, false);
                 }
 
