@@ -40,6 +40,7 @@ planned and are not yet implemented.
 - Trait declarations, `impl Trait for Type`, and static-dispatch method calls.
 - Array literals and indexing reads/writes.
 - Tuple literals and positional field access.
+- Tuple destructuring (`let (a, b) = pair`).
 - Nested modules (`module name:`), `use` aliases, and `pub` visibility.
 - File-based imports (`use alias from "file.nex"`).
 - Explicit casts with `as`.

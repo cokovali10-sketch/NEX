@@ -377,6 +377,7 @@ impl<'a> Printer<'a> {
         match &stmt.kind {
             StmtKind::Let {
                 name,
+                names,
                 mutable,
                 ty,
                 init,
@@ -386,7 +387,12 @@ impl<'a> Printer<'a> {
                     .as_ref()
                     .map(|ty| format!(": {}", type_str(ty)))
                     .unwrap_or_default();
-                self.push(format!("{keyword} {name}{annotation} = {}", expr_str(init)));
+                let target = if let Some(names) = names {
+                    format!("({})", names.join(", "))
+                } else {
+                    name.clone()
+                };
+                self.push(format!("{keyword} {target}{annotation} = {}", expr_str(init)));
             }
             StmtKind::Assign { name, value } => {
                 // The parser desugars `x += 1` into `x = x + 1`. Restore the

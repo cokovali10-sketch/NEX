@@ -1722,3 +1722,17 @@ fn main():
     assert_eq!(code, 0, "stderr: {stderr}");
     assert_eq!(stdout, "Hello NEX, n=42!\n");
 }
+
+#[test]
+fn tuple_destructuring() {
+    let source = r#"
+fn main():
+    var pair = (10, "x")
+    let (a, b) = pair
+    print(a)
+    print(b)
+"#;
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "10x");
+}

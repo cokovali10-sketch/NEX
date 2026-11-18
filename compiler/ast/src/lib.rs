@@ -162,6 +162,8 @@ pub struct Stmt {
 pub enum StmtKind {
     Let {
         name: String,
+        /// Names bound by a tuple destructuring pattern (`let (a, b) = ...`).
+        names: Option<Vec<String>>,
         mutable: bool,
         ty: Option<TypeExpr>,
         init: Expr,

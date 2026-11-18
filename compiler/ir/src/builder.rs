@@ -299,6 +299,54 @@ fn lower_statement(
     analysis: &Analysis,
 ) -> Result<(), String> {
     match &statement.kind {
+        StmtKind::Let {
+            names: Some(names),
+            init,
+            ..
+        } => {
+            let ty = analysis
+                .expr_type(init.span)
+                .ok_or_else(|| "missing type information for destructuring".to_string())?;
+            let Type::Struct(struct_name) = ty else {
+                return Err("cannot destructure a non-tuple value".to_string());
+            };
+            let info = analysis
+                .struct_info(struct_name)
+                .ok_or_else(|| "missing struct information for destructuring".to_string())?;
+            let source = lower_struct_place(builder, init, scopes, storage, analysis)?;
+            for (index, binding) in names.iter().enumerate() {
+                let field_ty = info
+                    .fields
+                    .get(index)
+                    .map(|(_, ty)| *ty)
+                    .unwrap_or(Type::Error);
+                let ir_ty = IrType::from_type(field_ty);
+                let field_ptr = builder.new_value();
+                builder.emit(Inst::FieldPtr {
+                    dst: field_ptr,
+                    base: source,
+                    struct_name,
+                    index: index as u32,
+                    field_ty: ir_ty,
+                });
+                let value = builder.new_value();
+                builder.emit(Inst::Load {
+                    dst: value,
+                    ptr: field_ptr,
+                    ty: ir_ty,
+                });
+                let slot = builder.alloca_at_entry(ir_ty);
+                builder.emit(Inst::Store {
+                    ptr: slot,
+                    value: Operand::Value(value),
+                    ty: ir_ty,
+                });
+                if let Some(scope) = scopes.last_mut() {
+                    scope.insert(binding.clone(), Slot { ptr: slot, ty: ir_ty });
+                }
+            }
+            Ok(())
+        }
         StmtKind::Let { name, init, .. } => {
             let (ptr, ty) = storage
                 .get(&statement.span)

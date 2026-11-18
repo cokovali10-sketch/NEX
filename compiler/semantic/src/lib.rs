@@ -1038,6 +1038,7 @@ impl<'a> Checker<'a> {
         match &statement.kind {
             StmtKind::Let {
                 name,
+                names,
                 mutable,
                 ty,
                 init,
@@ -1052,6 +1053,45 @@ impl<'a> Checker<'a> {
                 } else {
                     self.infer(init)
                 };
+
+                if let Some(names) = names {
+                    let Type::Struct(struct_name) = inferred else {
+                        if inferred != Type::Error {
+                            self.error(
+                                "NXS005",
+                                "tuple destructuring requires a tuple or struct initializer".to_string(),
+                                statement.span,
+                            );
+                        }
+                        for binding in names {
+                            self.declare(binding, Type::Error, *mutable, statement.span);
+                        }
+                        return;
+                    };
+                    let fields = self
+                        .analysis
+                        .structs
+                        .get(struct_name)
+                        .map(|info| info.fields.clone())
+                        .unwrap_or_default();
+                    if fields.len() != names.len() {
+                        self.error(
+                            "NXS005",
+                            format!(
+                                "tuple pattern binds {} name(s), but value has {} field(s)",
+                                names.len(),
+                                fields.len()
+                            ),
+                            statement.span,
+                        );
+                    }
+                    for (index, binding) in names.iter().enumerate() {
+                        let field_ty = fields.get(index).map(|(_, ty)| *ty).unwrap_or(Type::Error);
+                        self.declare(binding, field_ty, *mutable, statement.span);
+                    }
+                    self.analysis.decl_types.insert(statement.span, inferred);
+                    return;
+                }
 
                 let declared_ty = if ty.is_some() {
                     if inferred == Type::Error {

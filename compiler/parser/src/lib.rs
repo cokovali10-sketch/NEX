@@ -1266,15 +1266,35 @@ impl<'a> Parser<'a> {
         let mutable = keyword.kind == TokenKind::Var;
         let start = keyword.span;
 
-        let Some((name, _name_span)) = self.expect_ident("after binding keyword") else {
-            self.recover_statement();
-            return Stmt {
-                kind: StmtKind::Expr(Expr {
-                    kind: ExprKind::Error,
+        let (name, names) = if self.eat(&TokenKind::LParen) {
+            let mut names = Vec::new();
+            while !self.check(&TokenKind::RParen) && !self.check(&TokenKind::Eof) {
+                if let TokenKind::Ident(binding) = self.peek().clone() {
+                    self.advance();
+                    names.push(binding);
+                } else {
+                    let span = self.peek_token().span;
+                    self.error("NXP011", "expected a binding name in tuple pattern", span);
+                    break;
+                }
+                if !self.eat(&TokenKind::Comma) {
+                    break;
+                }
+            }
+            self.expect(&TokenKind::RParen, "after tuple pattern");
+            (String::new(), Some(names))
+        } else {
+            let Some((name, _name_span)) = self.expect_ident("after binding keyword") else {
+                self.recover_statement();
+                return Stmt {
+                    kind: StmtKind::Expr(Expr {
+                        kind: ExprKind::Error,
+                        span: start,
+                    }),
                     span: start,
-                }),
-                span: start,
+                };
             };
+            (name, None)
         };
 
         let ty = if self.eat(&TokenKind::Colon) {
@@ -1300,6 +1320,7 @@ impl<'a> Parser<'a> {
         Stmt {
             kind: StmtKind::Let {
                 name,
+                names,
                 mutable,
                 ty,
                 init,

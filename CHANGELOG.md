@@ -23,6 +23,7 @@
 
 - Type aliases (`type Name = Type`).
 - String interpolation (`f"value {expr}"`).
+- Tuple destructuring in `let`/`var` bindings.
 
 - Extended `match`: literal patterns, guards (`case X if cond:`), and
   inclusive range patterns (`case 1..5:`).
