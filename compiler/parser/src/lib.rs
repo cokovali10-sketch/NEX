@@ -22,6 +22,17 @@ pub fn parse(tokens: &[Token]) -> ParseResult {
     Parser::new(tokens).parse_program()
 }
 
+/// Parse a single expression from source text (used for interpolation holes).
+pub fn parse_expression(source: &str) -> (Option<Expr>, Vec<Diagnostic>) {
+    let lexed = nex_lexer::Lexer::new(source).lex();
+    if !lexed.diagnostics.is_empty() {
+        return (None, lexed.diagnostics);
+    }
+    let mut parser = Parser::new(&lexed.tokens);
+    let expr = parser.parse_expr();
+    (Some(expr), parser.diagnostics)
+}
+
 struct Parser<'a> {
     tokens: &'a [Token],
     pos: usize,
@@ -1703,6 +1714,72 @@ impl<'a> Parser<'a> {
         (args, open.merge(close))
     }
 
+    fn parse_fstring(&mut self, content: &str, span: Span) -> Expr {
+        let mut parts: Vec<Expr> = Vec::new();
+        let chars: Vec<char> = content.chars().collect();
+        let mut index = 0;
+        let mut text = String::new();
+        while index < chars.len() {
+            if chars[index] == '{' {
+                if !text.is_empty() {
+                    parts.push(Expr {
+                        kind: ExprKind::Str(std::mem::take(&mut text)),
+                        span,
+                    });
+                }
+                index += 1;
+                let start = index;
+                while index < chars.len() && chars[index] != '}' {
+                    index += 1;
+                }
+                let hole: String = chars[start..index].iter().collect();
+                if index < chars.len() {
+                    index += 1;
+                }
+                let (expr, diagnostics) = crate::parse_expression(hole.trim());
+                self.diagnostics.extend(diagnostics);
+                if let Some(expr) = expr {
+                    parts.push(Expr {
+                        kind: ExprKind::Call {
+                            callee: "to_string".to_string(),
+                            callee_span: span,
+                            args: vec![expr],
+                        },
+                        span,
+                    });
+                }
+            } else {
+                text.push(chars[index]);
+                index += 1;
+            }
+        }
+        if !text.is_empty() {
+            parts.push(Expr {
+                kind: ExprKind::Str(text),
+                span,
+            });
+        }
+        if parts.is_empty() {
+            return Expr {
+                kind: ExprKind::Str(String::new()),
+                span,
+            };
+        }
+        let mut iter = parts.into_iter();
+        let mut result = iter.next().unwrap();
+        for part in iter {
+            result = Expr {
+                kind: ExprKind::Call {
+                    callee: "concat".to_string(),
+                    callee_span: span,
+                    args: vec![result, part],
+                },
+                span,
+            };
+        }
+        result
+    }
+
     fn parse_primary(&mut self) -> Expr {
         let token = self.peek_token().clone();
         match token.kind {
@@ -1750,6 +1827,12 @@ impl<'a> Parser<'a> {
             }
             TokenKind::Ident(name) => {
                 self.advance();
+                if name == "f"
+                    && let TokenKind::Str(content) = self.peek().clone()
+                {
+                    self.advance();
+                    return self.parse_fstring(&content, token.span);
+                }
                 Expr {
                     kind: ExprKind::Ident(name),
                     span: token.span,

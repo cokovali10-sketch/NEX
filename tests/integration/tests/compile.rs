@@ -1709,3 +1709,16 @@ fn main():
     assert_eq!(code, 0, "stderr: {stderr}");
     assert_eq!(stdout, "mid");
 }
+
+#[test]
+fn string_interpolation() {
+    let source = r#"
+fn main():
+    var name = "NEX"
+    var n = 42
+    println(f"Hello {name}, n={n}!")
+"#;
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "Hello NEX, n=42!\n");
+}

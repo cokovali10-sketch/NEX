@@ -3858,13 +3858,13 @@ impl<'a> Checker<'a> {
                 return Type::Error;
             }
             let arg_ty = self.infer(&args[0]);
-            if arg_ty == Type::I64 || arg_ty == Type::F64 || arg_ty == Type::Bool {
+            if arg_ty == Type::I64 || arg_ty == Type::F64 || arg_ty == Type::Bool || arg_ty == Type::String {
                 return Type::String;
             }
             if arg_ty != Type::Error {
                 self.error(
                     "NXS004",
-                    format!("`to_string` expects `i64`, `f64` or `bool`, found `{arg_ty}`"),
+                    format!("`to_string` expects `i64`, `f64`, `bool` or `string`, found `{arg_ty}`"),
                     args[0].span,
                 );
             }

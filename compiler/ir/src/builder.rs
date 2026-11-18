@@ -3342,6 +3342,9 @@ fn lower_expr(
                 let arg_ty = analysis.expr_type(args[0].span).unwrap_or(Type::Error);
                 let arg_value =
                     lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
+                if arg_ty == Type::String {
+                    return Ok(arg_value);
+                }
                 let dst = builder.new_value();
                 if arg_ty == Type::Bool {
                     // The runtime takes a C int; widen the NEX bool first.

@@ -22,6 +22,7 @@
   `receiver.method(...)` calls dispatched statically to `Type.method`.
 
 - Type aliases (`type Name = Type`).
+- String interpolation (`f"value {expr}"`).
 
 - Extended `match`: literal patterns, guards (`case X if cond:`), and
   inclusive range patterns (`case 1..5:`).
