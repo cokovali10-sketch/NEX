@@ -46,13 +46,8 @@ fn main() -> ExitCode {
         "lint" => cmd_lint(&args[1..]),
         "add" => cmd_add(&args[1..]),
         "benchmark" => cmd_benchmark(&args[1..]),
-        "debug" | "profile" => {
-            eprintln!(
-                "nex: `{}` is planned for a later NEX release; see ROADMAP.md",
-                args[0]
-            );
-            ExitCode::from(2)
-        }
+        "debug" => cmd_debug(&args[1..]),
+        "profile" => cmd_profile(&args[1..]),
         _ => {
             eprintln!("nex: unknown command `{}`", args[0]);
             eprintln!("run `nex help` for usage");
@@ -584,6 +579,112 @@ fn cmd_benchmark(args: &[String]) -> ExitCode {
     ExitCode::SUCCESS
 }
 
+fn cmd_debug(args: &[String]) -> ExitCode {
+    let path = if args.is_empty() {
+        PathBuf::from(".")
+    } else {
+        PathBuf::from(&args[0])
+    };
+    let project = match discover(&path) {
+        Ok(project) => project,
+        Err(error) => {
+            eprintln!("nex: {error}");
+            return ExitCode::from(1);
+        }
+    };
+    let options = CompileOptions {
+        emit: Emit::Executable,
+        profile: Profile::Debug,
+        output: None,
+        build_dir: Some(project.root.join("build")),
+    };
+    let executable = match compile_file(&project.entry, options) {
+        Ok(result) => {
+            if result.has_errors() {
+                eprintln!("{}", render_all(&result.source, &result.diagnostics));
+                return ExitCode::from(1);
+            }
+            result.artifacts.and_then(|a| a.executable)
+        }
+        Err(error) => {
+            eprintln!("nex: {error}");
+            return ExitCode::from(2);
+        }
+    };
+    let Some(executable) = executable else {
+        eprintln!("nex: no executable was produced");
+        return ExitCode::from(1);
+    };
+    match Command::new(&executable).status() {
+        Ok(status) => {
+            if status.success() {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::from(status.code().unwrap_or(1) as u8)
+            }
+        }
+        Err(error) => {
+            eprintln!("nex: failed to run {}: {error}", executable.display());
+            ExitCode::from(1)
+        }
+    }
+}
+
+fn cmd_profile(args: &[String]) -> ExitCode {
+    let path = if args.is_empty() {
+        PathBuf::from(".")
+    } else {
+        PathBuf::from(&args[0])
+    };
+    let project = match discover(&path) {
+        Ok(project) => project,
+        Err(error) => {
+            eprintln!("nex: {error}");
+            return ExitCode::from(1);
+        }
+    };
+    let options = CompileOptions {
+        emit: Emit::Executable,
+        profile: Profile::Release,
+        output: None,
+        build_dir: Some(project.root.join("build")),
+    };
+    let executable = match compile_file(&project.entry, options) {
+        Ok(result) => {
+            if result.has_errors() {
+                eprintln!("{}", render_all(&result.source, &result.diagnostics));
+                return ExitCode::from(1);
+            }
+            result.artifacts.and_then(|a| a.executable)
+        }
+        Err(error) => {
+            eprintln!("nex: {error}");
+            return ExitCode::from(2);
+        }
+    };
+    let Some(executable) = executable else {
+        eprintln!("nex: no executable was produced");
+        return ExitCode::from(1);
+    };
+    let start = std::time::Instant::now();
+    let status = Command::new(&executable).status();
+    let elapsed = start.elapsed();
+    match status {
+        Ok(s) => {
+            println!("profile: {:.3} ms", elapsed.as_secs_f64() * 1000.0);
+            if s.success() {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::from(s.code().unwrap_or(1) as u8)
+            }
+        }
+        Err(error) => {
+            eprintln!("nex: failed to run {}: {error}", executable.display());
+            ExitCode::from(1)
+        }
+    }
+}
+
 fn cmd_clean(args: &[String]) -> ExitCode {
     let path = if args.is_empty() {
         PathBuf::from(".")
@@ -810,6 +911,6 @@ fn print_help() {
            --emit <kind>         exe | obj | llvm-ir | check\n\
            -o, --output <path>   Write the artifact to a specific path\n\
          \n\
-         Planned but not yet implemented: debug, profile"
+         Planned but not yet implemented: (none)"
     );
 }
