@@ -1104,6 +1104,15 @@ impl<'a> Parser<'a> {
                     span: start,
                 })
             }
+            TokenKind::Unsafe => {
+                let start = self.advance().span;
+                let body = self.parse_block();
+                let span = start.merge(body.span);
+                Some(Stmt {
+                    kind: StmtKind::Unsafe(body),
+                    span,
+                })
+            }
             TokenKind::Semicolon => {
                 let token = self.advance();
                 self.error(

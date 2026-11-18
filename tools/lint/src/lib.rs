@@ -167,6 +167,7 @@ fn check_block(block: &Block, warnings: &mut Vec<Warning>) {
                     check_block(&arm.body, warnings);
                 }
             }
+            StmtKind::Unsafe(block) => check_block(block, warnings),
             StmtKind::Expr(expr) => check_expr(expr, warnings),
             _ => {}
         }
@@ -287,6 +288,7 @@ fn collect_stmt_idents(stmt: &Stmt, out: &mut HashSet<String>) {
                 collect_block_idents(&arm.body, out);
             }
         }
+        StmtKind::Unsafe(block) => collect_block_idents(block, out),
         StmtKind::Expr(expr) => collect_expr_idents(expr, out),
         _ => {}
     }
@@ -337,6 +339,7 @@ fn collect_stmt_calls(stmt: &Stmt, out: &mut HashSet<String>) {
                 collect_block_calls(&arm.body, out);
             }
         }
+        StmtKind::Unsafe(block) => collect_block_calls(block, out),
         StmtKind::Expr(expr) => collect_expr_calls(expr, out),
         _ => {}
     }

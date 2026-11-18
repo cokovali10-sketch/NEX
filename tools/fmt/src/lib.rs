@@ -452,6 +452,12 @@ impl<'a> Printer<'a> {
                 }
                 self.indent -= 1;
             }
+            StmtKind::Unsafe(block) => {
+                self.push("unsafe:".to_string());
+                self.indent += 1;
+                self.block(block);
+                self.indent -= 1;
+            }
             StmtKind::Pass => self.push("pass"),
             StmtKind::Break => self.push("break"),
             StmtKind::Continue => self.push("continue"),

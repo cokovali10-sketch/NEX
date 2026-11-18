@@ -191,6 +191,9 @@ pub enum StmtKind {
     Continue,
     /// `pass`: an intentionally empty block.
     Pass,
+    /// `unsafe:` block. NEX 0.2 treats the body like a normal block; the
+    /// keyword documents intent and is reserved for future checks.
+    Unsafe(Block),
     Expr(Expr),
 }
 

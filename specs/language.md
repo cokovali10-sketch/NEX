@@ -42,6 +42,7 @@ planned and are not yet implemented.
 - Nested modules (`module name:`), `use` aliases, and `pub` visibility.
 - File-based imports (`use alias from "file.nex"`).
 - Explicit casts with `as`.
+- `unsafe:` blocks for low-level operations.
 - Top-level `const` declarations with compile-time constant initializers.
 
 ## Planned

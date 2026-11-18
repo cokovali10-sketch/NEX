@@ -248,6 +248,9 @@ fn collect_locals(
                     collect_locals(&arm.body, analysis, out);
                 }
             }
+            StmtKind::Unsafe(block) => {
+                collect_locals(block, analysis, out);
+            }
             _ => {}
         }
     }
@@ -468,6 +471,7 @@ fn lower_statement(
             Ok(())
         }
         StmtKind::Pass => Ok(()),
+        StmtKind::Unsafe(block) => lower_stmts(builder, &block.stmts, scopes, storage, analysis),
         StmtKind::Continue => {
             let (_, continue_bb) = builder
                 .loop_stack

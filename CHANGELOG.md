@@ -21,8 +21,7 @@
 - Traits: `trait` declarations, `impl Trait for Type`, `self`, and
   `receiver.method(...)` calls dispatched statically to `Type.method`.
 
-- File-based imports via `use alias from "file.nex"`; imported declarations are
-  available under the alias as a module.
+- `unsafe:` blocks for grouping low-level operations.
 
 - `pass`, an explicitly empty statement, for empty function bodies, `else`
   branches, and `match` arms. The formatter emits it for empty blocks.
