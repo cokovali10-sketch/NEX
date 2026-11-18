@@ -1395,3 +1395,36 @@ fn builder_produces_the_same_string_as_concat() {
     assert_eq!(code, 0, "stderr: {stderr}");
     assert_eq!(stdout, "true\n2000\n");
 }
+
+#[test]
+fn split_builds_a_string_array_in_nex() {
+    let source = "fn split(text: string, separator: string) -> [string]:
+    var out: [string] = []
+    var i = 0
+    var total = str_split_count(text, separator)
+    while i < total:
+        push(out, str_split_at(text, separator, i))
+        i = i + 1
+    return out
+
+fn main():
+    var parts = split(\"a,b,c\", \",\")
+    println(len(parts))
+    println(parts[0])
+    println(parts[2])
+    var query = split(\"id=7&page=2\", \"&\")
+    println(len(query))
+    println(query[1])
+";
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "3\na\nc\n2\npage=2\n");
+}
+
+#[test]
+fn split_handles_empty_and_trailing_fields() {
+    let source = "fn main():\n    println(str_split_count(\"a,b,c\", \",\"))\n    println(str_split_count(\"one\", \",\"))\n    println(str_split_at(\"a,b\", \",\", 5))\n";
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "3\n1\n\n");
+}

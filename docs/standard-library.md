@@ -280,6 +280,30 @@ while true:
     pool_submit(pool, "serve", client)
 ```
 
+### Splitting a string
+
+Splitting is not a builtin yet: it needs a growable array of strings, and NEX can
+already express that. Until a `str_split` primitive lands, use this helper:
+
+```nex
+fn split(text: string, separator: string) -> [string]:
+    var out: [string] = []
+    var i = 0
+    var total = str_split_count(text, separator)
+    while i < total:
+        push(out, str_split_at(text, separator, i))
+        i = i + 1
+    return out
+
+fn main():
+    var query = split("id=7&page=2", "&")
+    println(len(query))    // 2
+    println(query[1])      // page=2
+```
+
+`str_split_count` and `str_split_at` are backed by `strstr`, so this is O(n) in
+the number of fields for the count and O(n) per field lookup.
+
 ### String builder
 
 `concat` allocates a new buffer on every call, so appending in a loop is
