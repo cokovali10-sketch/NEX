@@ -2799,7 +2799,3 @@ double nex_rt_round_f64(double value) {
 double nex_rt_trunc_f64(double value) {
     return trunc(value);
 }
-
-double nex_rt_abs_f64_value(double value) {
-    return value < 0 ? -value : value;
-}
