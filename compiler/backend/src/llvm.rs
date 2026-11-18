@@ -407,6 +407,14 @@ impl<'a> Emitter<'a> {
                         self.operand_str(operand, IrType::Bool)?
                     ));
                 }
+                UnOp::BitNot => {
+                    body.push_str(&format!(
+                        "  %v{} = xor {} {}, -1\n",
+                        dst.0,
+                        llvm_type(*ty),
+                        self.operand_str(operand, *ty)?
+                    ));
+                }
             },
             Inst::Cast {
                 dst,
@@ -645,6 +653,12 @@ fn bin_instruction(op: BinOp, ty: IrType) -> &'static str {
         (BinOp::Ge, true, _) => "fcmp oge",
         (BinOp::Ge, false, true) => "icmp uge",
         (BinOp::Ge, false, false) => "icmp sge",
+        (BinOp::BitAnd, _, _) => "and",
+        (BinOp::BitOr, _, _) => "or",
+        (BinOp::BitXor, _, _) => "xor",
+        (BinOp::Shl, _, _) => "shl",
+        (BinOp::Shr, false, true) => "lshr",
+        (BinOp::Shr, _, _) => "ashr",
     }
 }
 

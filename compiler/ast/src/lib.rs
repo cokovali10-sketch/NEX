@@ -289,6 +289,7 @@ pub enum ExprKind {
 pub enum UnaryOp {
     Neg,
     Not,
+    BitNot,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -306,6 +307,11 @@ pub enum BinOp {
     Ge,
     And,
     Or,
+    BitAnd,
+    BitOr,
+    BitXor,
+    Shl,
+    Shr,
 }
 
 impl BinOp {
@@ -338,6 +344,11 @@ impl BinOp {
             Self::Ge => ">=",
             Self::And => "and",
             Self::Or => "or",
+            Self::BitAnd => "&",
+            Self::BitOr => "|",
+            Self::BitXor => "^",
+            Self::Shl => "<<",
+            Self::Shr => ">>",
         }
     }
 }

@@ -1832,6 +1832,18 @@ impl<'a> Checker<'a> {
                                 Type::Error
                             }
                         }
+                        nex_ast::UnaryOp::BitNot => {
+                            if operand_ty.is_integer() {
+                                operand_ty
+                            } else {
+                                self.error(
+                                    "NXS008",
+                                    format!("`~` requires an integer, found `{operand_ty}`"),
+                                    expr.span,
+                                );
+                                Type::Error
+                            }
+                        }
                     }
                 }
             }
@@ -1853,6 +1865,21 @@ impl<'a> Checker<'a> {
                             self.error(
                                 "NXS008",
                                 format!("arithmetic is not defined for type `{ty}`"),
+                                expr.span,
+                            );
+                            Type::Error
+                        }
+                    }
+                    BinOp::BitAnd | BinOp::BitOr | BinOp::BitXor | BinOp::Shl | BinOp::Shr => {
+                        let Some(ty) = self.unify_operands(left, right) else {
+                            return Type::Error;
+                        };
+                        if ty.is_integer() {
+                            ty
+                        } else {
+                            self.error(
+                                "NXS008",
+                                format!("bitwise operators require integer operands, found `{ty}`"),
                                 expr.span,
                             );
                             Type::Error

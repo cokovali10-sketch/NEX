@@ -2141,6 +2141,7 @@ fn lower_expr(
             let un_op = match op {
                 nex_ast::UnaryOp::Neg => UnOp::Neg,
                 nex_ast::UnaryOp::Not => UnOp::Not,
+                nex_ast::UnaryOp::BitNot => UnOp::BitNot,
             };
             builder.emit(Inst::Un {
                 dst,

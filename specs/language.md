@@ -17,6 +17,7 @@ planned and are not yet implemented.
 - Numeric types `i8`, `i16`, `i32`, `u8`, `u16`, `u32`, `u64`, `f32` in
   annotations and casts through literal coercion.
 - Arithmetic: `+`, `-`, `*`, `/`, `%`.
+- Bitwise: `&`, `|`, `^`, `<<`, `>>`, `~` (integers).
 - Comparisons: `==`, `!=`, `<`, `<=`, `>`, `>=`.
 - Logical: `and`, `or`, `not`.
 - Unary negation.

@@ -94,6 +94,11 @@ pub enum BinOp {
     Le,
     Gt,
     Ge,
+    BitAnd,
+    BitOr,
+    BitXor,
+    Shl,
+    Shr,
 }
 
 impl BinOp {
@@ -110,6 +115,11 @@ impl BinOp {
             AstBinOp::Le => Self::Le,
             AstBinOp::Gt => Self::Gt,
             AstBinOp::Ge => Self::Ge,
+            AstBinOp::BitAnd => Self::BitAnd,
+            AstBinOp::BitOr => Self::BitOr,
+            AstBinOp::BitXor => Self::BitXor,
+            AstBinOp::Shl => Self::Shl,
+            AstBinOp::Shr => Self::Shr,
             AstBinOp::And | AstBinOp::Or => return None,
         })
     }
@@ -119,6 +129,7 @@ impl BinOp {
 pub enum UnOp {
     Neg,
     Not,
+    BitNot,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

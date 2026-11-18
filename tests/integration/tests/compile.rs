@@ -1771,3 +1771,19 @@ fn main():
     assert_eq!(code, 0, "stderr: {stderr}");
     assert_eq!(stdout, "21");
 }
+
+#[test]
+fn bitwise_operators() {
+    let source = r#"
+fn main():
+    println(6 & 3)
+    println(6 | 3)
+    println(6 ^ 3)
+    println(1 << 4)
+    println(16 >> 2)
+    println(~0)
+"#;
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "2\n7\n5\n16\n4\n-1\n");
+}

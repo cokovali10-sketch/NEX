@@ -577,17 +577,25 @@ fn expr_str(expr: &Expr) -> String {
 
 const PREC_OR: u8 = 1;
 const PREC_AND: u8 = 2;
-const PREC_COMPARE: u8 = 3;
-const PREC_ADD: u8 = 5;
-const PREC_MUL: u8 = 6;
-const PREC_UNARY: u8 = 7;
-const PREC_PRIMARY: u8 = 8;
+const PREC_BIT_OR: u8 = 3;
+const PREC_BIT_XOR: u8 = 4;
+const PREC_BIT_AND: u8 = 5;
+const PREC_SHIFT: u8 = 6;
+const PREC_COMPARE: u8 = 7;
+const PREC_ADD: u8 = 8;
+const PREC_MUL: u8 = 9;
+const PREC_UNARY: u8 = 10;
+const PREC_PRIMARY: u8 = 11;
 
 fn precedence(kind: &ExprKind) -> u8 {
     match kind {
         ExprKind::Binary { op, .. } => match op {
             BinOp::Or => PREC_OR,
             BinOp::And => PREC_AND,
+            BinOp::BitOr => PREC_BIT_OR,
+            BinOp::BitXor => PREC_BIT_XOR,
+            BinOp::BitAnd => PREC_BIT_AND,
+            BinOp::Shl | BinOp::Shr => PREC_SHIFT,
             BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge => PREC_COMPARE,
             BinOp::Add | BinOp::Sub => PREC_ADD,
             BinOp::Mul | BinOp::Div | BinOp::Rem => PREC_MUL,
@@ -633,6 +641,7 @@ fn write_expr_inner(expr: &Expr, own: u8, out: &mut String) {
             let symbol = match op {
                 UnaryOp::Neg => "-",
                 UnaryOp::Not => "not ",
+                UnaryOp::BitNot => "~",
             };
             out.push_str(symbol);
             write_expr(operand, own, out);

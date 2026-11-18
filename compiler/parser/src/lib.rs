@@ -1659,8 +1659,65 @@ fn parse_expression_or_assignment(&mut self) -> Stmt {
         left
     }
 
+    fn parse_bit_or(&mut self) -> Expr {
+        let mut left = self.parse_bit_xor();
+        while self.check(&TokenKind::Pipe) {
+            self.advance();
+            let right = self.parse_bit_xor();
+            left = binary(BinOp::BitOr, left, right);
+        }
+        left
+    }
+
+    fn parse_bit_xor(&mut self) -> Expr {
+        let mut left = self.parse_bit_and();
+        while self.check(&TokenKind::Caret) {
+            self.advance();
+            let right = self.parse_bit_and();
+            left = binary(BinOp::BitXor, left, right);
+        }
+        left
+    }
+
+    fn parse_bit_and(&mut self) -> Expr {
+        let mut left = self.parse_shift();
+        while self.check(&TokenKind::Amp) {
+            self.advance();
+            let right = self.parse_shift();
+            left = binary(BinOp::BitAnd, left, right);
+        }
+        left
+    }
+
+    fn parse_shift(&mut self) -> Expr {
+        let mut left = self.parse_comparison();
+        loop {
+            let op = if self.eat(&TokenKind::Shl) {
+                BinOp::Shl
+            } else if self.eat(&TokenKind::Shr) {
+                BinOp::Shr
+            } else {
+                break;
+            };
+            let right = self.parse_comparison();
+            left = binary(op, left, right);
+        }
+        left
+    }
+
     fn parse_not(&mut self) -> Expr {
-        if self.check(&TokenKind::Not) || self.check(&TokenKind::Bang) {
+        if self.check(&TokenKind::Tilde) {
+            let start = self.advance().span;
+            let operand = self.parse_not();
+            let span = start.merge(operand.span);
+            Expr {
+                kind: ExprKind::Unary {
+                    op: UnaryOp::BitNot,
+                    operand: Box::new(operand),
+                },
+                span,
+            }
+        } else if self.check(&TokenKind::Not) || self.check(&TokenKind::Bang) {
             let start = self.advance().span;
             let operand = self.parse_not();
             let span = start.merge(operand.span);
@@ -1672,7 +1729,7 @@ fn parse_expression_or_assignment(&mut self) -> Stmt {
                 span,
             }
         } else {
-            self.parse_comparison()
+            self.parse_bit_or()
         }
     }
 

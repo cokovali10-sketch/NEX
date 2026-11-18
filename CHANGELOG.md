@@ -6,6 +6,7 @@
 
 - `import "file.nex"` and `from "file.nex" import alias` syntax alongside
   `use alias from "file.nex"`.
+- Bitwise operators for integers: `&`, `|`, `^`, `<<`, `>>`, `~`.
 
 - String standard library: `str_contains`, `str_index_of`, `str_substring`,
   `str_upper`, `str_lower`, `str_trim`, with runtime implementations, semantic
