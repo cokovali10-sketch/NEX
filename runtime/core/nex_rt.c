@@ -2580,3 +2580,44 @@ char *nex_rt_http_response_keepalive(const char *status, const char *content_typ
     );
     return response;
 }
+
+/* Read timeout for a socket. Returns 1 on success, 0 on failure. */
+long long nex_rt_tcp_set_timeout(long long socket, long long milliseconds) {
+    if (socket < 0 || milliseconds < 0) {
+        return 0;
+    }
+
+    /* Disable Nagle: without TCP_NODELAY each request/response pair pays the
+       delayed-ACK round trip, which dominates every other cost on a small
+       response. */
+    int yes = 1;
+#ifdef _WIN32
+    setsockopt((SOCKET)socket, IPPROTO_TCP, TCP_NODELAY, (const char *)&yes, sizeof(yes));
+#else
+    setsockopt((int)socket, IPPROTO_TCP, TCP_NODELAY, &yes, sizeof(yes));
+#endif
+
+#ifdef _WIN32
+    DWORD timeout = (DWORD)milliseconds;
+    if (setsockopt((SOCKET)socket, SOL_SOCKET, SO_RCVTIMEO,
+                   (const char *)&timeout, sizeof(timeout)) != 0) {
+        return 0;
+    }
+    if (setsockopt((SOCKET)socket, SOL_SOCKET, SO_SNDTIMEO,
+                   (const char *)&timeout, sizeof(timeout)) != 0) {
+        return 0;
+    }
+    return 1;
+#else
+    struct timeval timeout;
+    timeout.tv_sec = milliseconds / 1000;
+    timeout.tv_usec = (milliseconds % 1000) * 1000;
+    if (setsockopt((int)socket, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) != 0) {
+        return 0;
+    }
+    if (setsockopt((int)socket, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)) != 0) {
+        return 0;
+    }
+    return 1;
+#endif
+}

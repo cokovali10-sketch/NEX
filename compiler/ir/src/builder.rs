@@ -2918,6 +2918,28 @@ fn lower_expr(
                 return Ok(Operand::Value(dst));
             }
 
+            if callee == "tcp_set_timeout" {
+                let socket = lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
+                let timeout =
+                    lower_expr(builder, &args[1], scopes, storage, analysis, Type::Error)?;
+                let raw = builder.new_value();
+                builder.emit(Inst::Call {
+                    dst: Some(raw),
+                    name: "nex_rt_tcp_set_timeout".to_string(),
+                    args: vec![socket, timeout],
+                    ret: IrType::I32,
+                });
+                let dst = builder.new_value();
+                builder.emit(Inst::Cast {
+                    dst,
+                    kind: CastKind::Truncate,
+                    from: IrType::I32,
+                    to: IrType::Bool,
+                    operand: Operand::Value(raw),
+                });
+                return Ok(Operand::Value(dst));
+            }
+
             if callee == "str_reverse" {
                 let value = lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
                 let dst = builder.new_value();

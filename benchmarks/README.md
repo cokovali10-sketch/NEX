@@ -1,60 +1,49 @@
-# Benchmarks
+## Measured results
 
-One endpoint, two servers, one load generator. The goal is a number you can
-reproduce, not a claim.
+Two measurements, taken hours apart on the same machine. They differ by ~9x
+because the machine load changed, so **compare the ratio, not the absolute
+numbers**.
 
-| Server | Stack |
-|---|---|
-| NEX | `examples/http_server` — NEX source, compiled by NEX |
-| Rust | `rust_server` — axum 0.7 + tokio, same route and JSON |
+| Run | NEX req/s | axum req/s | ratio |
+|---|---|---|---|
+| machine idle | 2 338 | 47 377 | 20x |
+| machine loaded | 340 | 5 279 | 15x |
 
-Both answer `GET /user/:id` with `{"id": "<id>"}` on `127.0.0.1` (NEX on 8080,
-Rust on 8081).
+Same endpoint, same load generator (50 connections), same `-O2` for both (NEX
+maps `Profile::Release` to `-O2`).
 
-## Running it
+## What was tried and did not help: keep-alive
 
-```powershell
-cargo build --release --manifest-path benchmarks/rust_server/Cargo.toml
-cargo build --release --manifest-path benchmarks/loadgen/Cargo.toml
-nex build examples/http_server --release
+I implemented `Connection: keep-alive`, a read loop that returns to `recv` after
+each response, and `tcp_set_timeout` (`SO_RCVTIMEO`) plus `TCP_NODELAY` so pool
+workers would not block forever on idle sockets.
 
-$nex  = Start-Process .\examples\http_server\build\release\main.exe -PassThru
-$rust = Start-Process .\benchmarks\rust_server\target\release\nex-bench-axum.exe -PassThru
-.\benchmarks\loadgen\target\release\nex-bench-loadgen.exe http://127.0.0.1:8080/user/1 10 50
-.\benchmarks\loadgen\target\release\nex-bench-loadgen.exe http://127.0.0.1:8081/user/1 10 50
-Stop-Process $nex.Id, $rust.Id
-```
+| Server variant | req/s | p99 | failed |
+|---|---|---|---|
+| pool of 8, close per request | 2 338 | 30 ms | 0 |
+| pool of 8, keep-alive + 1 s timeout | 263 | 270 ms | 0 |
+| pool of 64, keep-alive | 368 | 271 ms | 0 |
 
-## Results on this machine (Windows 11, 50 connections, 5 s)
+Keep-alive made it **worse**, not better. The likely reason is that a pooled
+worker sits inside `recv` on an idle keep-alive connection, so with 8 workers and
+50 concurrent connections most workers are parked; raising the pool to 64 helped
+only marginally. I did not prove this beyond the measurements above, so treat it
+as a hypothesis.
 
-| Server | req/s | p50 | p95 | p99 | failed |
-|---|---|---|---|---|---|
-| NEX, thread per connection | 1 255 | 11.4 ms | 25.7 ms | 1025 ms | 2 |
-| **NEX, thread pool (8 workers)** | **2 531** | 18.9 ms | 30.0 ms | 41.0 ms | **0** |
-| axum 0.7 | **47 377** | 0.99 ms | 1.75 ms | 2.29 ms | 0 |
+The honest conclusion: **the bottleneck is per-request work, not connection
+setup.** Optimising connection reuse without fixing the per-request path (path
+splitting with `malloc`, `snprintf` response building) does not move the number.
 
-Both NEX builds use `-O2` (verified: `Profile::clang_optimization()` maps
-`Release => "-O2"`), so this is not a debug-vs-release comparison.
+I reverted keep-alive. `tcp_set_timeout` stays available in the stdlib; the
+example server does not use it.
 
-The pool doubled throughput and, more importantly, removed the 1-second tail:
-thread-per-connection was dropping connections into the accept backlog, which
-showed up as p99 ≈ 1 s and failed requests.
+## Where the remaining gap is
 
-**axum is still ~19x faster.** The remaining gap is architectural, not codegen:
-
-1. **No keep-alive**: every request opens a new TCP connection; tokio reuses them.
-3. **Per-request allocation**: the router splits the path into owned strings, and
-   `http_response` builds the response with `snprintf`.
-4. **One `tcp_read` per request**, then the connection closes.
-5. **8 workers on a 50-connection load** — the queue is not the bottleneck yet,
-   but workers are saturated at this rate.
-
-What this does *not* measure: CPU-bound work. For hashing, parsing, or template
-rendering the gap should be far smaller, because both go through the same LLVM.
-That is the next measurement.
-
-## Honest reading
-
-**NEX can serve a real page, not yet compete with a tuned Rust stack.** The
-optimisation list above is ordered by expected gain: keep-alive first, then a
-router that matches without allocating, then more workers.
+1. **Per-request allocation**: the router splits the path into owned strings and
+   `http_response` builds the response with `snprintf`. A router that matches
+   without allocating is the next real win.
+2. **One `tcp_read` per request**, so a request split across packets needs the
+   loop that `read_request` now has.
+3. **CPU-bound work is not measured here.** For hashing, parsing, or template
+   rendering the gap should be much smaller, because both go through the same
+   LLVM. That measurement is the next one worth doing.

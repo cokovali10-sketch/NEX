@@ -49,6 +49,8 @@ fn read_request(client: i64) -> string:
         return request
 
 fn serve(client: i64):
+    tcp_set_timeout(client, 1000)
+
     var request = read_request(client)
     if len(request) == 0:
         tcp_close(client)

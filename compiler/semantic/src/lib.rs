@@ -2144,6 +2144,41 @@ impl<'a> Checker<'a> {
             return Type::Void;
         }
 
+        if callee == "http_response_keepalive" {
+            if args.len() != 3 {
+                self.error(
+                    "NXS004",
+                    format!(
+                        "`http_response_keepalive` expects 3 arguments, found {}",
+                        args.len()
+                    ),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let status_ty = self.infer(&args[0]);
+            let type_ty = self.infer(&args[1]);
+            let body_ty = self.infer(&args[2]);
+            let all_strings =
+                status_ty == Type::String && type_ty == Type::String && body_ty == Type::String;
+            if !all_strings
+                && status_ty != Type::Error
+                && type_ty != Type::Error
+                && body_ty != Type::Error
+            {
+                self.error(
+                    "NXS004",
+                    "`http_response_keepalive` expects `(string, string, string)`",
+                    span,
+                );
+                return Type::Error;
+            }
+            return Type::String;
+        }
+
         if callee == "http_method"
             || callee == "http_path"
             || callee == "http_version"
@@ -2920,6 +2955,32 @@ impl<'a> Checker<'a> {
                     Type::Error
                 }
             };
+        }
+
+        if callee == "tcp_set_timeout" {
+            if args.len() != 2 {
+                self.error(
+                    "NXS004",
+                    format!(
+                        "`tcp_set_timeout` expects 2 arguments, found {}",
+                        args.len()
+                    ),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let socket_ty = self.infer(&args[0]);
+            let timeout_ty = self.infer(&args[1]);
+            if (socket_ty != Type::I64 || timeout_ty != Type::I64)
+                && (socket_ty != Type::Error && timeout_ty != Type::Error)
+            {
+                self.error("NXS004", "`tcp_set_timeout` expects `(i64, i64)`", span);
+                return Type::Error;
+            }
+            return Type::Bool;
         }
 
         if callee == "str_reverse" {
