@@ -124,15 +124,23 @@ fn check_block(block: &Block, warnings: &mut Vec<Warning>) {
     let mut used = HashSet::new();
     collect_block_idents_excluding(block, &mut used);
     for stmt in &block.stmts {
-        if let StmtKind::Let { name, ty, .. } = &stmt.kind {
-            let reported =
-                name.starts_with('_') || used.contains(name) || type_mentions(ty.as_ref(), &used);
-            if !reported {
-                warnings.push(Warning {
-                    code: "NXL001",
-                    message: format!("`{name}` is declared but never used"),
-                    span: stmt.span,
-                });
+        if let StmtKind::Let { name, names, ty, .. } = &stmt.kind {
+            let bindings: Vec<&String> = if let Some(names) = names {
+                names.iter().collect()
+            } else {
+                vec![name]
+            };
+            for binding in bindings {
+                let reported = binding.starts_with('_')
+                    || used.contains(binding)
+                    || type_mentions(ty.as_ref(), &used);
+                if !reported {
+                    warnings.push(Warning {
+                        code: "NXL001",
+                        message: format!("`{binding}` is declared but never used"),
+                        span: stmt.span,
+                    });
+                }
             }
         }
     }
