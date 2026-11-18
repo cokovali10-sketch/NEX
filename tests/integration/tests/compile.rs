@@ -1756,3 +1756,18 @@ fn main():
     assert_eq!(code, 0, "stderr: {stderr}");
     assert_eq!(stdout, "102030123");
 }
+
+#[test]
+fn parallel_assignment_swaps_values() {
+    let source = r#"
+fn main():
+    var a = 1
+    var b = 2
+    a, b = b, a
+    print(a)
+    print(b)
+"#;
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "21");
+}

@@ -172,6 +172,11 @@ pub enum StmtKind {
         name: String,
         value: Expr,
     },
+    /// Parallel assignment (`a, b = b, a`).
+    AssignMany {
+        names: Vec<String>,
+        values: Vec<Expr>,
+    },
     AssignField {
         base: String,
         path: Vec<String>,

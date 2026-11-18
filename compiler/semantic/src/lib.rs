@@ -1136,6 +1136,43 @@ impl<'a> Checker<'a> {
                 let var_ty = var.ty;
                 self.check_expected(value, var_ty);
             }
+            StmtKind::AssignMany { names, values } => {
+                if names.len() != values.len() {
+                    self.error(
+                        "NXS005",
+                        format!(
+                            "parallel assignment has {} targets and {} values",
+                            names.len(),
+                            values.len()
+                        ),
+                        statement.span,
+                    );
+                }
+                for (name, value) in names.iter().zip(values.iter()) {
+                    let Some(var) = self.lookup(name) else {
+                        self.error(
+                            "NXS016",
+                            format!("cannot assign to undeclared variable `{name}`"),
+                            statement.span,
+                        );
+                        self.infer(value);
+                        continue;
+                    };
+                    if !var.mutable {
+                        self.error(
+                            "NXS007",
+                            format!(
+                                "cannot assign to immutable variable `{name}`; declare it with `var`"
+                            ),
+                            statement.span,
+                        );
+                    }
+                    self.check_expected(value, var.ty);
+                }
+                for value in values.iter().skip(names.len()) {
+                    self.infer(value);
+                }
+            }
             StmtKind::AssignField { base, path, value } => {
                 let Some(var) = self.lookup(base) else {
                     self.error(

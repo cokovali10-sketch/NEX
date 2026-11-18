@@ -10,6 +10,7 @@ planned and are not yet implemented.
 - External C function declarations with `extern "C" fn`.
 - `let` (immutable) and `var` (mutable) bindings with type inference.
 - Assignment to mutable bindings.
+- Parallel assignment (`a, b = b, a`).
 - Compound assignment operators `+=`, `-=`, `*=`, `/=`, `%=` (desugared to
   `x = x <op> value`).
 - Integer `i64`, floating point `f64`, `bool`, `char`, and `string` types.

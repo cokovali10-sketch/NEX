@@ -1493,6 +1493,39 @@ impl<'a> Parser<'a> {
     fn parse_expression_or_assignment(&mut self) -> Stmt {
         let expr = self.parse_expr();
 
+        if self.check(&TokenKind::Comma) {
+            let mut places = vec![expr.clone()];
+            while self.eat(&TokenKind::Comma) {
+                places.push(self.parse_expr());
+            }
+            if self.eat(&TokenKind::Eq) {
+                let mut values = vec![self.parse_expr()];
+                while self.eat(&TokenKind::Comma) {
+                    values.push(self.parse_expr());
+                }
+                let span = places.first().map(|e| e.span).unwrap_or_default().merge(
+                    values.last().map(|e| e.span).unwrap_or_default(),
+                );
+                self.expect_line_end();
+                let mut names = Vec::new();
+                for place in &places {
+                    if let ExprKind::Ident(name) = &place.kind {
+                        names.push(name.clone());
+                    } else {
+                        self.error(
+                            "NXP011",
+                            "parallel assignment targets must be variable names",
+                            place.span,
+                        );
+                    }
+                }
+                return Stmt {
+                    kind: StmtKind::AssignMany { names, values },
+                    span,
+                };
+            }
+        }
+
         let is_assignment = self.check(&TokenKind::Eq) || compound_bin_op(self.peek()).is_some();
 
         if is_assignment {

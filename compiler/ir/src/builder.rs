@@ -371,6 +371,73 @@ fn lower_statement(
             }
             Ok(())
         }
+        StmtKind::AssignMany { names, values } => {
+            let mut temps: Vec<(ValueId, IrType)> = Vec::new();
+            for (name, value) in names.iter().zip(values.iter()) {
+                let ty = lookup_slot(scopes, name)
+                    .map(|slot| slot.ty)
+                    .ok_or_else(|| format!("unknown variable `{name}` during code generation"))?;
+                let ptr = builder.alloca_at_entry(ty);
+                match ty {
+                    IrType::Struct(struct_name) => {
+                        let source = lower_struct_place(builder, value, scopes, storage, analysis)?;
+                        copy_struct(builder, ptr, source, struct_name, analysis)?;
+                    }
+                    IrType::Array(array_type) => {
+                        let source = lower_array_place(builder, value, scopes, storage, analysis)?;
+                        let src_ty = analysis.expr_type(value.span).unwrap_or(Type::Error);
+                        let Type::Array { display, .. } = src_ty else {
+                            return Err("array assignment requires an array value".to_string());
+                        };
+                        let info = analysis
+                            .array_info(display)
+                            .ok_or_else(|| "missing array type information".to_string())?;
+                        copy_array(builder, ptr, source, array_type, info.elem, info.len)?;
+                    }
+                    _ => {
+                        let operand = lower_expr(builder, value, scopes, storage, analysis, Type::Error)?;
+                        builder.emit(Inst::Store {
+                            ptr,
+                            value: operand,
+                            ty,
+                        });
+                    }
+                }
+                temps.push((ptr, ty));
+            }
+            for (name, (ptr, ty)) in names.iter().zip(temps.iter()) {
+                let target = lookup_slot(scopes, name)
+                    .ok_or_else(|| format!("unknown variable `{name}` during code generation"))?
+                    .ptr;
+                match ty {
+                    IrType::Struct(struct_name) => {
+                        copy_struct(builder, target, *ptr, *struct_name, analysis)?;
+                    }
+                    IrType::Array(array_type) => {
+                        let src_ty = analysis.expr_type(values.first().map(|v| v.span).unwrap_or_default()).unwrap_or(Type::Error);
+                        if let Type::Array { display, .. } = src_ty
+                            && let Some(info) = analysis.array_info(display)
+                        {
+                            copy_array(builder, target, *ptr, *array_type, info.elem, info.len)?;
+                        }
+                    }
+                    _ => {
+                        let value = builder.new_value();
+                        builder.emit(Inst::Load {
+                            dst: value,
+                            ptr: *ptr,
+                            ty: *ty,
+                        });
+                        builder.emit(Inst::Store {
+                            ptr: target,
+                            value: Operand::Value(value),
+                            ty: *ty,
+                        });
+                    }
+                }
+            }
+            Ok(())
+        }
         StmtKind::Assign { name, value } => {
             if let Some(global) = analysis.globals.get(name) {
                 let new_value = lower_expr(builder, value, scopes, storage, analysis, global.ty)?;

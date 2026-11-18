@@ -394,6 +394,11 @@ impl<'a> Printer<'a> {
                 };
                 self.push(format!("{keyword} {target}{annotation} = {}", expr_str(init)));
             }
+            StmtKind::AssignMany { names, values } => {
+                let targets = names.join(", ");
+                let rendered: Vec<String> = values.iter().map(expr_str).collect();
+                self.push(format!("{targets} = {}", rendered.join(", ")));
+            }
             StmtKind::Assign { name, value } => {
                 // The parser desugars `x += 1` into `x = x + 1`. Restore the
                 // compound form so formatting never rewrites one into the other.

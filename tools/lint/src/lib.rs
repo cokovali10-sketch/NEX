@@ -251,6 +251,14 @@ fn collect_stmt_idents(stmt: &Stmt, out: &mut HashSet<String>) {
             out.insert(name.clone());
             collect_expr_idents(value, out);
         }
+        StmtKind::AssignMany { names, values } => {
+            for name in names {
+                out.insert(name.clone());
+            }
+            for value in values {
+                collect_expr_idents(value, out);
+            }
+        }
         StmtKind::AssignField {
             base, path, value, ..
         } => {
@@ -318,6 +326,11 @@ fn collect_stmt_calls(stmt: &Stmt, out: &mut HashSet<String>) {
     match &stmt.kind {
         StmtKind::Let { init, .. } => collect_expr_calls(init, out),
         StmtKind::Assign { value, .. } => collect_expr_calls(value, out),
+        StmtKind::AssignMany { values, .. } => {
+            for value in values {
+                collect_expr_calls(value, out);
+            }
+        }
         StmtKind::AssignField { value, .. } => collect_expr_calls(value, out),
         StmtKind::AssignIndex { index, value, .. } => {
             collect_expr_calls(index, out);
