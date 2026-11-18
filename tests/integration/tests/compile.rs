@@ -785,9 +785,9 @@ fn main():
     print(" ")
     print(p.x)
 "#;
-    let (stdout, _stderr, code) = run_source(source);
-    assert_eq!(code, 0);
-    assert_eq!(stdout, "{3, 4} [1, 2, 3] (7, 8) 3 99");
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "program exited with {code}, stderr: {stderr}");
+    assert_eq!(stdout, "{3, 4} [1, 2, 3] (7, 8) 3 99", "stdout: {stdout}");
 }
 
 #[test]
