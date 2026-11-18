@@ -1787,3 +1787,11 @@ fn main():
     assert_eq!(code, 0, "stderr: {stderr}");
     assert_eq!(stdout, "2\n7\n5\n16\n4\n-1\n");
 }
+
+#[test]
+fn octal_integer_literals() {
+    let source = "fn main():\n    println(0o17)\n";
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "15\n");
+}

@@ -303,6 +303,36 @@ impl<'a> Lexer<'a> {
             return;
         }
 
+        if self.byte_at(self.pos) == Some(b'0')
+            && matches!(self.byte_at(self.pos + 1), Some(b'o' | b'O'))
+        {
+            self.pos += 2;
+            let digits_start = self.pos;
+            while matches!(self.byte_at(self.pos), Some(b'0'..=b'7' | b'_')) {
+                self.pos += 1;
+            }
+            if self.pos == digits_start {
+                self.diagnostics.push(Diagnostic::error(
+                    "NXL008",
+                    "octal literal requires at least one digit",
+                    Span::new(start, self.pos),
+                ));
+                self.push(TokenKind::Int(0), Span::new(start, self.pos));
+                return;
+            }
+            let digits = self.source[digits_start..self.pos].replace('_', "");
+            let value = i64::from_str_radix(&digits, 8).unwrap_or_else(|_| {
+                self.diagnostics.push(Diagnostic::error(
+                    "NXL009",
+                    "integer literal is out of range for i64",
+                    Span::new(start, self.pos),
+                ));
+                0
+            });
+            self.push(TokenKind::Int(value), Span::new(start, self.pos));
+            return;
+        }
+
         while matches!(self.byte_at(self.pos), Some(b'0'..=b'9' | b'_')) {
             self.pos += 1;
         }

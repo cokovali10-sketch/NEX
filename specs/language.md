@@ -18,6 +18,7 @@ planned and are not yet implemented.
   annotations and casts through literal coercion.
 - Arithmetic: `+`, `-`, `*`, `/`, `%`.
 - Bitwise: `&`, `|`, `^`, `<<`, `>>`, `~` (integers).
+- Integer literals support hexadecimal (`0x`), binary (`0b`) and octal (`0o`).
 - Comparisons: `==`, `!=`, `<`, `<=`, `>`, `>=`.
 - Logical: `and`, `or`, `not`.
 - Unary negation.
