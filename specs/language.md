@@ -44,6 +44,7 @@ planned and are not yet implemented.
 - Tuple literals and positional field access.
 - Tuple destructuring (`let (a, b) = pair`).
 - Nested modules (`module name:`), `use` aliases, and `pub` visibility.
+- `import` and `from ... import` file import syntax.
 - File-based imports (`use alias from "file.nex"`).
 - Explicit casts with `as`.
 - Type aliases (`type Name = Type`).

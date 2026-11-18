@@ -324,4 +324,32 @@ mod tests {
         assert!(!result.has_errors(), "{:?}", result.diagnostics);
         assert!(result.artifacts.as_ref().unwrap().executable.is_some());
     }
+
+    #[test]
+    fn imports_with_keyword_syntax() {
+        let dir = std::env::temp_dir().join("nex-driver-import-keyword");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("src")).unwrap();
+        std::fs::write(
+            dir.join("src").join("math.nex"),
+            "pub fn add(a: i64, b: i64) -> i64:\n    return a + b\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("src").join("main.nex"),
+            "import \"math.nex\"\n\nfn main():\n    print(math.add(2, 3))\n",
+        )
+        .unwrap();
+        let result = compile_file(
+            &dir.join("src").join("main.nex"),
+            CompileOptions {
+                emit: Emit::Executable,
+                build_dir: Some(dir.join("build")),
+                ..CompileOptions::default()
+            },
+        )
+        .expect("compilation should not fail at toolchain level");
+        assert!(!result.has_errors(), "{:?}", result.diagnostics);
+        assert!(result.artifacts.as_ref().unwrap().executable.is_some());
+    }
 }

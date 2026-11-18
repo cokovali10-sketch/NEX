@@ -33,6 +33,15 @@ pub fn parse_expression(source: &str) -> (Option<Expr>, Vec<Diagnostic>) {
     (Some(expr), parser.diagnostics)
 }
 
+fn import_alias(file: &str) -> String {
+    let name = file
+        .rsplit(['/', '\\'])
+        .next()
+        .unwrap_or(file)
+        .trim_end_matches(".nex");
+    name.to_string()
+}
+
 struct Parser<'a> {
     tokens: &'a [Token],
     pos: usize,
@@ -140,6 +149,18 @@ impl<'a> Parser<'a> {
                 }
             } else if self.check(&TokenKind::Use) {
                 if let Some(decl) = self.parse_use() {
+                    uses.push(decl);
+                } else {
+                    self.synchronize_item();
+                }
+            } else if self.check(&TokenKind::Import) {
+                if let Some(decl) = self.parse_import_syntax() {
+                    uses.push(decl);
+                } else {
+                    self.synchronize_item();
+                }
+            } else if self.check(&TokenKind::From) {
+                if let Some(decl) = self.parse_from_import() {
                     uses.push(decl);
                 } else {
                     self.synchronize_item();
@@ -960,6 +981,53 @@ impl<'a> Parser<'a> {
         Some((name, functions, consts, structs, enums))
     }
 
+    fn parse_import_syntax(&mut self) -> Option<UseDecl> {
+        let start = self.advance().span; // import
+        let TokenKind::Str(file) = self.peek().clone() else {
+            let span = self.peek_token().span;
+            self.error("NXP010", "expected a string literal after `import`", span);
+            self.synchronize_item();
+            return None;
+        };
+        self.advance();
+        let span = start.merge(self.peek_token().span);
+        self.expect_line_end();
+        let alias = import_alias(&file);
+        Some(UseDecl {
+            path: vec![alias],
+            file: Some(file),
+            span,
+        })
+    }
+
+    fn parse_from_import(&mut self) -> Option<UseDecl> {
+        let start = self.advance().span; // from
+        let TokenKind::Str(file) = self.peek().clone() else {
+            let span = self.peek_token().span;
+            self.error("NXP010", "expected a string literal after `from`", span);
+            self.synchronize_item();
+            return None;
+        };
+        self.advance();
+        if !self.eat(&TokenKind::Import) {
+            let span = self.peek_token().span;
+            self.error("NXP010", "expected `import` after the file name", span);
+            self.synchronize_item();
+            return None;
+        }
+        let Some((name, _)) = self.expect_ident("after `import`") else {
+            self.synchronize_item();
+            return None;
+        };
+        let span = start.merge(self.peek_token().span);
+        self.expect_line_end();
+        Some(UseDecl {
+            path: vec![name],
+            file: Some(file),
+            span,
+        })
+    }
+
     fn parse_use(&mut self) -> Option<UseDecl> {
         let start = self.advance().span; // use
         let Some((first, _)) = self.expect_ident("after `use`") else {
@@ -1490,7 +1558,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_expression_or_assignment(&mut self) -> Stmt {
+fn parse_expression_or_assignment(&mut self) -> Stmt {
         let expr = self.parse_expr();
 
         if self.check(&TokenKind::Comma) {
