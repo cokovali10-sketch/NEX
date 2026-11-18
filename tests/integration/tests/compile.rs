@@ -1677,3 +1677,17 @@ fn main():
     assert_eq!(code, 0, "stderr: {stderr}");
     assert_eq!(stdout, "42hi");
 }
+
+#[test]
+fn type_aliases_resolve() {
+    let source = r#"
+type Age = i64
+
+fn main():
+    var a: Age = 42
+    print(a)
+"#;
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "42");
+}

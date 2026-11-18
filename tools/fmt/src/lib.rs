@@ -8,7 +8,7 @@
 
 use nex_ast::{
     BinOp, Block, ConstDecl, EnumDecl, Expr, ExprKind, FnDecl, ImplBlock, MatchArm, Param, Program,
-    Stmt, StmtKind, StructDecl, TraitDecl, TypeExpr, UnaryOp, UseDecl,
+    Stmt, StmtKind, StructDecl, TraitDecl, TypeAliasDecl, TypeExpr, UnaryOp, UseDecl,
 };
 use nex_diagnostics::Diagnostic;
 
@@ -193,6 +193,13 @@ impl<'a> Printer<'a> {
             self.trait_decl(item);
             first = false;
         }
+        for item in &program.type_aliases {
+            if !first {
+                self.blank();
+            }
+            self.type_alias_decl(item);
+            first = false;
+        }
         for item in &program.consts {
             if !first {
                 self.blank();
@@ -306,6 +313,15 @@ impl<'a> Printer<'a> {
         self.indent += 1;
         self.block(&item.body);
         self.indent -= 1;
+    }
+
+    fn type_alias_decl(&mut self, item: &TypeAliasDecl) {
+        let visibility = if item.public { "pub " } else { "" };
+        self.push(format!(
+            "{visibility}type {} = {}",
+            item.name,
+            type_str(&item.ty)
+        ));
     }
 
     fn const_decl(&mut self, item: &ConstDecl) {

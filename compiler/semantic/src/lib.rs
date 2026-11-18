@@ -71,6 +71,7 @@ pub struct Analysis {
     pub enums: BTreeMap<String, EnumInfo>,
     pub arrays: BTreeMap<String, ArrayInfo>,
     pub traits: BTreeMap<String, TraitInfo>,
+    pub type_aliases: BTreeMap<String, Type>,
     pub modules: std::collections::HashSet<String>,
     pub aliases: std::collections::HashMap<String, String>,
     pub public_consts: std::collections::HashSet<String>,
@@ -194,6 +195,7 @@ impl<'a> Checker<'a> {
                 enums: BTreeMap::new(),
                 arrays: BTreeMap::new(),
                 traits: BTreeMap::new(),
+                type_aliases: BTreeMap::new(),
                 modules: std::collections::HashSet::new(),
                 aliases: std::collections::HashMap::new(),
                 public_consts: std::collections::HashSet::new(),
@@ -225,6 +227,7 @@ impl<'a> Checker<'a> {
         checker.collect_enums();
         checker.collect_traits();
         checker.collect_impls();
+        checker.collect_type_aliases();
         checker.collect_consts();
         checker.collect_globals();
         checker.collect_functions();
@@ -805,6 +808,23 @@ impl<'a> Checker<'a> {
                 info.fields = fields;
             }
         }
+    }
+
+    fn collect_type_aliases(&mut self) {
+        let aliases = self.program.type_aliases.clone();
+        for alias in aliases {
+            if self.analysis.type_aliases.contains_key(&alias.name) {
+                self.error("NXS003", format!("duplicate type alias `{}`", alias.name), alias.span);
+                continue;
+            }
+            self.current_type_params.clear();
+            let ty = self.resolve_type(&alias.ty);
+            if ty == Type::Error {
+                continue;
+            }
+            self.analysis.type_aliases.insert(alias.name.clone(), ty);
+        }
+        self.current_type_params.clear();
     }
 
     fn collect_consts(&mut self) {
@@ -4204,6 +4224,9 @@ impl<'a> Checker<'a> {
         if self.current_type_params.contains(&ty.name) {
             let name = Box::leak(ty.name.clone().into_boxed_str());
             return Type::TypeParam(name);
+        }
+        if let Some(ty) = self.analysis.type_aliases.get(&ty.name).copied() {
+            return ty;
         }
         if let Some(info) = self.analysis.structs.get(&ty.name) {
             return Type::Struct(info.name_static);

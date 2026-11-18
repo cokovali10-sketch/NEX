@@ -45,6 +45,7 @@ impl<'a> Parser<'a> {
         let mut enums = Vec::new();
         let mut traits = Vec::new();
         let mut impls = Vec::new();
+        let mut type_aliases = Vec::new();
         let mut consts = Vec::new();
         let mut globals: Vec<GlobalDecl> = Vec::new();
         let mut functions = Vec::new();
@@ -85,6 +86,13 @@ impl<'a> Parser<'a> {
             } else if self.check(&TokenKind::Impl) {
                 if let Some(block) = self.parse_impl() {
                     impls.push(block);
+                } else {
+                    self.synchronize_item();
+                }
+            } else if self.check(&TokenKind::Type) {
+                if let Some(mut alias) = self.parse_type_alias() {
+                    alias.public = is_public;
+                    type_aliases.push(alias);
                 } else {
                     self.synchronize_item();
                 }
@@ -156,6 +164,7 @@ impl<'a> Parser<'a> {
                 enums,
                 traits,
                 impls,
+                type_aliases,
                 consts,
                 functions,
                 span: Span::new(start, end),
@@ -492,6 +501,24 @@ impl<'a> Parser<'a> {
             name.push_str(&next);
         }
         Some(name)
+    }
+
+    fn parse_type_alias(&mut self) -> Option<nex_ast::TypeAliasDecl> {
+        let start = self.advance().span; // type
+        let (name, _name_span) = self.expect_ident("after `type`")?;
+        if !self.expect(&TokenKind::Eq, "in type alias") {
+            self.synchronize_item();
+            return None;
+        }
+        let ty = self.parse_type();
+        let span = start.merge(ty.span);
+        self.expect_line_end();
+        Some(nex_ast::TypeAliasDecl {
+            name,
+            ty,
+            public: false,
+            span,
+        })
     }
 
     fn parse_const(&mut self) -> Option<ConstDecl> {

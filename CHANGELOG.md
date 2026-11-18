@@ -21,7 +21,7 @@
 - Traits: `trait` declarations, `impl Trait for Type`, `self`, and
   `receiver.method(...)` calls dispatched statically to `Type.method`.
 
-- Generic structs with monomorphization.
+- Type aliases (`type Name = Type`).
 
 - `unsafe:` blocks for grouping low-level operations.
 - `nex add <path>` copies a local package into `deps/` and records it in `nex.toml`.

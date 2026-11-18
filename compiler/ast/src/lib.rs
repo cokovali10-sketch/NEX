@@ -15,6 +15,7 @@ pub struct Program {
     pub enums: Vec<EnumDecl>,
     pub traits: Vec<TraitDecl>,
     pub impls: Vec<ImplBlock>,
+    pub type_aliases: Vec<TypeAliasDecl>,
     pub consts: Vec<ConstDecl>,
     pub functions: Vec<FnDecl>,
     pub span: Span,
@@ -22,6 +23,15 @@ pub struct Program {
 
 /// A trait declares method signatures. NEX uses static dispatch: an `impl`
 /// block supplies a concrete method for one struct type.
+/// `type Name = Type` alias declaration.
+#[derive(Debug, Clone)]
+pub struct TypeAliasDecl {
+    pub name: String,
+    pub ty: TypeExpr,
+    pub public: bool,
+    pub span: Span,
+}
+
 #[derive(Debug, Clone)]
 pub struct TraitDecl {
     pub name: String,
