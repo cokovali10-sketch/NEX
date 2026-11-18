@@ -1803,3 +1803,17 @@ fn string_indexing() {
     assert_eq!(code, 0, "stderr: {stderr}");
     assert_eq!(stdout, "b");
 }
+
+#[test]
+fn string_slicing() {
+    let source = r#"
+fn main():
+    var s = "hello world"
+    println(s[0..5])
+    println(s[6..])
+    println(s[..5])
+"#;
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "hello\nworld\nhello\n");
+}

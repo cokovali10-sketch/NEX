@@ -37,6 +37,7 @@ planned and are not yet implemented.
 - Built-in `concat` and `to_string`.
 - String comparison (`==`, `!=`, `<`, `<=`, `>`, `>=`) comparing contents.
 - String indexing (`s[1]`) returns a one-character string.
+- String slicing (`s[1..3]`) with optional bounds.
 - String interpolation with `f"..."`.
 - Struct declarations with scalar fields, construction, field access, and
   field assignment (see `specs/types.md`).

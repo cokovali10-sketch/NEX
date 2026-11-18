@@ -1902,18 +1902,57 @@ fn parse_expression_or_assignment(&mut self) -> Stmt {
 
             if self.check(&TokenKind::LBracket) {
                 let start = self.advance().span;
-                let index = self.parse_expr();
+                let has_start = !matches!(
+                    self.peek(),
+                    TokenKind::Colon | TokenKind::DotDot | TokenKind::RBracket
+                );
+                let first = if has_start {
+                    Some(self.parse_expr())
+                } else {
+                    None
+                };
+                let is_slice = self.eat(&TokenKind::DotDot);
+                let end = if is_slice && !self.check(&TokenKind::RBracket) {
+                    Some(self.parse_expr())
+                } else {
+                    None
+                };
                 let close = self.peek_token().span;
                 self.expect(&TokenKind::RBracket, "after array index");
                 let span = expr.span.merge(close);
                 let _ = start;
-                expr = Expr {
-                    kind: ExprKind::Index {
-                        base: Box::new(expr),
-                        index: Box::new(index),
-                    },
-                    span,
-                };
+                if is_slice {
+                    let base = expr;
+                    let base_span = base.span;
+                    let start_expr = first.unwrap_or(Expr {
+                        kind: ExprKind::Int(0),
+                        span: base_span,
+                    });
+                    let end_expr = end.unwrap_or(Expr {
+                        kind: ExprKind::Call {
+                            callee: "len".to_string(),
+                            callee_span: base_span,
+                            args: vec![base.clone()],
+                        },
+                        span: base_span,
+                    });
+                    expr = Expr {
+                        kind: ExprKind::Call {
+                            callee: "str_substring".to_string(),
+                            callee_span: base_span,
+                            args: vec![base, start_expr, end_expr],
+                        },
+                        span,
+                    };
+                } else if let Some(index) = first {
+                    expr = Expr {
+                        kind: ExprKind::Index {
+                            base: Box::new(expr),
+                            index: Box::new(index),
+                        },
+                        span,
+                    };
+                }
                 continue;
             }
 
