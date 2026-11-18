@@ -6,39 +6,49 @@ same three workloads and print timings in milliseconds.
 - NEX: `examples/bench_cpu` (built with `nex build --release`)
 - Rust: `benchmarks/cpu_rust` (`cargo build --release`)
 
-The loops carry data dependencies (LCG, sqrt chain) so the compiler cannot
-close-form them; loop bounds depend on a runtime clock value.
+Loop bodies carry data dependencies (LCG, sqrt chain) and bounds come from a
+runtime clock, so the optimizer cannot close-form the workloads.
 
-## Results on this machine (Windows 11, release builds, best of 3)
+## Results, same run back to back (machine under load)
 
 | Workload | NEX | Rust | ratio |
 |---|---|---|---|
-| `lcg_loop` — 20M iterations, 64-bit LCG | 60 ms | 59 ms | **1.02x** |
-| `math_loop` — 5M × `sqrt(i)` | 9 ms | 0 ms | Rust optimised it away |
-11 | `string_loop` — 50 000 × `concat(out, "x")` | 711 ms | 0 ms | NEX is quadratic here |
+| `lcg_loop` — 20M iterations, 64-bit LCG | 106 ms | 108 ms | **1.0x** |
+| `math_loop` — 5M × `sqrt(i)` | 15 ms | 0 ms | Rust vectorises |
+| `string_loop` — 50 000 appends | 1 ms | 0 ms | parity |
+
+Earlier runs on an idle machine gave the same picture (NEX 60 ms / Rust 59 ms for
+the LCG loop). Absolute numbers on this machine move by up to 9x with load, so
+**compare the ratio, not the milliseconds**.
+
+## Correction to the previous version of this file
+
+The first version measured `string_loop` as 50 000 × `concat(out, "x")` and
+reported **711 ms for NEX vs 0 ms for Rust**. That number was real but it was
+measuring the standard library, not the compiler: `concat` copies the whole
+prefix on every call, so the loop was quadratic.
+
+After adding `builder_append` (amortised O(1)), the same workload takes **1 ms**
+and produces the same string. The old table is kept here only to explain the
+difference; it is not a fair comparison of NEX and Rust codegen.
 
 ## Reading the numbers
 
-**Integer code: parity.** 20M iterations of a dependent 64-bit multiply-add take
-60 ms in NEX and 59 ms in Rust. That is the honest headline: on the same LLVM
-backend, NEX-generated code is indistinguishable from Rust for scalar integer
-work.
+**Integer code: parity.** 20M iterations of a dependent 64-bit multiply-add:
+NEX 106 ms, Rust 108 ms. Same LLVM backend, same `-O2`. On scalar integer work
+there is nothing to choose between them.
 
-**Float loop: Rust wins by vectorising.** Rust turned the sqrt chain into SIMD
-(or folded it); NEX emitted a scalar loop at 1.8 ns per `sqrt`, which is already
-close to the libm call cost. Closing this needs a vectorising pass over the NEX
-IR, which is not implemented.
+**Float loop: Rust wins by vectorising.** Rust turned the sqrt chain into SIMD;
+NEX emitted a scalar loop at ~3 ns per `sqrt`, which is close to the libm call
+cost. Closing this needs a vectorising pass over the NEX IR — not implemented.
 
-**String building: NEX is quadratic.** `concat` allocates a new buffer and copies
-the old contents every call, so 50 000 concatenations copy ~1.25 GB in total
-(711 ms). Rust's `String::push` is amortised O(1) (0 ms). This is not a codegen
-problem — it is a stdlib design problem, and it is the next thing worth fixing.
+**String building: parity, once the stdlib is fixed.** Both are amortised O(1).
 
-## What this means
+## Honest conclusion
 
-- NEX can generate code as fast as Rust for ordinary integer work. The claim
-  "faster than Rust" is not supported by these numbers, and I am not making it.
-- The places NEX loses are (1) string allocation strategy, (2) vectorisation,
-  (3) the HTTP server architecture — not the compiler's per-statement output.
-- The next fix with the best ratio of effort to gain is a growable string buffer
-  so `concat` stops being quadratic.
+NEX generates code as fast as Rust for ordinary integer and string work. It is
+slower on vectorisable float loops, and much slower on I/O-heavy servers because
+of the server architecture, not the codegen.
+
+The claim "faster than Rust" is not supported by these measurements, and I am not
+making it.

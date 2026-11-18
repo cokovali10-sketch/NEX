@@ -20,13 +20,16 @@ fn math_loop(seed: i64) -> f64:
         i = i + 1.0
     return total
 
+# String building with the builder: amortised O(1) per append. The previous
+# version of this workload used `concat` in a loop, which is quadratic and said
+# nothing about the compiler.
 fn string_loop() -> string:
-    var out = ""
+    var builder = builder_new()
     var i = 0
     while i < 50000:
-        out = concat(out, "x")
+        builder_append(builder, "x")
         i = i + 1
-    return out
+    return builder_string(builder)
 
 fn main():
     var seed = now_ms()
@@ -46,4 +49,4 @@ fn main():
     print("string_loop: ")
     println(end - late)
     print("checksum: ")
-    println(a + len(c))
+    println(a + len(c) + seed)
