@@ -168,6 +168,30 @@ impl<'a> Parser<'a> {
         let start = self.advance().span;
         let (name, _name_span) = self.expect_ident("after `fn`")?;
 
+        let type_params = if self.eat(&TokenKind::Lt) {
+            let mut params = Vec::new();
+            loop {
+                if let TokenKind::Ident(param) = self.peek().clone() {
+                    self.advance();
+                    params.push(param);
+                } else {
+                    let span = self.peek_token().span;
+                    self.error("NXP011", "expected a type parameter name", span);
+                    break;
+                }
+                if !self.eat(&TokenKind::Comma) {
+                    break;
+                }
+            }
+            if !self.eat(&TokenKind::Gt) {
+                let span = self.peek_token().span;
+                self.error("NXP011", "expected `>`", span);
+            }
+            params
+        } else {
+            Vec::new()
+        };
+
         if !self.expect(&TokenKind::LParen, "after function name") {
             self.synchronize_item();
             return None;
@@ -186,6 +210,7 @@ impl<'a> Parser<'a> {
         let span = start.merge(body.span);
         Some(FnDecl {
             name,
+            type_params,
             public: false,
             extern_abi: None,
             params,
@@ -237,6 +262,7 @@ impl<'a> Parser<'a> {
         };
         Some(FnDecl {
             name,
+            type_params: Vec::new(),
             public: false,
             extern_abi: abi,
             params,
@@ -423,6 +449,7 @@ impl<'a> Parser<'a> {
         let span = start.merge(body.span);
         Some(FnDecl {
             name,
+            type_params: Vec::new(),
             public: false,
             extern_abi: None,
             params,
@@ -498,6 +525,30 @@ impl<'a> Parser<'a> {
         let start = self.advance().span;
         let (name, _name_span) = self.expect_ident("after `struct`")?;
 
+        let type_params = if self.eat(&TokenKind::Lt) {
+            let mut params = Vec::new();
+            loop {
+                if let TokenKind::Ident(param) = self.peek().clone() {
+                    self.advance();
+                    params.push(param);
+                } else {
+                    let span = self.peek_token().span;
+                    self.error("NXP011", "expected a type parameter name", span);
+                    break;
+                }
+                if !self.eat(&TokenKind::Comma) {
+                    break;
+                }
+            }
+            if !self.eat(&TokenKind::Gt) {
+                let span = self.peek_token().span;
+                self.error("NXP011", "expected `>`", span);
+            }
+            params
+        } else {
+            Vec::new()
+        };
+
         if !self.expect(&TokenKind::Colon, "after struct name") {
             self.synchronize_item();
             return None;
@@ -540,6 +591,7 @@ impl<'a> Parser<'a> {
         self.eat(&TokenKind::Dedent);
         Some(StructDecl {
             name,
+            type_params,
             public: false,
             fields,
             span: Span::new(start.start, end),

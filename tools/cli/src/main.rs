@@ -44,8 +44,9 @@ fn main() -> ExitCode {
         }
         "fmt" => cmd_fmt(&args[1..]),
         "lint" => cmd_lint(&args[1..]),
+        "add" => cmd_add(&args[1..]),
         "benchmark" => cmd_benchmark(&args[1..]),
-        "add" | "debug" | "profile" => {
+        "debug" | "profile" => {
             eprintln!(
                 "nex: `{}` is planned for a later NEX release; see ROADMAP.md",
                 args[0]
@@ -430,6 +431,78 @@ fn cmd_run(args: &[String]) -> ExitCode {
     }
 }
 
+fn cmd_add(args: &[String]) -> ExitCode {
+    if args.is_empty() {
+        eprintln!("usage: nex add <path>");
+        return ExitCode::from(2);
+    }
+    let source = PathBuf::from(&args[0]);
+    if !source.is_dir() {
+        eprintln!("nex: `{}` is not a directory", source.display());
+        return ExitCode::from(2);
+    }
+    let name = source
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("dependency")
+        .to_string();
+
+    let project = match discover(&PathBuf::from(".")) {
+        Ok(project) => project,
+        Err(error) => {
+            eprintln!("nex: {error}");
+            return ExitCode::from(1);
+        }
+    };
+
+    let deps_dir = project.root.join("deps");
+    if let Err(error) = std::fs::create_dir_all(&deps_dir) {
+        eprintln!("nex: cannot create deps dir: {error}");
+        return ExitCode::from(1);
+    }
+    let dest = deps_dir.join(&name);
+    if dest.exists() {
+        eprintln!("nex: dependency `{name}` already exists");
+        return ExitCode::from(1);
+    }
+    if let Err(error) = copy_dir_all(&source, &dest) {
+        eprintln!("nex: failed to copy dependency: {error}");
+        return ExitCode::from(1);
+    }
+
+    let config_path = project.root.join("nex.toml");
+    if config_path.is_file() {
+        let mut text = std::fs::read_to_string(&config_path).unwrap_or_default();
+        if !text.contains("[dependencies]") {
+            text.push_str("\n[dependencies]\n");
+        }
+        if !text.contains(&format!("\"{name}\"")) {
+            if let Some(idx) = text.find("[dependencies]") {
+                let insert_pos = text[idx..].find('\n').map(|p| idx + p + 1).unwrap_or(text.len());
+                text.insert_str(insert_pos, &format!("{name} = \"{}\"\n", source.display()));
+            }
+        }
+        let _ = std::fs::write(&config_path, text);
+    }
+
+    println!("added dependency `{name}`");
+    ExitCode::SUCCESS
+}
+
+fn copy_dir_all(src: &Path, dst: &Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(dst)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let ty = entry.file_type()?;
+        if ty.is_dir() {
+            copy_dir_all(&entry.path(), &dst.join(entry.file_name()))?;
+        } else {
+            std::fs::copy(entry.path(), dst.join(entry.file_name()))?;
+        }
+    }
+    Ok(())
+}
+
 fn cmd_benchmark(args: &[String]) -> ExitCode {
     let mut iterations: u32 = 10;
     let mut path = PathBuf::from(".");
@@ -737,6 +810,6 @@ fn print_help() {
            --emit <kind>         exe | obj | llvm-ir | check\n\
            -o, --output <path>   Write the artifact to a specific path\n\
          \n\
-         Planned but not yet implemented: add, debug, profile"
+         Planned but not yet implemented: debug, profile"
     );
 }

@@ -22,7 +22,7 @@
   `receiver.method(...)` calls dispatched statically to `Type.method`.
 
 - `unsafe:` blocks for grouping low-level operations.
-- `nex benchmark` compiles and runs a project in release mode, reporting average elapsed time.
+- `nex add <path>` copies a local package into `deps/` and records it in `nex.toml`.
 
 - `pass`, an explicitly empty statement, for empty function bodies, `else`
   branches, and `match` arms. The formatter emits it for empty blocks.

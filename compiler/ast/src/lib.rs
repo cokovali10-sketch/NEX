@@ -71,6 +71,7 @@ pub struct UseDecl {
 #[derive(Debug, Clone)]
 pub struct StructDecl {
     pub name: String,
+    pub type_params: Vec<String>,
     pub public: bool,
     pub fields: Vec<FieldDecl>,
     pub span: Span,
@@ -109,6 +110,7 @@ pub struct ConstDecl {
 #[derive(Debug, Clone)]
 pub struct FnDecl {
     pub name: String,
+    pub type_params: Vec<String>,
     pub public: bool,
     pub extern_abi: Option<String>,
     pub params: Vec<Param>,
