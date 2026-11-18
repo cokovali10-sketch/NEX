@@ -351,6 +351,9 @@ Measured on `examples/bench_strings` (50 000 appends of one byte):
 | `abs` | `(value: i64 or f64) -> i64 or f64` | Absolute value, same type in and out. |
 | `min` / `max` | `(a, b) -> i64 or f64` | Same-type operands only. |
 | `sqrt` | `(value: f64) -> f64` | `libm` |
+| `floor` / `ceil` | `(value: f64) -> f64` | `libm` rounding toward -inf / +inf. |
+| `round` | `(value: f64) -> f64` | Round half away from zero. |
+| `trunc` | `(value: f64) -> f64` | Drop the fractional part. |
 | `pow` | `(base: f64, exponent: f64) -> f64` | `libm` |
 
 ### Diagnostics and memory

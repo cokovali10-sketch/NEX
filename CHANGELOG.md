@@ -70,6 +70,8 @@
 
 - JSON output helpers: `json_escape` and `json_quote`, plus an example that builds JSON and parses it back.
 
+- Math: `floor`, `ceil`, `round`, `trunc` for `f64`.
+
 ### Fixed
 
 - The lexer now skips a leading UTF-8 BOM instead of reporting `unexpected character`.

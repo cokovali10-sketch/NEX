@@ -2783,3 +2783,23 @@ char *nex_rt_json_quote(const char *value) {
     free(escaped);
     return quoted;
 }
+
+double nex_rt_floor_f64(double value) {
+    return floor(value);
+}
+
+double nex_rt_ceil_f64(double value) {
+    return ceil(value);
+}
+
+double nex_rt_round_f64(double value) {
+    return round(value);
+}
+
+double nex_rt_trunc_f64(double value) {
+    return trunc(value);
+}
+
+double nex_rt_abs_f64_value(double value) {
+    return value < 0 ? -value : value;
+}

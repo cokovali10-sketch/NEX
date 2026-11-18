@@ -2305,6 +2305,24 @@ fn lower_expr(
                 return Ok(Operand::Value(dst));
             }
 
+            if callee == "floor" || callee == "ceil" || callee == "round" || callee == "trunc" {
+                let value = lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
+                let name = match callee {
+                    "floor" => "nex_rt_floor_f64",
+                    "ceil" => "nex_rt_ceil_f64",
+                    "round" => "nex_rt_round_f64",
+                    _ => "nex_rt_trunc_f64",
+                };
+                let dst = builder.new_value();
+                builder.emit(Inst::Call {
+                    dst: Some(dst),
+                    name: name.to_string(),
+                    args: vec![value],
+                    ret: IrType::F64,
+                });
+                return Ok(Operand::Value(dst));
+            }
+
             if callee == "json_escape" || callee == "json_quote" {
                 let value = lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
                 let name = if callee == "json_escape" {

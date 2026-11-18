@@ -65,6 +65,11 @@ const RUNTIME_DECLS: &[&str] = &[
     "declare i64 @nex_rt_str_index_of_from(ptr, ptr, i64)",
     "declare ptr @nex_rt_char_at(ptr, i64)",
     "declare i64 @nex_rt_char_code(ptr)",
+    "declare double @nex_rt_floor_f64(double)",
+    "declare double @nex_rt_ceil_f64(double)",
+    "declare double @nex_rt_round_f64(double)",
+    "declare double @nex_rt_trunc_f64(double)",
+    "declare double @nex_rt_abs_f64_value(double)",
     "declare ptr @nex_rt_json_escape(ptr)",
     "declare ptr @nex_rt_json_quote(ptr)",
     "declare i64 @nex_rt_builder_new()",
@@ -699,6 +704,11 @@ fn runtime_signature(name: &str) -> (Vec<IrType>, IrType) {
         "nex_rt_str_index_of_from" => (vec![ptr, ptr, i64], i64),
         "nex_rt_char_at" => (vec![ptr, i64], ptr),
         "nex_rt_char_code" => (vec![ptr], i64),
+        "nex_rt_floor_f64"
+        | "nex_rt_ceil_f64"
+        | "nex_rt_round_f64"
+        | "nex_rt_trunc_f64"
+        | "nex_rt_abs_f64_value" => (vec![f64], f64),
         "nex_rt_json_escape" | "nex_rt_json_quote" => (vec![ptr], ptr),
         "nex_rt_builder_new" => (vec![], i64),
         "nex_rt_builder_append" => (vec![i64, ptr], i32),

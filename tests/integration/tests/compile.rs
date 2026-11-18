@@ -1457,3 +1457,23 @@ fn built_json_parses_back() {
     assert_eq!(code, 0, "stderr: {stderr}");
     assert_eq!(stdout, "{\"n\": \"a\\\"b\"}\nobject\na\"b\n");
 }
+
+#[test]
+fn rounding_builtins() {
+    let source = r#"fn main():
+    println(floor(2.7))
+    println(ceil(2.1))
+    println(round(2.5))
+    println(trunc(-2.9))
+"#;
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "2\n3\n3\n-2\n");
+}
+
+#[test]
+fn rounding_rejects_integers() {
+    let result = compile("fn main():\n    print(floor(2))\n");
+    assert!(result.has_errors());
+    assert!(result.diagnostics.iter().any(|d| d.code == "NXS004"));
+}
