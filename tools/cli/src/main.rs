@@ -27,11 +27,29 @@ fn main() -> ExitCode {
         "test" => cmd_test(&args[1..]),
         "clean" => cmd_clean(&args[1..]),
         "doctor" => {
-            let root = args.get(1).map(PathBuf::from);
+            let mut root: Option<PathBuf> = None;
+            let mut target: Option<String> = None;
+            let mut index = 1;
+            while index < args.len() {
+                match args[index].as_str() {
+                    "--target" => {
+                        if index + 1 >= args.len() {
+                            eprintln!("nex: `--target` requires a value");
+                            return ExitCode::from(2);
+                        }
+                        target = Some(args[index + 1].clone());
+                        index += 2;
+                    }
+                    value => {
+                        root = Some(PathBuf::from(value));
+                        index += 1;
+                    }
+                }
+            }
             let project_root = root
                 .as_deref()
                 .and_then(|path| project::find_root(path).ok());
-            doctor::run(project_root.as_deref());
+            doctor::run(project_root.as_deref(), target.as_deref());
             ExitCode::SUCCESS
         }
         "version" | "--version" | "-V" => {
@@ -249,7 +267,7 @@ fn cmd_init(args: &[String]) -> ExitCode {
 }
 
 fn cmd_build(args: &[String]) -> ExitCode {
-    let (path, emit, profile, output) = match parse_build_args(args, false) {
+    let (path, emit, profile, output, target) = match parse_build_args(args, false) {
         Ok(value) => value,
         Err(error) => {
             eprintln!("nex: {error}");
@@ -270,6 +288,7 @@ fn cmd_build(args: &[String]) -> ExitCode {
         profile,
         output,
         build_dir: Some(project.root.join("build")),
+        target,
     };
 
     match compile_file(&project.entry, options) {
@@ -321,7 +340,7 @@ fn cmd_build(args: &[String]) -> ExitCode {
 }
 
 fn cmd_check(args: &[String]) -> ExitCode {
-    let (path, _emit, _profile, _output) = match parse_build_args(args, false) {
+    let (path, _emit, _profile, _output, _target) = match parse_build_args(args, false) {
         Ok(value) => value,
         Err(error) => {
             eprintln!("nex: {error}");
@@ -342,6 +361,7 @@ fn cmd_check(args: &[String]) -> ExitCode {
         profile: Profile::Debug,
         output: None,
         build_dir: Some(project.root.join("build")),
+        target: None,
     };
 
     match compile_file(&project.entry, options) {
@@ -369,7 +389,7 @@ fn cmd_run(args: &[String]) -> ExitCode {
         (args, &[][..])
     };
 
-    let (path, _emit, profile, _output) = match parse_build_args(build_args, false) {
+    let (path, _emit, profile, _output, target) = match parse_build_args(build_args, false) {
         Ok(value) => value,
         Err(error) => {
             eprintln!("nex: {error}");
@@ -390,6 +410,7 @@ fn cmd_run(args: &[String]) -> ExitCode {
         profile,
         output: None,
         build_dir: Some(project.root.join("build")),
+        target,
     };
 
     let executable = match compile_file(&project.entry, options) {
@@ -531,6 +552,7 @@ fn cmd_benchmark(args: &[String]) -> ExitCode {
         profile: Profile::Release,
         output: None,
         build_dir: Some(project.root.join("build")),
+        target: None,
     };
 
     let executable = match compile_file(&project.entry, options) {
@@ -597,6 +619,7 @@ fn cmd_debug(args: &[String]) -> ExitCode {
         profile: Profile::Debug,
         output: None,
         build_dir: Some(project.root.join("build")),
+        target: None,
     };
     let executable = match compile_file(&project.entry, options) {
         Ok(result) => {
@@ -648,6 +671,7 @@ fn cmd_profile(args: &[String]) -> ExitCode {
         profile: Profile::Release,
         output: None,
         build_dir: Some(project.root.join("build")),
+        target: None,
     };
     let executable = match compile_file(&project.entry, options) {
         Ok(result) => {
@@ -769,6 +793,7 @@ fn cmd_test(args: &[String]) -> ExitCode {
                 profile: Profile::Debug,
                 output: None,
                 build_dir: Some(build_dir),
+                target: None,
             },
         );
 
@@ -823,11 +848,12 @@ fn cmd_test(args: &[String]) -> ExitCode {
 fn parse_build_args(
     args: &[String],
     _allow_emit: bool,
-) -> Result<(String, Emit, Profile, Option<PathBuf>), String> {
+) -> Result<(String, Emit, Profile, Option<PathBuf>, Option<String>), String> {
     let mut path = String::from(".");
     let mut emit = Emit::Executable;
     let mut profile = Profile::Debug;
     let mut output = None;
+    let mut target = None;
     let mut index = 0;
 
     while index < args.len() {
@@ -864,6 +890,13 @@ fn parse_build_args(
                 output = Some(PathBuf::from(value));
                 index += 2;
             }
+            "--target" => {
+                let value = args
+                    .get(index + 1)
+                    .ok_or_else(|| "`--target` requires a target triple".to_string())?;
+                target = Some(value.clone());
+                index += 2;
+            }
             value if value.starts_with('-') => {
                 return Err(format!("unknown option `{value}`"));
             }
@@ -874,7 +907,7 @@ fn parse_build_args(
         }
     }
 
-    Ok((path, emit, profile, output))
+    Ok((path, emit, profile, output, target))
 }
 
 fn valid_project_name(name: &str) -> bool {
@@ -909,7 +942,8 @@ fn print_help() {
            --release             Release build\n\
            --max                 Maximum optimization build\n\
            --emit <kind>         exe | obj | llvm-ir | check\n\
-           -o, --output <path>   Write the artifact to a specific path\n\
+           --target <triple>     Compile for a specific target triple
+          -o, --output <path>   Write the artifact to a specific path\n\
          \n\
          Planned but not yet implemented: (none)"
     );

@@ -2,7 +2,7 @@ use nex_backend::Clang;
 use nex_driver::{CompileOptions, Emit, Profile, compile_source};
 use std::path::Path;
 
-pub fn run(project_root: Option<&Path>) {
+pub fn run(project_root: Option<&Path>, target: Option<&str>) {
     println!("NEX doctor");
     println!("==========");
     println!("os: {}", std::env::consts::OS);
@@ -18,6 +18,12 @@ pub fn run(project_root: Option<&Path>) {
             match clang.probe() {
                 Ok(()) => println!("  probe: OK"),
                 Err(error) => println!("  probe: FAIL ({error})"),
+            }
+            if let Some(triple) = target {
+                match clang.validate_target(triple) {
+                    Ok(()) => println!("  target {triple}: OK"),
+                    Err(error) => println!("  target {triple}: FAIL ({error})"),
+                }
             }
         }
         Err(error) => {
@@ -36,6 +42,7 @@ pub fn run(project_root: Option<&Path>) {
             profile: Profile::Debug,
             output: None,
             build_dir: Some(build_dir),
+            target: None,
         },
     );
 

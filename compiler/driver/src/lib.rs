@@ -16,6 +16,7 @@ pub struct CompileOptions {
     pub profile: Profile,
     pub output: Option<PathBuf>,
     pub build_dir: Option<PathBuf>,
+    pub target: Option<String>,
 }
 
 impl Default for CompileOptions {
@@ -25,6 +26,7 @@ impl Default for CompileOptions {
             profile: Profile::Debug,
             output: None,
             build_dir: None,
+            target: None,
         }
     }
 }
@@ -123,7 +125,7 @@ pub fn compile_source(
 
     let clang = Clang::discover().map_err(DriverError::Toolchain)?;
     let artifacts = clang
-        .compile(&llvm_ir, &build_dir, &stem, options.profile, options.emit)
+        .compile(&llvm_ir, &build_dir, &stem, options.profile, options.emit, options.target.as_deref())
         .map_err(DriverError::Toolchain)?;
     result.artifacts = Some(artifacts);
 

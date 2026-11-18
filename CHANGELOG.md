@@ -24,6 +24,7 @@
 - Type aliases (`type Name = Type`).
 - String interpolation (`f"value {expr}"`).
 - Tuple destructuring in `let`/`var` bindings.
+- Cross-platform target selection (`--target`) and `nex doctor --target`.
 
 - Extended `match`: literal patterns, guards (`case X if cond:`), and
   inclusive range patterns (`case 1..5:`).

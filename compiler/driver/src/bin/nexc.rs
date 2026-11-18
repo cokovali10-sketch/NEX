@@ -86,6 +86,7 @@ fn main() -> ExitCode {
         profile,
         output,
         build_dir: None,
+        target: None,
     };
 
     match compile_file(&input, options) {

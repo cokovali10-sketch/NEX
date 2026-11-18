@@ -122,6 +122,24 @@ impl Clang {
         ))
     }
 
+    /// Validate that clang accepts a target triple.
+    pub fn validate_target(&self, triple: &str) -> Result<(), ToolchainError> {
+        let output = Command::new(&self.path)
+            .arg("-target")
+            .arg(triple)
+            .arg("-dumpmachine")
+            .output()
+            .map_err(ToolchainError::Io)?;
+        if output.status.success() {
+            Ok(())
+        } else {
+            Err(ToolchainError::CommandFailed {
+                command: format!("{} -target {triple} -dumpmachine", self.path.display()),
+                stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+            })
+        }
+    }
+
     pub fn probe(&self) -> Result<(), ToolchainError> {
         let temp = unique_temp_dir("nex-toolchain-probe");
         fs::create_dir_all(&temp).map_err(ToolchainError::Io)?;
@@ -149,6 +167,7 @@ impl Clang {
         stem: &str,
         profile: Profile,
         emit: Emit,
+        target: Option<&str>,
     ) -> Result<BuildArtifacts, ToolchainError> {
         fs::create_dir_all(build_dir).map_err(ToolchainError::Io)?;
         let llvm_ir = build_dir.join(format!("{stem}.ll"));
@@ -164,8 +183,8 @@ impl Clang {
             Emit::Object => {
                 let object = build_dir.join(object_name(stem));
                 let runtime_object = build_dir.join("nex_rt.o");
-                self.compile_ir_to_object(&llvm_ir, &object, profile)?;
-                self.compile_runtime_to_object(&runtime_object, profile)?;
+                self.compile_ir_to_object(&llvm_ir, &object, profile, target)?;
+                self.compile_runtime_to_object(&runtime_object, profile, target)?;
                 Ok(BuildArtifacts {
                     llvm_ir,
                     object: Some(object),
@@ -175,7 +194,7 @@ impl Clang {
             }
             Emit::Executable => {
                 let executable = build_dir.join(executable_name(stem));
-                self.link_executable(&llvm_ir, &executable, profile)?;
+                self.link_executable(&llvm_ir, &executable, profile, target)?;
                 Ok(BuildArtifacts {
                     llvm_ir,
                     object: None,
@@ -191,6 +210,7 @@ impl Clang {
         llvm_ir: &Path,
         output: &Path,
         profile: Profile,
+        target: Option<&str>,
     ) -> Result<(), ToolchainError> {
         let mut args = vec![
             profile.clang_optimization().to_string(),
@@ -199,6 +219,10 @@ impl Clang {
             "-o".to_string(),
             output.to_string_lossy().to_string(),
         ];
+        if let Some(target) = target {
+            args.push("-target".to_string());
+            args.push(target.to_string());
+        }
         if profile == Profile::Debug {
             args.push("-g".to_string());
         }
@@ -209,6 +233,7 @@ impl Clang {
         &self,
         output: &Path,
         profile: Profile,
+        target: Option<&str>,
     ) -> Result<(), ToolchainError> {
         let runtime_path =
             build_dir_runtime_source(output.parent().unwrap_or_else(|| Path::new(".")), RUNTIME_C)?;
@@ -219,6 +244,10 @@ impl Clang {
             "-o".to_string(),
             output.to_string_lossy().to_string(),
         ];
+        if let Some(target) = target {
+            args.push("-target".to_string());
+            args.push(target.to_string());
+        }
         if profile == Profile::Debug {
             args.push("-g".to_string());
         }
@@ -230,6 +259,7 @@ impl Clang {
         llvm_ir: &Path,
         output: &Path,
         profile: Profile,
+        target: Option<&str>,
     ) -> Result<(), ToolchainError> {
         let runtime_path =
             build_dir_runtime_source(output.parent().unwrap_or_else(|| Path::new(".")), RUNTIME_C)?;
@@ -240,6 +270,10 @@ impl Clang {
             "-o".to_string(),
             output.to_string_lossy().to_string(),
         ];
+        if let Some(target) = target {
+            args.push("-target".to_string());
+            args.push(target.to_string());
+        }
         if profile == Profile::Debug {
             args.push("-g".to_string());
         }

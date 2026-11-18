@@ -33,7 +33,7 @@
 
 - [x] Constant folding in NEX IR.
 - [x] Debug symbols via Clang (`-g`).
-- [ ] Cross-platform targets.
+- [x] Cross-platform target validation (`--target <triple>`, `nex doctor --target`).
 - [x] Reproducible build metadata (build.json).
 
 ## NEX 0.4 - Memory and Safety
@@ -91,6 +91,6 @@
 ## Post-1.0 (planned)
 
 - Full ownership, borrowing and lifetime analysis.
-- Cross-platform target validation and CI matrix.
+- Cross-platform CI matrix.
 - NEX Studio (editor, project explorer, LSP integration).
 - Foreign adapters for Python and Rust.

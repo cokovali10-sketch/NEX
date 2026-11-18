@@ -12,6 +12,7 @@ fn compile(source: &str) -> nex_driver::CompileResult {
             profile: Profile::Debug,
             output: None,
             build_dir: Some(build_dir),
+            target: None,
         },
     )
     .expect("toolchain should be available")
@@ -932,6 +933,7 @@ fn emits_llvm_ir() {
             profile: Profile::Debug,
             output: None,
             build_dir: Some(build_dir),
+            target: None,
         },
     )
     .expect("toolchain should be available");
@@ -956,6 +958,7 @@ fn emits_object_file() {
             profile: Profile::Debug,
             output: None,
             build_dir: Some(build_dir),
+            target: None,
         },
     )
     .expect("toolchain should be available");
