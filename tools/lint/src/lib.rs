@@ -67,6 +67,12 @@ fn lint_program(program: &Program) -> Vec<Warning> {
         collect_expr_idents(&constant.init, &mut used_idents);
         collect_expr_calls(&constant.init, &mut called_functions);
     }
+    for block in &program.impls {
+        for method in &block.methods {
+            collect_block_idents(&method.body, &mut used_idents);
+            collect_block_calls(&method.body, &mut called_functions);
+        }
+    }
 
     // Unused private functions.
     for function in &program.functions {
@@ -101,6 +107,11 @@ fn lint_program(program: &Program) -> Vec<Warning> {
     // Per-function checks.
     for function in &program.functions {
         check_block(&function.body, &mut warnings);
+    }
+    for block in &program.impls {
+        for method in &block.methods {
+            check_block(&method.body, &mut warnings);
+        }
     }
 
     warnings.sort_by_key(|warning| warning.span.start);

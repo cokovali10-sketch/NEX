@@ -7,8 +7,8 @@
 //! [`FormatResult::had_comments`] and warn before overwriting a file.
 
 use nex_ast::{
-    BinOp, Block, ConstDecl, EnumDecl, Expr, ExprKind, FnDecl, MatchArm, Param, Program, Stmt,
-    StmtKind, StructDecl, TypeExpr, UnaryOp, UseDecl,
+    BinOp, Block, ConstDecl, EnumDecl, Expr, ExprKind, FnDecl, ImplBlock, MatchArm, Param, Program,
+    Stmt, StmtKind, StructDecl, TraitDecl, TypeExpr, UnaryOp, UseDecl,
 };
 use nex_diagnostics::Diagnostic;
 
@@ -186,11 +186,25 @@ impl<'a> Printer<'a> {
             self.enum_decl(item);
             first = false;
         }
+        for item in &program.traits {
+            if !first {
+                self.blank();
+            }
+            self.trait_decl(item);
+            first = false;
+        }
         for item in &program.consts {
             if !first {
                 self.blank();
             }
             self.const_decl(item);
+            first = false;
+        }
+        for item in &program.impls {
+            if !first {
+                self.blank();
+            }
+            self.impl_block(item);
             first = false;
         }
         for item in &program.functions {
@@ -229,6 +243,68 @@ impl<'a> Printer<'a> {
         for variant in &item.variants {
             self.push(&variant.name);
         }
+        self.indent -= 1;
+    }
+
+    fn trait_decl(&mut self, item: &TraitDecl) {
+        let visibility = if item.public { "pub " } else { "" };
+        self.push(format!("{visibility}trait {}:", item.name));
+        self.indent += 1;
+        if item.methods.is_empty() {
+            self.push("pass");
+        }
+        for method in &item.methods {
+            let params: Vec<String> = method.params.iter().map(param_str).collect();
+            let mut text = format!("fn {}(self", method.name);
+            if !params.is_empty() {
+                text.push_str(", ");
+                text.push_str(&params.join(", "));
+            }
+            text.push(')');
+            if let Some(ret) = &method.ret {
+                text.push_str(&format!(" -> {}", type_str(ret)));
+            }
+            self.push(&text);
+        }
+        self.indent -= 1;
+    }
+
+    fn impl_block(&mut self, item: &ImplBlock) {
+        self.push(format!("impl {} for {}:", item.trait_name, item.type_name));
+        self.indent += 1;
+        if item.methods.is_empty() {
+            self.push("pass");
+        }
+        for (index, method) in item.methods.iter().enumerate() {
+            if index > 0 {
+                self.blank();
+            }
+            self.method_decl(method);
+        }
+        self.indent -= 1;
+    }
+
+    fn method_decl(&mut self, item: &FnDecl) {
+        let mut text = format!("fn {}(", item.name);
+        let params: Vec<String> = item
+            .params
+            .iter()
+            .skip(1)
+            .map(param_str)
+            .collect();
+        text.push_str("self");
+        if !params.is_empty() {
+            text.push_str(", ");
+            text.push_str(&params.join(", "));
+        }
+        text.push(')');
+        if let Some(ret) = &item.ret {
+            text.push_str(&format!(" -> {}", type_str(ret)));
+        }
+        text.push(':');
+        self.push(&text);
+        self.indent += 1;
+        self.block(&item.body);
         self.indent -= 1;
     }
 
@@ -385,8 +461,12 @@ impl<'a> Printer<'a> {
 
     fn match_arm(&mut self, arm: &MatchArm) {
         match &arm.pattern {
-            Some(pattern) => self.push(format!("case {pattern}:")),
-            None => self.push("else:"),
+            nex_ast::Pattern::Else => self.push("else:".to_string()),
+            nex_ast::Pattern::Variant(name) => self.push(format!("case {name}:")),
+            nex_ast::Pattern::Int(value) => self.push(format!("case {value}:")),
+            nex_ast::Pattern::Bool(value) => self.push(format!("case {value}:")),
+            nex_ast::Pattern::Char(value) => self.push(format!("case {value:?}:")),
+            nex_ast::Pattern::Str(value) => self.push(format!("case {:?}:", value)),
         }
         self.indent += 1;
         self.block(&arm.body);
@@ -656,6 +736,13 @@ mod tests {
     fn formats_pass_statements() {
         let source = "fn noop():\n    pass\n\nfn main():\n    noop()\n";
         let expected = "fn noop():\n    pass\n\nfn main():\n    noop()\n";
+        assert_eq!(format(source), expected);
+    }
+
+    #[test]
+    fn formats_traits_and_impls() {
+        let source = "trait Shape:\n  fn area(self)->f64\nstruct Rect:\n  w: f64\nimpl Shape for Rect:\n  fn area(self)->f64:\n    return self.w*self.w\nfn main():\n  var r=Rect(2.0)\n  print(r.area())\n";
+        let expected = "struct Rect:\n    w: f64\n\ntrait Shape:\n    fn area(self) -> f64\n\nimpl Shape for Rect:\n    fn area(self) -> f64:\n        return self.w * self.w\n\nfn main():\n    var r = Rect(2.0)\n    print(r.area())\n";
         assert_eq!(format(source), expected);
     }
 

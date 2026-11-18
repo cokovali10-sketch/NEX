@@ -25,7 +25,7 @@
 - [x] Nested struct fields.
 - [x] Enforce `pub` visibility across modules.
 - [x] Array and tuple type annotations, parameters, and return values.
-- [ ] Traits and pattern matching beyond enums.
+- [x] Traits and pattern matching beyond enums.
 - [x] Better control-flow analysis and definite-return checking for constant conditions.
 - [x] Richer diagnostics with help suggestions.
 

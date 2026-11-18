@@ -41,10 +41,34 @@ pub struct ArrayInfo {
 }
 
 #[derive(Debug, Clone)]
+pub struct TraitMethodSig {
+    pub name: String,
+    pub params: Vec<Type>,
+    pub ret: Type,
+}
+
+#[derive(Debug, Clone)]
+pub struct TraitInfo {
+    pub name: String,
+    pub methods: Vec<TraitMethodSig>,
+    pub public: bool,
+}
+
+/// Resolution of `receiver.method(...)` stored by span for the IR builder.
+#[derive(Debug, Clone)]
+pub struct MethodCallInfo {
+    pub symbol: String,
+    pub receiver: String,
+    pub receiver_ty: Type,
+    pub ret: Type,
+}
+
+#[derive(Debug, Clone)]
 pub struct Analysis {
     pub structs: BTreeMap<String, StructInfo>,
     pub enums: BTreeMap<String, EnumInfo>,
     pub arrays: BTreeMap<String, ArrayInfo>,
+    pub traits: BTreeMap<String, TraitInfo>,
     pub modules: std::collections::HashSet<String>,
     pub aliases: std::collections::HashMap<String, String>,
     pub public_consts: std::collections::HashSet<String>,
@@ -64,6 +88,8 @@ pub struct Analysis {
     pub field_writes: HashMap<Span, Vec<(&'static str, u32, Type)>>,
     /// Enum variant values keyed by expression span: (enum name, variant index).
     pub variant_values: HashMap<Span, (&'static str, u32)>,
+    /// Method calls keyed by the full call expression span.
+    pub method_calls: HashMap<Span, MethodCallInfo>,
     pub diagnostics: Vec<Diagnostic>,
 }
 
@@ -98,6 +124,10 @@ impl Analysis {
 
     pub fn variant_value(&self, span: Span) -> Option<(&'static str, u32)> {
         self.variant_values.get(&span).copied()
+    }
+
+    pub fn method_call(&self, span: Span) -> Option<&MethodCallInfo> {
+        self.method_calls.get(&span)
     }
 
     pub fn expr_type(&self, span: Span) -> Option<Type> {
@@ -145,6 +175,7 @@ impl<'a> Checker<'a> {
                 structs: BTreeMap::new(),
                 enums: BTreeMap::new(),
                 arrays: BTreeMap::new(),
+                traits: BTreeMap::new(),
                 modules: std::collections::HashSet::new(),
                 aliases: std::collections::HashMap::new(),
                 public_consts: std::collections::HashSet::new(),
@@ -159,6 +190,7 @@ impl<'a> Checker<'a> {
                 field_reads: HashMap::new(),
                 field_writes: HashMap::new(),
                 variant_values: HashMap::new(),
+                method_calls: HashMap::new(),
                 diagnostics: Vec::new(),
             },
             scopes: Vec::new(),
@@ -168,6 +200,8 @@ impl<'a> Checker<'a> {
         checker.collect_modules();
         checker.collect_structs();
         checker.collect_enums();
+        checker.collect_traits();
+        checker.collect_impls();
         checker.collect_consts();
         checker.collect_globals();
         checker.collect_functions();
@@ -372,6 +406,225 @@ impl<'a> Checker<'a> {
                     public: definition.public,
                 },
             );
+        }
+    }
+
+    fn collect_traits(&mut self) {
+        for definition in &self.program.traits {
+            if self.analysis.structs.contains_key(&definition.name)
+                || self.analysis.enums.contains_key(&definition.name)
+                || self.analysis.functions.contains_key(&definition.name)
+            {
+                self.error(
+                    "NXS003",
+                    format!("name `{}` is already declared", definition.name),
+                    definition.span,
+                );
+                continue;
+            }
+            if self.analysis.traits.contains_key(&definition.name) {
+                self.error(
+                    "NXS039",
+                    format!("duplicate trait `{}`", definition.name),
+                    definition.span,
+                );
+                continue;
+            }
+
+            let mut methods = Vec::new();
+            let mut seen = std::collections::HashSet::new();
+            for method in &definition.methods {
+                if !seen.insert(method.name.clone()) {
+                    self.error(
+                        "NXS003",
+                        format!(
+                            "duplicate method `{}` in trait `{}`",
+                            method.name, definition.name
+                        ),
+                        method.span,
+                    );
+                    continue;
+                }
+                let mut params = Vec::with_capacity(method.params.len());
+                for param in &method.params {
+                    let ty = self.resolve_type(&param.ty);
+                    if ty == Type::Void {
+                        self.error(
+                            "NXS002",
+                            format!("parameter `{}` cannot have type `void`", param.name),
+                            param.span,
+                        );
+                    }
+                    params.push(ty);
+                }
+                let ret = method
+                    .ret
+                    .as_ref()
+                    .map(|ty| self.resolve_type(ty))
+                    .unwrap_or(Type::Void);
+                methods.push(TraitMethodSig {
+                    name: method.name.clone(),
+                    params,
+                    ret,
+                });
+            }
+
+            self.analysis.traits.insert(
+                definition.name.clone(),
+                TraitInfo {
+                    name: definition.name.clone(),
+                    methods,
+                    public: definition.public,
+                },
+            );
+        }
+    }
+
+    fn collect_impls(&mut self) {
+        let mut implemented: std::collections::HashSet<(String, String)> =
+            std::collections::HashSet::new();
+        for block in &self.program.impls {
+            let Some(trait_info) = self.analysis.traits.get(&block.trait_name).cloned() else {
+                self.error(
+                    "NXS041",
+                    format!("unknown trait `{}` in impl block", block.trait_name),
+                    block.span,
+                );
+                continue;
+            };
+            let Some(struct_info) = self.analysis.structs.get(&block.type_name).cloned() else {
+                self.error(
+                    "NXS042",
+                    format!(
+                        "impl target `{}` must be a declared struct",
+                        block.type_name
+                    ),
+                    block.span,
+                );
+                continue;
+            };
+            if !implemented.insert((block.trait_name.clone(), block.type_name.clone())) {
+                self.error(
+                    "NXS043",
+                    format!(
+                        "duplicate `impl {} for {}` block",
+                        block.trait_name, block.type_name
+                    ),
+                    block.span,
+                );
+                continue;
+            }
+
+            let mut provided = std::collections::HashSet::new();
+            for method in &block.methods {
+                if !provided.insert(method.name.clone()) {
+                    self.error(
+                        "NXS003",
+                        format!(
+                            "duplicate method `{}` in `impl {} for {}`",
+                            method.name, block.trait_name, block.type_name
+                        ),
+                        method.span,
+                    );
+                    continue;
+                }
+
+                let Some(expected) = trait_info
+                    .methods
+                    .iter()
+                    .find(|candidate| candidate.name == method.name)
+                    .cloned()
+                else {
+                    self.error(
+                        "NXS044",
+                        format!(
+                            "method `{}` is not declared by trait `{}`",
+                            method.name, block.trait_name
+                        ),
+                        method.span,
+                    );
+                    continue;
+                };
+
+                let mut params = Vec::with_capacity(method.params.len());
+                for param in &method.params {
+                    params.push(self.resolve_type(&param.ty));
+                }
+                let ret = method
+                    .ret
+                    .as_ref()
+                    .map(|ty| self.resolve_type(ty))
+                    .unwrap_or(Type::Void);
+
+                let receiver_ok = params.first() == Some(&Type::Struct(struct_info.name_static));
+                if !receiver_ok {
+                    self.error(
+                        "NXS044",
+                        format!(
+                            "method `{}` must take `self` of type `{}`",
+                            method.name, block.type_name
+                        ),
+                        method.span,
+                    );
+                    continue;
+                }
+                let actual_params = &params[1..];
+                if actual_params != expected.params.as_slice() || ret != expected.ret {
+                    let diagnostic = Diagnostic::error(
+                        "NXS044",
+                        format!(
+                            "method `{}` does not match the signature declared by trait `{}`",
+                            method.name, block.trait_name
+                        ),
+                        method.span,
+                    )
+                    .with_note(format!(
+                        "expected `({})` returning `{}`",
+                        expected
+                            .params
+                            .iter()
+                            .map(ToString::to_string)
+                            .collect::<Vec<_>>()
+                            .join(", "),
+                        expected.ret
+                    ));
+                    self.analysis.diagnostics.push(diagnostic);
+                    continue;
+                }
+
+                let symbol = format!("{}.{}", block.type_name, method.name);
+                if self.analysis.functions.contains_key(&symbol) {
+                    self.error(
+                        "NXS003",
+                        format!("duplicate method `{symbol}`"),
+                        method.span,
+                    );
+                    continue;
+                }
+                self.analysis.functions.insert(
+                    symbol.clone(),
+                    FnSig {
+                        name: symbol,
+                        params,
+                        ret,
+                        public: struct_info.public,
+                        span: method.span,
+                    },
+                );
+            }
+
+            for expected in &trait_info.methods {
+                if !provided.contains(&expected.name) {
+                    self.error(
+                        "NXS045",
+                        format!(
+                            "`impl {} for {}` is missing method `{}`",
+                            block.trait_name, block.type_name, expected.name
+                        ),
+                        block.span,
+                    );
+                }
+            }
         }
     }
 
@@ -652,7 +905,14 @@ impl<'a> Checker<'a> {
     }
 
     fn check_functions(&mut self) {
-        let functions = self.program.functions.clone();
+        let mut functions = self.program.functions.clone();
+        for block in &self.program.impls {
+            for method in &block.methods {
+                let mut method = method.clone();
+                method.name = format!("{}.{}", block.type_name, method.name);
+                functions.push(method);
+            }
+        }
         for function in functions {
             if self.analysis.externs.contains(&function.name) {
                 continue;
@@ -956,86 +1216,234 @@ impl<'a> Checker<'a> {
             }
             StmtKind::Match { scrutinee, arms } => {
                 let scrut_ty = self.infer(scrutinee);
-                let enum_name = match scrut_ty {
-                    Type::Enum(name) => Some(name),
-                    Type::Error => None,
-                    other => {
-                        self.error(
-                            "NXS031",
-                            format!("match scrutinee must have an enum type, found `{other}`"),
-                            statement.span,
-                        );
-                        None
-                    }
-                };
+                let is_enum = matches!(scrut_ty, Type::Enum(_));
+                let is_int = scrut_ty.is_integer();
+                let is_bool = scrut_ty == Type::Bool;
+                let is_char = scrut_ty == Type::Char;
+                let is_str = scrut_ty == Type::String;
 
-                if let Some(enum_name) = enum_name {
-                    let info = self.analysis.enums.get(enum_name).cloned();
-                    if let Some(info) = info {
-                        let mut seen = std::collections::HashSet::new();
-                        let mut else_seen = false;
-                        let mut else_not_last = false;
-                        for (index, arm) in arms.iter().enumerate() {
-                            match &arm.pattern {
-                                Some(variant) => {
-                                    if else_seen {
-                                        self.error(
-                                            "NXS034",
-                                            "case arm cannot follow an `else` arm".to_string(),
-                                            arm.span,
-                                        );
-                                    }
-                                    if !seen.insert(variant.clone()) {
-                                        self.error(
-                                            "NXS032",
-                                            format!("duplicate match arm for variant `{variant}`"),
-                                            arm.span,
-                                        );
-                                    }
-                                    if !info.variants.iter().any(|value| value == variant) {
+                if !is_enum && !is_int && !is_bool && !is_char && !is_str && scrut_ty != Type::Error {
+                    self.error(
+                        "NXS031",
+                        format!(
+                            "match scrutinee must have an enum, integer, bool, char, or string type, found `{scrut_ty}`"
+                        ),
+                        statement.span,
+                    );
+                }
+
+                let mut seen_variants: std::collections::HashSet<String> =
+                    std::collections::HashSet::new();
+                let mut seen_ints: std::collections::HashSet<i64> = std::collections::HashSet::new();
+                let mut seen_strs: std::collections::HashSet<String> = std::collections::HashSet::new();
+                let mut seen_chars: std::collections::HashSet<char> = std::collections::HashSet::new();
+                let mut seen_bools: std::collections::HashSet<bool> = std::collections::HashSet::new();
+                let mut else_seen = false;
+                let mut else_not_last = false;
+
+                for (index, arm) in arms.iter().enumerate() {
+                    match &arm.pattern {
+                        nex_ast::Pattern::Else => {
+                            if else_seen {
+                                self.error(
+                                    "NXS034",
+                                    "only one `else` arm is allowed".to_string(),
+                                    arm.span,
+                                );
+                            }
+                            else_seen = true;
+                            if index + 1 != arms.len() {
+                                else_not_last = true;
+                            }
+                        }
+                        nex_ast::Pattern::Variant(variant) => {
+                            if else_seen {
+                                self.error(
+                                    "NXS034",
+                                    "case arm cannot follow an `else` arm".to_string(),
+                                    arm.span,
+                                );
+                            }
+                            if !seen_variants.insert(variant.clone()) {
+                                self.error(
+                                    "NXS032",
+                                    format!("duplicate match arm for variant `{variant}`"),
+                                    arm.span,
+                                );
+                            }
+                            if is_enum {
+                                if let Type::Enum(name) = scrut_ty {
+                                    let info = self.analysis.enums.get(name).cloned();
+                                    if let Some(info) = info
+                                        && !info.variants.iter().any(|value| value == variant)
+                                    {
                                         self.error(
                                             "NXS030",
-                                            format!(
-                                                "enum `{enum_name}` has no variant `{variant}`"
-                                            ),
+                                            format!("enum `{name}` has no variant `{variant}`"),
                                             arm.span,
                                         );
                                     }
                                 }
-                                None => {
-                                    if else_seen {
-                                        self.error(
-                                            "NXS034",
-                                            "only one `else` arm is allowed".to_string(),
-                                            arm.span,
-                                        );
-                                    }
-                                    else_seen = true;
-                                    if index + 1 != arms.len() {
-                                        else_not_last = true;
-                                    }
-                                }
+                            } else if scrut_ty != Type::Error {
+                                self.error(
+                                    "NXS030",
+                                    "variant patterns are only valid for enum scrutinees".to_string(),
+                                    arm.span,
+                                );
                             }
-                            self.check_block(&arm.body, false);
                         }
-                        if else_not_last {
-                            self.error(
-                                "NXS034",
-                                "`else` arm must be the last match arm".to_string(),
-                                statement.span,
-                            );
+                        nex_ast::Pattern::Int(value) => {
+                            if else_seen {
+                                self.error(
+                                    "NXS034",
+                                    "case arm cannot follow an `else` arm".to_string(),
+                                    arm.span,
+                                );
+                            }
+                            if !is_int {
+                                if scrut_ty != Type::Error {
+                                    self.error(
+                                        "NXS030",
+                                        "integer patterns require an integer scrutinee".to_string(),
+                                        arm.span,
+                                    );
+                                }
+                            } else if !seen_ints.insert(*value) {
+                                self.error(
+                                    "NXS032",
+                                    format!("duplicate match arm for `{value}`"),
+                                    arm.span,
+                                );
+                            }
                         }
-                        if !else_seen && seen.len() < info.variants.len() {
-                            self.warning(
-                                "NXS033",
-                                format!("match does not cover all variants of enum `{enum_name}`"),
-                                statement.span,
-                            );
+                        nex_ast::Pattern::Bool(value) => {
+                            if else_seen {
+                                self.error(
+                                    "NXS034",
+                                    "case arm cannot follow an `else` arm".to_string(),
+                                    arm.span,
+                                );
+                            }
+                            if !is_bool {
+                                if scrut_ty != Type::Error {
+                                    self.error(
+                                        "NXS030",
+                                        "boolean patterns require a `bool` scrutinee".to_string(),
+                                        arm.span,
+                                    );
+                                }
+                            } else if !seen_bools.insert(*value) {
+                                self.error(
+                                    "NXS032",
+                                    format!("duplicate match arm for `{value}`"),
+                                    arm.span,
+                                );
+                            }
+                        }
+                        nex_ast::Pattern::Char(value) => {
+                            if else_seen {
+                                self.error(
+                                    "NXS034",
+                                    "case arm cannot follow an `else` arm".to_string(),
+                                    arm.span,
+                                );
+                            }
+                            if !is_char {
+                                if scrut_ty != Type::Error {
+                                    self.error(
+                                        "NXS030",
+                                        "char patterns require a `char` scrutinee".to_string(),
+                                        arm.span,
+                                    );
+                                }
+                            } else if !seen_chars.insert(*value) {
+                                self.error(
+                                    "NXS032",
+                                    format!("duplicate match arm for `{value:?}`"),
+                                    arm.span,
+                                );
+                            }
+                        }
+                        nex_ast::Pattern::Str(value) => {
+                            if else_seen {
+                                self.error(
+                                    "NXS034",
+                                    "case arm cannot follow an `else` arm".to_string(),
+                                    arm.span,
+                                );
+                            }
+                            if !is_str {
+                                if scrut_ty != Type::Error {
+                                    self.error(
+                                        "NXS030",
+                                        "string patterns require a `string` scrutinee".to_string(),
+                                        arm.span,
+                                    );
+                                }
+                            } else if !seen_strs.insert(value.clone()) {
+                                self.error(
+                                    "NXS032",
+                                    format!("duplicate match arm for `{value}`"),
+                                    arm.span,
+                                );
+                            }
                         }
                     }
-                } else {
-                    for arm in arms {
-                        self.check_block(&arm.body, false);
+                    self.check_block(&arm.body, false);
+                }
+
+                if else_not_last {
+                    self.error(
+                        "NXS034",
+                        "`else` arm must be the last match arm".to_string(),
+                        statement.span,
+                    );
+                }
+
+                if scrut_ty != Type::Error {
+                    let exhaustive = else_seen
+                        || (is_enum
+                            && seen_variants.len()
+                                == self
+                                    .analysis
+                                    .enums
+                                    .get(if let Type::Enum(name) = scrut_ty {
+                                        name
+                                    } else {
+                                        ""
+                                    })
+                                    .map(|info| info.variants.len())
+                                    .unwrap_or(0))
+                        || (is_bool && seen_bools.len() == 2);
+                    if !exhaustive && !else_seen {
+                        if is_enum {
+                            self.warning(
+                                "NXS033",
+                                format!(
+                                    "match does not cover all variants of enum `{}`",
+                                    if let Type::Enum(name) = scrut_ty {
+                                        name
+                                    } else {
+                                        ""
+                                    }
+                                ),
+                                statement.span,
+                            );
+                        } else if is_int || is_char || is_str {
+                            self.error(
+                                "NXS033",
+                                format!(
+                                    "match on `{scrut_ty}` must include an `else` arm"
+                                ),
+                                statement.span,
+                            );
+                        } else if is_bool {
+                            self.warning(
+                                "NXS033",
+                                "match does not cover both `true` and `false`".to_string(),
+                                statement.span,
+                            );
+                        }
                     }
                 }
             }
@@ -1581,7 +1989,102 @@ impl<'a> Checker<'a> {
         ty
     }
 
+    /// Resolve `receiver.method(args)` when `receiver` is a local (or `self`)
+    /// whose struct type has a method registered by an `impl` block.
+    fn check_method_call(&mut self, callee: &str, args: &[Expr], span: Span) -> Option<Type> {
+        let (receiver, method_name) = callee.rsplit_once('.')?;
+        if receiver.is_empty() || method_name.is_empty() {
+            return None;
+        }
+
+        let root = receiver.split('.').next().unwrap_or(receiver);
+        let Some(receiver_var) = self.lookup(root) else {
+            return None;
+        };
+
+        if receiver.contains('.') {
+            self.error(
+                "NXS047",
+                "method calls on nested fields are not supported yet; assign the field to a local first"
+                    .to_string(),
+                span,
+            );
+            for arg in args {
+                self.infer(arg);
+            }
+            return Some(Type::Error);
+        }
+
+        let receiver_ty = receiver_var.ty;
+        if receiver_ty == Type::Error {
+            for arg in args {
+                self.infer(arg);
+            }
+            return Some(Type::Error);
+        }
+
+        let symbol = match receiver_ty {
+            Type::Struct(name) => format!("{name}.{method_name}"),
+            _ => {
+                self.error(
+                    "NXS046",
+                    format!("type `{receiver_ty}` has no method `{method_name}`"),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Some(Type::Error);
+            }
+        };
+
+        let Some(signature) = self.analysis.functions.get(&symbol).cloned() else {
+            self.error(
+                "NXS046",
+                format!("type `{receiver_ty}` has no method `{method_name}`"),
+                span,
+            );
+            for arg in args {
+                self.infer(arg);
+            }
+            return Some(Type::Error);
+        };
+
+        let expected = &signature.params[1..];
+        if args.len() != expected.len() {
+            self.error(
+                "NXS004",
+                format!(
+                    "method `{method_name}` expects {} argument(s), found {}",
+                    expected.len(),
+                    args.len()
+                ),
+                span,
+            );
+            for arg in args {
+                self.infer(arg);
+            }
+            return Some(Type::Error);
+        }
+        for (arg, expected_ty) in args.iter().zip(expected.iter()) {
+            self.check_expected(arg, *expected_ty);
+        }
+        self.analysis.method_calls.insert(
+            span,
+            MethodCallInfo {
+                symbol,
+                receiver: root.to_string(),
+                receiver_ty,
+                ret: signature.ret,
+            },
+        );
+        Some(signature.ret)
+    }
+
     fn check_call(&mut self, callee: &str, callee_span: Span, args: &[Expr], span: Span) -> Type {
+        if let Some(result) = self.check_method_call(callee, args, span) {
+            return result;
+        }
         let callee = self
             .analysis
             .aliases

@@ -5,8 +5,9 @@
 //! the compiler report more than one independent error per file.
 
 use nex_ast::{
-    BinOp, Block, ConstDecl, EnumDecl, Expr, ExprKind, FieldDecl, FnDecl, GlobalDecl, MatchArm,
-    Param, Program, Stmt, StmtKind, StructDecl, TypeExpr, UnaryOp, UseDecl, VariantDecl,
+    BinOp, Block, ConstDecl, EnumDecl, Expr, ExprKind, FieldDecl, FnDecl, GlobalDecl, ImplBlock,
+    MatchArm, Param, Program, Stmt, StmtKind, StructDecl, TraitDecl, TraitMethodDecl, TypeExpr,
+    UnaryOp, UseDecl, VariantDecl,
 };
 use nex_diagnostics::{Diagnostic, Span};
 use nex_lexer::{Token, TokenKind};
@@ -42,6 +43,8 @@ impl<'a> Parser<'a> {
         let mut uses = Vec::new();
         let mut structs = Vec::new();
         let mut enums = Vec::new();
+        let mut traits = Vec::new();
+        let mut impls = Vec::new();
         let mut consts = Vec::new();
         let mut globals: Vec<GlobalDecl> = Vec::new();
         let mut functions = Vec::new();
@@ -69,6 +72,19 @@ impl<'a> Parser<'a> {
                 if let Some(mut definition) = self.parse_enum() {
                     definition.public = is_public;
                     enums.push(definition);
+                } else {
+                    self.synchronize_item();
+                }
+            } else if self.check(&TokenKind::Trait) {
+                if let Some(mut definition) = self.parse_trait() {
+                    definition.public = is_public;
+                    traits.push(definition);
+                } else {
+                    self.synchronize_item();
+                }
+            } else if self.check(&TokenKind::Impl) {
+                if let Some(block) = self.parse_impl() {
+                    impls.push(block);
                 } else {
                     self.synchronize_item();
                 }
@@ -138,6 +154,8 @@ impl<'a> Parser<'a> {
                 uses,
                 structs,
                 enums,
+                traits,
+                impls,
                 consts,
                 functions,
                 span: Span::new(start, end),
@@ -226,6 +244,227 @@ impl<'a> Parser<'a> {
             body,
             span,
         })
+    }
+
+    fn parse_trait(&mut self) -> Option<TraitDecl> {
+        let start = self.advance().span; // trait
+        let (name, _name_span) = self.expect_ident("after `trait`")?;
+
+        if !self.expect(&TokenKind::Colon, "after trait name") {
+            self.synchronize_item();
+            return None;
+        }
+        self.expect_line_end();
+
+        if !self.eat(&TokenKind::Indent) {
+            let span = self.peek_token().span;
+            self.error("NXP002", "expected an indented trait body after `:`", span);
+            return None;
+        }
+
+        let mut methods = Vec::new();
+        while !self.check(&TokenKind::Dedent) && !self.check(&TokenKind::Eof) {
+            if self.eat(&TokenKind::Newline) {
+                continue;
+            }
+            if !self.check(&TokenKind::Fn) {
+                let span = self.peek_token().span;
+                self.error(
+                    "NXP015",
+                    format!(
+                        "expected a method signature in trait `{name}`, found {}",
+                        self.peek_token().kind.describe()
+                    ),
+                    span,
+                );
+                self.synchronize_item();
+                continue;
+            }
+
+            let method_start = self.advance().span; // fn
+            let Some((method_name, _method_span)) = self.expect_ident("after `fn`") else {
+                self.synchronize_item();
+                continue;
+            };
+            if !self.expect(&TokenKind::LParen, "after method name") {
+                self.synchronize_item();
+                continue;
+            }
+            let (receiver, params) = self.parse_method_params();
+            if receiver.is_none() {
+                self.error(
+                    "NXP014",
+                    format!("trait method `{method_name}` must declare `self`"),
+                    method_start,
+                );
+            }
+            self.expect(&TokenKind::RParen, "after method parameters");
+            let ret = if self.eat(&TokenKind::Arrow) {
+                Some(self.parse_type())
+            } else {
+                None
+            };
+            let span = method_start.merge(self.peek_token().span);
+            self.expect_line_end();
+            methods.push(TraitMethodDecl {
+                name: method_name,
+                params,
+                ret,
+                span,
+            });
+        }
+
+        let end = self.peek_token().span.end;
+        self.eat(&TokenKind::Dedent);
+        Some(TraitDecl {
+            name,
+            public: false,
+            methods,
+            span: start.merge(Span::new(end, end)),
+        })
+    }
+
+    fn parse_impl(&mut self) -> Option<ImplBlock> {
+        let start = self.advance().span; // impl
+        let trait_name = self.parse_path_name("after `impl`")?;
+        if !self.expect(&TokenKind::For, "after trait name in `impl`") {
+            self.synchronize_item();
+            return None;
+        }
+        let type_name = self.parse_path_name("after `for`")?;
+
+        if !self.expect(&TokenKind::Colon, "after impl target") {
+            self.synchronize_item();
+            return None;
+        }
+        self.expect_line_end();
+
+        if !self.eat(&TokenKind::Indent) {
+            let span = self.peek_token().span;
+            self.error("NXP002", "expected an indented impl body after `:`", span);
+            return None;
+        }
+
+        let mut methods = Vec::new();
+        while !self.check(&TokenKind::Dedent) && !self.check(&TokenKind::Eof) {
+            if self.eat(&TokenKind::Newline) {
+                continue;
+            }
+            if !self.check(&TokenKind::Fn) {
+                let span = self.peek_token().span;
+                self.error(
+                    "NXP015",
+                    format!(
+                        "expected a method in `impl {trait_name} for {type_name}`, found {}",
+                        self.peek_token().kind.describe()
+                    ),
+                    span,
+                );
+                self.synchronize_item();
+                continue;
+            }
+            if let Some(method) = self.parse_method_function(&type_name) {
+                methods.push(method);
+            } else {
+                self.synchronize_item();
+            }
+        }
+
+        let end = self.peek_token().span.end;
+        self.eat(&TokenKind::Dedent);
+        Some(ImplBlock {
+            trait_name,
+            type_name,
+            methods,
+            span: start.merge(Span::new(end, end)),
+        })
+    }
+
+    fn parse_method_function(&mut self, type_name: &str) -> Option<FnDecl> {
+        let start = self.advance().span; // fn
+        let (name, _name_span) = self.expect_ident("after `fn`")?;
+
+        if !self.expect(&TokenKind::LParen, "after method name") {
+            self.synchronize_item();
+            return None;
+        }
+
+        let (receiver, mut params) = self.parse_method_params();
+        if let Some(receiver_span) = receiver {
+            params.insert(
+                0,
+                Param {
+                    name: "self".to_string(),
+                    ty: TypeExpr {
+                        name: type_name.to_string(),
+                        array: None,
+                        tuple: None,
+                        span: receiver_span,
+                    },
+                    span: receiver_span,
+                },
+            );
+        } else {
+            self.error(
+                "NXP014",
+                format!("impl method `{name}` must declare `self`"),
+                start,
+            );
+        }
+        self.expect(&TokenKind::RParen, "after method parameters");
+
+        let ret = if self.eat(&TokenKind::Arrow) {
+            Some(self.parse_type())
+        } else {
+            None
+        };
+
+        let body = self.parse_block();
+        let span = start.merge(body.span);
+        Some(FnDecl {
+            name,
+            public: false,
+            extern_abi: None,
+            params,
+            ret,
+            body,
+            span,
+        })
+    }
+
+    /// Parse the receiver marker and optional extra parameters of a method.
+    /// `self` has no type annotation: the impl header supplies its type.
+    fn parse_method_params(&mut self) -> (Option<Span>, Vec<Param>) {
+        let receiver = if let TokenKind::Ident(name) = self.peek() {
+            if name == "self" {
+                let span = self.advance().span;
+                Some(span)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        if receiver.is_some() && !self.eat(&TokenKind::Comma) {
+            return (receiver, Vec::new());
+        }
+
+        (receiver, self.parse_params())
+    }
+
+    fn parse_path_name(&mut self, context: &str) -> Option<String> {
+        let (first, _) = self.expect_ident(context)?;
+        let mut name = first;
+        while self.eat(&TokenKind::Dot) {
+            let Some((next, _)) = self.expect_ident("in path") else {
+                self.synchronize_item();
+                return None;
+            };
+            name.push('.');
+            name.push_str(&next);
+        }
+        Some(name)
     }
 
     fn parse_const(&mut self) -> Option<ConstDecl> {
@@ -349,6 +588,70 @@ impl<'a> Parser<'a> {
         })
     }
 
+    fn parse_match_pattern(&mut self) -> Option<nex_ast::Pattern> {
+        if self.eat(&TokenKind::Case) {
+            let pattern = match self.peek().clone() {
+                TokenKind::Int(value) => {
+                    self.advance();
+                    nex_ast::Pattern::Int(value)
+                }
+                TokenKind::Minus => {
+                    self.advance();
+                    let TokenKind::Int(value) = self.peek().clone() else {
+                        let span = self.peek_token().span;
+                        self.error("NXP013", "expected an integer after `-` in a match pattern", span);
+                        return None;
+                    };
+                    self.advance();
+                    nex_ast::Pattern::Int(-value)
+                }
+                TokenKind::Str(value) => {
+                    self.advance();
+                    nex_ast::Pattern::Str(value)
+                }
+                TokenKind::Char(value) => {
+                    self.advance();
+                    nex_ast::Pattern::Char(value)
+                }
+                TokenKind::True => {
+                    self.advance();
+                    nex_ast::Pattern::Bool(true)
+                }
+                TokenKind::False => {
+                    self.advance();
+                    nex_ast::Pattern::Bool(false)
+                }
+                TokenKind::Ident(name) if name == "_" => {
+                    self.advance();
+                    nex_ast::Pattern::Else
+                }
+                TokenKind::Ident(name) => {
+                    self.advance();
+                    nex_ast::Pattern::Variant(name)
+                }
+                _ => {
+                    let span = self.peek_token().span;
+                    self.error(
+                        "NXP013",
+                        format!(
+                            "expected a pattern after `case`, found {}",
+                            self.peek_token().kind.describe()
+                        ),
+                        span,
+                    );
+                    return None;
+                }
+            };
+            Some(pattern)
+        } else if self.eat(&TokenKind::Else) {
+            Some(nex_ast::Pattern::Else)
+        } else {
+            let span = self.peek_token().span;
+            self.error("NXP013", "expected `case` or `else` in a match body", span);
+            None
+        }
+    }
+
     fn parse_match(&mut self) -> Stmt {
         let start = self.advance().span;
         let scrutinee = self.parse_expr();
@@ -385,17 +688,7 @@ impl<'a> Parser<'a> {
             }
 
             let arm_start = self.peek_token().span;
-            let pattern = if self.eat(&TokenKind::Case) {
-                let Some((variant, _variant_span)) = self.expect_ident("after `case`") else {
-                    self.recover_statement();
-                    continue;
-                };
-                Some(variant)
-            } else if self.eat(&TokenKind::Else) {
-                None
-            } else {
-                let span = self.peek_token().span;
-                self.error("NXP013", "expected `case` or `else` in a match body", span);
+            let Some(pattern) = self.parse_match_pattern() else {
                 self.recover_statement();
                 continue;
             };

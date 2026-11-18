@@ -117,7 +117,16 @@ pub fn build(program: &Program, analysis: &Analysis) -> Result<IrModule, String>
         externs: Vec::new(),
     };
 
-    for function in &program.functions {
+    let mut functions = program.functions.clone();
+    for block in &program.impls {
+        for method in &block.methods {
+            let mut method = method.clone();
+            method.name = format!("{}.{}", block.type_name, method.name);
+            functions.push(method);
+        }
+    }
+
+    for function in &functions {
         if analysis.externs.contains(&function.name) {
             let signature = analysis.functions.get(&function.name).ok_or_else(|| {
                 format!("missing type information for function `{}`", function.name)
@@ -713,6 +722,23 @@ fn lower_struct_place(
             }
         }
         ExprKind::Call { callee, args, .. } => {
+            if analysis.method_call(expr.span).is_some() {
+                let ty = analysis
+                    .expr_type(expr.span)
+                    .ok_or_else(|| "missing type information for method call".to_string())?;
+                let Type::Struct(name) = ty else {
+                    return Err("not a struct value".to_string());
+                };
+                let value = lower_expr(builder, expr, scopes, storage, analysis, ty)?;
+                let ptr = builder.alloca_at_entry(IrType::Struct(name));
+                builder.emit(Inst::Store {
+                    ptr,
+                    value,
+                    ty: IrType::Struct(name),
+                });
+                return Ok(ptr);
+            }
+
             let resolved = analysis
                 .aliases
                 .get(callee)
@@ -1243,30 +1269,104 @@ fn lower_match(
     builder.terminate(Terminator::Br(pending_bb));
     builder.current = pending_bb;
 
+    let scrut_ty = analysis.expr_type(scrutinee.span).unwrap_or(Type::Error);
+    let scrut_ir = IrType::from_type(scrut_ty);
+
     for arm in arms {
         let body_bb = builder.new_block();
         match &arm.pattern {
-            Some(variant) => {
-                let tag = if let Some(Type::Enum(enum_name)) = analysis.expr_type(scrutinee.span) {
-                    analysis
-                        .enum_info(enum_name)
-                        .and_then(|info| info.variants.iter().position(|value| value == variant))
-                        .unwrap_or(0) as i64
-                } else {
-                    0
+            nex_ast::Pattern::Else => {
+                builder.terminate(Terminator::Br(body_bb));
+                builder.current = body_bb;
+                scopes.push(HashMap::new());
+                lower_stmts(builder, &arm.body.stmts, scopes, storage, analysis)?;
+                scopes.pop();
+                if !builder.current_terminated() {
+                    merge_reachable = true;
+                    builder.terminate(Terminator::Br(merge_bb));
+                }
+                pending = None;
+            }
+            other => {
+                let cond = match other {
+                    nex_ast::Pattern::Variant(variant) => {
+                        let tag = if let Type::Enum(enum_name) = scrut_ty {
+                            analysis
+                                .enum_info(enum_name)
+                                .and_then(|info| {
+                                    info.variants.iter().position(|value| value == variant)
+                                })
+                                .unwrap_or(0) as i64
+                        } else {
+                            0
+                        };
+                        let cmp_dst = builder.new_value();
+                        builder.emit(Inst::Bin {
+                            dst: cmp_dst,
+                            op: BinOp::Eq,
+                            ty: IrType::I32,
+                            lhs: scrut.clone(),
+                            rhs: Operand::Const(Const::Int(tag)),
+                        });
+                        Operand::Value(cmp_dst)
+                    }
+                    nex_ast::Pattern::Int(value) => {
+                        let cmp_dst = builder.new_value();
+                        builder.emit(Inst::Bin {
+                            dst: cmp_dst,
+                            op: BinOp::Eq,
+                            ty: scrut_ir,
+                            lhs: scrut.clone(),
+                            rhs: Operand::Const(Const::Int(*value)),
+                        });
+                        Operand::Value(cmp_dst)
+                    }
+                    nex_ast::Pattern::Bool(value) => {
+                        let cmp_dst = builder.new_value();
+                        builder.emit(Inst::Bin {
+                            dst: cmp_dst,
+                            op: BinOp::Eq,
+                            ty: scrut_ir,
+                            lhs: scrut.clone(),
+                            rhs: Operand::Const(Const::Bool(*value)),
+                        });
+                        Operand::Value(cmp_dst)
+                    }
+                    nex_ast::Pattern::Char(value) => {
+                        let cmp_dst = builder.new_value();
+                        builder.emit(Inst::Bin {
+                            dst: cmp_dst,
+                            op: BinOp::Eq,
+                            ty: scrut_ir,
+                            lhs: scrut.clone(),
+                            rhs: Operand::Const(Const::Char(*value)),
+                        });
+                        Operand::Value(cmp_dst)
+                    }
+                    nex_ast::Pattern::Str(value) => {
+                        let call_dst = builder.new_value();
+                        builder.emit(Inst::Call {
+                            dst: Some(call_dst),
+                            name: "nex_rt_str_eq".to_string(),
+                            args: vec![scrut.clone(), Operand::Const(Const::Str(value.clone()))],
+                            ret: IrType::I32,
+                        });
+                        let cmp_dst = builder.new_value();
+                        builder.emit(Inst::Bin {
+                            dst: cmp_dst,
+                            op: BinOp::Ne,
+                            ty: IrType::I32,
+                            lhs: Operand::Value(call_dst),
+                            rhs: Operand::Const(Const::Int(0)),
+                        });
+                        Operand::Value(cmp_dst)
+                    }
+                    nex_ast::Pattern::Else => Operand::Const(Const::Bool(true)),
                 };
 
-                let cmp_dst = builder.new_value();
-                builder.emit(Inst::Bin {
-                    dst: cmp_dst,
-                    op: BinOp::Eq,
-                    ty: IrType::I32,
-                    lhs: scrut.clone(),
-                    rhs: Operand::Const(Const::Int(tag)),
-                });
                 let next_bb = builder.new_block();
                 builder.terminate(Terminator::CondBr {
-                    cond: Operand::Value(cmp_dst),
+                    cond,
                     then_bb: body_bb,
                     else_bb: next_bb,
                 });
@@ -1283,40 +1383,49 @@ fn lower_match(
                 pending = Some(next_bb);
                 builder.current = next_bb;
             }
-            None => {
-                builder.terminate(Terminator::Br(body_bb));
-                builder.current = body_bb;
-                scopes.push(HashMap::new());
-                lower_stmts(builder, &arm.body.stmts, scopes, storage, analysis)?;
-                scopes.pop();
-                if !builder.current_terminated() {
-                    merge_reachable = true;
-                    builder.terminate(Terminator::Br(merge_bb));
-                }
-                pending = None;
-            }
         }
     }
 
-    if let Some(enum_name) = analysis.expr_type(scrutinee.span).and_then(|ty| match ty {
-        Type::Enum(name) => Some(name),
-        _ => None,
-    }) {
+    if let Type::Enum(enum_name) = scrut_ty {
         if let Some(info) = analysis.enum_info(enum_name) {
             let mut seen = std::collections::HashSet::new();
             let mut else_seen = false;
             for arm in arms {
                 match &arm.pattern {
-                    Some(variant) => {
+                    nex_ast::Pattern::Variant(variant) => {
                         seen.insert(variant.clone());
                     }
-                    None => {
+                    nex_ast::Pattern::Else => {
                         else_seen = true;
                     }
+                    _ => {}
                 }
             }
             exhaustive = else_seen || seen.len() == info.variants.len();
         }
+    } else if scrut_ty == Type::Bool {
+        let mut seen = std::collections::HashSet::new();
+        let mut else_seen = false;
+        for arm in arms {
+            match &arm.pattern {
+                nex_ast::Pattern::Bool(value) => {
+                    seen.insert(*value);
+                }
+                nex_ast::Pattern::Else => {
+                    else_seen = true;
+                }
+                _ => {}
+            }
+        }
+        exhaustive = else_seen || seen.len() == 2;
+    } else {
+        let mut else_seen = false;
+        for arm in arms {
+            if matches!(arm.pattern, nex_ast::Pattern::Else) {
+                else_seen = true;
+            }
+        }
+        exhaustive = else_seen;
     }
 
     if let Some(pending_bb) = pending {
@@ -2011,6 +2120,49 @@ fn lower_expr(
             Ok(Operand::Value(dst))
         }
         ExprKind::Call { callee, args, .. } => {
+            if let Some(method) = analysis.method_call(expr.span).cloned() {
+                let receiver_expr = Expr {
+                    kind: ExprKind::Ident(method.receiver.clone()),
+                    span: expr.span,
+                };
+                let receiver = lower_expr(
+                    builder,
+                    &receiver_expr,
+                    scopes,
+                    storage,
+                    analysis,
+                    method.receiver_ty,
+                )?;
+                let mut call_args = vec![receiver];
+                for arg in args {
+                    call_args.push(lower_expr(
+                        builder,
+                        arg,
+                        scopes,
+                        storage,
+                        analysis,
+                        Type::Error,
+                    )?);
+                }
+                let ret = IrType::from_type(method.ret);
+                let dst = if ret == IrType::Void {
+                    None
+                } else {
+                    Some(builder.new_value())
+                };
+                builder.emit(Inst::Call {
+                    dst,
+                    name: method.symbol,
+                    args: call_args,
+                    ret,
+                });
+                return if let Some(dst) = dst {
+                    Ok(Operand::Value(dst))
+                } else {
+                    Ok(Operand::Const(Const::Bool(false)))
+                };
+            }
+
             let callee = analysis
                 .aliases
                 .get(callee)

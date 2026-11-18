@@ -13,8 +13,40 @@ pub struct Program {
     pub uses: Vec<UseDecl>,
     pub structs: Vec<StructDecl>,
     pub enums: Vec<EnumDecl>,
+    pub traits: Vec<TraitDecl>,
+    pub impls: Vec<ImplBlock>,
     pub consts: Vec<ConstDecl>,
     pub functions: Vec<FnDecl>,
+    pub span: Span,
+}
+
+/// A trait declares method signatures. NEX uses static dispatch: an `impl`
+/// block supplies a concrete method for one struct type.
+#[derive(Debug, Clone)]
+pub struct TraitDecl {
+    pub name: String,
+    pub public: bool,
+    pub methods: Vec<TraitMethodDecl>,
+    pub span: Span,
+}
+
+/// A method signature inside a trait. `self` is implicit and typed by the
+/// implementing struct, so it is not part of `params`.
+#[derive(Debug, Clone)]
+pub struct TraitMethodDecl {
+    pub name: String,
+    pub params: Vec<Param>,
+    pub ret: Option<TypeExpr>,
+    pub span: Span,
+}
+
+/// `impl Trait for Type:` with concrete method bodies. Method `FnDecl`s keep
+/// their plain names; semantic analysis registers them as `Type.method`.
+#[derive(Debug, Clone)]
+pub struct ImplBlock {
+    pub trait_name: String,
+    pub type_name: String,
+    pub methods: Vec<FnDecl>,
     pub span: Span,
 }
 
@@ -164,10 +196,20 @@ pub enum StmtKind {
 
 #[derive(Debug, Clone)]
 pub struct MatchArm {
-    /// `None` is the fallback (`else`) arm.
-    pub pattern: Option<String>,
+    /// `Pattern::Else` is the fallback arm.
+    pub pattern: Pattern,
     pub body: Block,
     pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Pattern {
+    Else,
+    Variant(String),
+    Int(i64),
+    Bool(bool),
+    Char(char),
+    Str(String),
 }
 
 #[derive(Debug, Clone)]

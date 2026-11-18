@@ -35,6 +35,8 @@ planned and are not yet implemented.
 - Struct declarations with scalar fields, construction, field access, and
   field assignment (see `specs/types.md`).
 - Enum declarations and `match` over enum values.
+- `match` over integers, booleans, characters, and strings.
+- Trait declarations, `impl Trait for Type`, and static-dispatch method calls.
 - Array literals and indexing reads/writes.
 - Tuple literals and positional field access.
 - Nested modules (`module name:`), `use` aliases, and `pub` visibility.
@@ -44,8 +46,6 @@ planned and are not yet implemented.
 ## Planned
 
 - Generics and type constraints.
-- Traits and pattern matching beyond enums.
-
 - Async/await and structured concurrency.
 - Macros and compile-time evaluation.
 - Unsafe blocks and low-level pointers.
@@ -73,6 +73,42 @@ fn main():
 ## Types
 
 See `specs/types.md`.
+
+## Traits
+
+Traits declare method signatures. Implementations are static-dispatched to the
+concrete struct type:
+
+```nex
+trait Shape:
+    fn area(self) -> f64
+
+struct Rect:
+    width: f64
+    height: f64
+
+impl Shape for Rect:
+    fn area(self) -> f64:
+        return self.width * self.height
+```
+
+Method calls use `receiver.method(...)` syntax and resolve to the registered
+`Type.method` symbol at compile time.
+
+## Pattern matching
+
+`match` supports enum variants, integer, boolean, character, and string
+patterns. Scalar matches require an `else` arm.
+
+```nex
+match value:
+    case 1:
+        print("one")
+    case 2:
+        print("two")
+    else:
+        print("other")
+```
 
 ## Memory model
 

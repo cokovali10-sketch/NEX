@@ -344,7 +344,7 @@ fn enum_errors_are_reported() {
     );
 
     let non_enum_match = compile(
-        "fn main():\n    let x = 1\n    match x:\n        case 1:\n            print(\"one\")\n",
+        "fn main():\n    let x = 1.0\n    match x:\n        else:\n            print(\"x\")\n",
     );
     assert!(
         non_enum_match
@@ -1476,4 +1476,172 @@ fn rounding_rejects_integers() {
     let result = compile("fn main():\n    print(floor(2))\n");
     assert!(result.has_errors());
     assert!(result.diagnostics.iter().any(|d| d.code == "NXS004"));
+}
+
+#[test]
+fn trait_methods_use_static_dispatch() {
+    let source = r#"
+trait Shape:
+    fn area(self) -> f64
+    fn name(self) -> string
+
+struct Circle:
+    radius: f64
+
+struct Rect:
+    width: f64
+    height: f64
+
+impl Shape for Circle:
+    fn area(self) -> f64:
+        return 3.14 * self.radius * self.radius
+
+    fn name(self) -> string:
+        return "circle"
+
+impl Shape for Rect:
+    fn area(self) -> f64:
+        return self.width * self.height
+
+    fn name(self) -> string:
+        return "rect"
+
+fn main():
+    var c = Circle(2.0)
+    var r = Rect(3.0, 4.0)
+    println(c.name())
+    println(c.area())
+    println(r.name())
+    println(r.area())
+"#;
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "circle\n12.56\nrect\n12\n");
+}
+
+#[test]
+fn trait_methods_accept_parameters_and_call_functions() {
+    let source = r#"
+trait Counter:
+    fn bump(self, by: i64) -> i64
+
+struct Value:
+    start: i64
+
+fn base() -> i64:
+    return 100
+
+impl Counter for Value:
+    fn bump(self, by: i64) -> i64:
+        return self.start + by + base()
+
+fn main():
+    var value = Value(7)
+    println(value.bump(5))
+"#;
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "112\n");
+}
+
+#[test]
+fn trait_errors_are_reported() {
+    let missing = compile(
+        "trait T:\n    fn run(self) -> i64\n\nstruct S:\n    x: i64\n\nimpl T for S:\n    fn other(self) -> i64:\n        return 1\n\nfn main():\n    print(1)\n",
+    );
+    assert!(
+        missing.diagnostics.iter().any(|d| d.code == "NXS044"),
+        "{:?}",
+        missing.diagnostics
+    );
+    assert!(
+        missing.diagnostics.iter().any(|d| d.code == "NXS045"),
+        "{:?}",
+        missing.diagnostics
+    );
+
+    let mismatch = compile(
+        "trait T:\n    fn run(self) -> i64\n\nstruct S:\n    x: i64\n\nimpl T for S:\n    fn run(self) -> string:\n        return \"x\"\n\nfn main():\n    print(1)\n",
+    );
+    assert!(
+        mismatch.diagnostics.iter().any(|d| d.code == "NXS044"),
+        "{:?}",
+        mismatch.diagnostics
+    );
+
+    let unknown_trait = compile(
+        "struct S:\n    x: i64\n\nimpl Missing for S:\n    fn run(self) -> i64:\n        return 1\n\nfn main():\n    print(1)\n",
+    );
+    assert!(
+        unknown_trait
+            .diagnostics
+            .iter()
+            .any(|d| d.code == "NXS041"),
+        "{:?}",
+        unknown_trait.diagnostics
+    );
+
+    let unknown_method = compile(
+        "trait T:\n    fn run(self) -> i64\n\nstruct S:\n    x: i64\n\nimpl T for S:\n    fn run(self) -> i64:\n        return 1\n\nfn main():\n    var s = S(1)\n    println(s.missing())\n",
+    );
+    assert!(
+        unknown_method
+            .diagnostics
+            .iter()
+            .any(|d| d.code == "NXS046"),
+        "{:?}",
+        unknown_method.diagnostics
+    );
+}
+
+#[test]
+fn pattern_matching_literals_runs() {
+    let source = r#"
+fn main():
+    var x = 2
+    match x:
+        case 1:
+            print("one")
+        case 2:
+            print("two")
+        else:
+            print("other")
+
+    var s = "hi"
+    match s:
+        case "hello":
+            print("greeting")
+        case "hi":
+            print("short")
+        else:
+            print("unknown")
+
+    var c = 'b'
+    match c:
+        case 'a':
+            print("A")
+        case 'b':
+            print("B")
+        else:
+            print("other")
+
+    var flag = false
+    match flag:
+        case true:
+            print("yes")
+        case false:
+            print("no")
+"#;
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "twoshortBno");
+}
+
+#[test]
+fn pattern_match_requires_else_for_scalars() {
+    let integer = compile("fn main():\n    var x = 1\n    match x:\n        case 1:\n            print(\"one\")\n");
+    assert!(integer.diagnostics.iter().any(|d| d.code == "NXS033"));
+
+    let boolean = compile("fn main():\n    var x = true\n    match x:\n        case true:\n            print(\"yes\")\n");
+    assert!(boolean.diagnostics.iter().any(|d| d.code == "NXS033"));
 }

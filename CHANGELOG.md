@@ -18,6 +18,12 @@
   self-comparisons, constant conditions, and unused imports, with
   `file:line:column` output and a `--deny-warnings` flag for CI.
 
+- Traits: `trait` declarations, `impl Trait for Type`, `self`, and
+  `receiver.method(...)` calls dispatched statically to `Type.method`.
+
+- Pattern matching beyond enums: `match` now accepts integer, boolean,
+  character, and string patterns. Scalar matches require an `else` arm.
+
 - `pass`, an explicitly empty statement, for empty function bodies, `else`
   branches, and `match` arms. The formatter emits it for empty blocks.
 
