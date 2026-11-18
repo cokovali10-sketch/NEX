@@ -195,9 +195,24 @@ fn load_program_file(
     }
     let text = fs::read_to_string(&canonical).map_err(DriverError::Io)?;
     let name = canonical.display().to_string();
-    let result = load_program_text(&name, text, visited);
+    let (program, sources, diagnostics) = load_program_text(&name, text, visited)?;
+    // Tag diagnostics from imported files with their real file and position.
+    let primary = sources.first();
+    let tagged: Vec<Diagnostic> = diagnostics
+        .into_iter()
+        .map(|mut diagnostic| {
+            let location = diagnostic
+                .span
+                .and_then(|span| primary.map(|source| source.line_col(span.start)))
+                .map(|(line, column)| format!(":{line}:{column}"))
+                .unwrap_or_default();
+            diagnostic.message = format!("{name}{location}: {}", diagnostic.message);
+            diagnostic.span = None;
+            diagnostic
+        })
+        .collect();
     visited.remove(&canonical);
-    result
+    Ok((program, sources, tagged))
 }
 
 fn prefix_program(mut program: nex_ast::Program, prefix: &str) -> nex_ast::Program {

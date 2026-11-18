@@ -42,7 +42,7 @@ runtime (`runtime/core/nex_rt.c`) — not a hidden language runtime.
 
 ## Status
 
-- Current milestone: **NEX 0.2 — Semantic Core**.
+- Current release: **NEX 1.0 - Stable Core**.
 - Implemented: lexer, parser, AST, semantic analysis, type checking, NEX IR,
   LLVM textual IR backend, native executable generation, CLI, and end-to-end
   tests.

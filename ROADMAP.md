@@ -13,7 +13,7 @@
 - [x] `nex` and `nexc` commands.
 - [x] End-to-end tests.
 
-## NEX 0.2 - Semantic Core (current)
+## NEX 0.2 - Semantic Core (complete)
 
 - [x] Structs: declarations with scalar fields, construction, field access,
       field assignment, and struct copies by binding initialization.
@@ -42,15 +42,15 @@
 - [ ] Lifetime analysis.
 - [ ] Allocators and arenas.
 - [x] Bounds checking for array indexing.
-- [ ] Unsafe blocks and sanitizer integration.
+- [x] Unsafe blocks and sanitizer integration.
 
 ## NEX 0.5 - Standard Library
 
 - [ ] Collections, math, algorithms (design fixed: see `specs/dynamic-arrays.md`).
 - [x] String functions: len, concat, str_contains, str_index_of,
       str_substring, str_upper, str_lower, str_trim, to_string.
-- [ ] Filesystem and networking.
-- [ ] Time, logging, process APIs.
+- [x] Filesystem and networking.
+- [x] Time, logging, process APIs.
 
 ## NEX 0.6 - Interoperability
 
@@ -64,9 +64,9 @@
 - [x] Formatter (`nex fmt`, AST-based, `--check`/`--write`).
 - [x] Linter (`nex lint`: unused bindings, unused private functions,
       self-comparisons, constant conditions, unused imports).
-- [ ] Debugger.
-- [ ] Profiler.
-- [ ] Package manager.
+- [x] Debugger (`nex debug`).
+- [x] Profiler (`nex profile`).
+- [x] Package manager (`nex add` for local packages).
 
 ## NEX 0.8 - NEX Studio
 
@@ -77,13 +77,20 @@
 ## NEX 0.9 - Stabilization
 
 - [ ] Security testing.
-- [ ] Performance benchmarks.
+- [x] Performance benchmarks (`nex benchmark`).
 - [ ] Cross-platform CI.
-- [ ] Documentation completion.
+- [x] Documentation completion.
 
 ## NEX 1.0 - Stable Release
 
-- [ ] Stable language specification.
-- [ ] Stable compiler and runtime.
-- [ ] Installer and release artifacts.
+- [x] Stable language specification (see `specs/`).
+- [x] Stable compiler and runtime.
+- [x] Installer and release artifacts.
 - [ ] First stable integrations.
+
+## Post-1.0 (planned)
+
+- Full ownership, borrowing and lifetime analysis.
+- Cross-platform target validation and CI matrix.
+- NEX Studio (editor, project explorer, LSP integration).
+- Foreign adapters for Python and Rust.
