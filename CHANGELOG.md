@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Fixed and growable arrays of struct and tuple values, including indexing,
+  element assignment, and `for x in array`.
+
 ## 1.0.1 (2026-11-19)
 
 The first NEX release with downloadable binaries. The `v1.0.0` tag was cut

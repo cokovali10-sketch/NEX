@@ -51,7 +51,8 @@ runtime (`runtime/core/nex_rt.c`) — not a hidden language runtime.
   `while`, `for` ranges and `for x in array`, `const`, explicit casts, string
   equality and ordering, compound and parallel assignment, structs with scalar
   or nested struct fields and function parameters and returns, enums with
-  `match`, arrays (fixed and growable `[T]`) and tuples with type annotations
+  `match`, arrays (fixed and growable `[T]`, including struct and tuple elements)
+  and tuples with type annotations
   and function parameters and returns, traits and inherent `impl` methods with
   static dispatch, generics via monomorphization, type aliases, modules and
   file imports, f-strings, string indexing/slicing, bitwise operators,

@@ -367,7 +367,9 @@ fn lower_statement(
                 let info = analysis
                     .array_info(display)
                     .ok_or_else(|| "missing array type information".to_string())?;
-                copy_array(builder, ptr, source, info.llvm, info.elem, info.len)?;
+                copy_array(
+                    builder, ptr, source, info.llvm, info.elem, info.len, analysis,
+                )?;
             } else {
                 let value = lower_expr(builder, init, scopes, storage, analysis, expected)?;
                 builder.emit(Inst::Store { ptr, value, ty });
@@ -398,7 +400,9 @@ fn lower_statement(
                         let info = analysis
                             .array_info(display)
                             .ok_or_else(|| "missing array type information".to_string())?;
-                        copy_array(builder, ptr, source, array_type, info.elem, info.len)?;
+                        copy_array(
+                            builder, ptr, source, array_type, info.elem, info.len, analysis,
+                        )?;
                     }
                     _ => {
                         let operand =
@@ -427,7 +431,9 @@ fn lower_statement(
                         if let Type::Array { display, .. } = src_ty
                             && let Some(info) = analysis.array_info(display)
                         {
-                            copy_array(builder, target, *ptr, array_type, info.elem, info.len)?;
+                            copy_array(
+                                builder, target, *ptr, array_type, info.elem, info.len, analysis,
+                            )?;
                         }
                     }
                     _ => {
@@ -473,7 +479,7 @@ fn lower_statement(
                         }
                         _ => return Err("array assignment requires an array value".to_string()),
                     };
-                    copy_array(builder, ptr, source, array_type, elem, len)?;
+                    copy_array(builder, ptr, source, array_type, elem, len, analysis)?;
                     Ok(())
                 }
                 (ptr, ty) => {
@@ -587,6 +593,11 @@ fn lower_statement(
                 index: idx_value,
                 elem_ty: elem_ir,
             });
+            if let Type::Struct(struct_name) = elem {
+                let source = lower_struct_place(builder, value, scopes, storage, analysis)?;
+                copy_struct(builder, dst_ptr, source, struct_name, analysis)?;
+                return Ok(());
+            }
             let operand = lower_expr(builder, value, scopes, storage, analysis, Type::Error)?;
             builder.emit(Inst::Store {
                 ptr: dst_ptr,
@@ -930,6 +941,48 @@ fn lower_struct_place(
                 ty: IrType::Struct(name),
             });
             Ok(ptr)
+        }
+        ExprKind::Index { base, index } => {
+            let elem_ty = analysis.expr_type(expr.span).unwrap_or(Type::Error);
+            if !matches!(elem_ty, Type::Struct(_)) {
+                return Err("indexed value is not a struct".to_string());
+            }
+            let base_ty = analysis.expr_type(base.span).unwrap_or(Type::Error);
+            if let Type::DynArray(_) = base_ty {
+                let operand =
+                    lower_dyn_index(builder, base, index, expr, scopes, storage, analysis)?;
+                match operand {
+                    Operand::Value(value) => Ok(value),
+                    _ => Err("expected a struct place".to_string()),
+                }
+            } else {
+                let base_ptr = lower_array_place(builder, base, scopes, storage, analysis)?;
+                let idx_value = lower_expr(builder, index, scopes, storage, analysis, Type::Error)?;
+                let index_ty = analysis.expr_type(index.span).unwrap_or(Type::I64);
+                let array_type = match base_ty {
+                    Type::Array { llvm, display, .. } => {
+                        if let Some(info) = analysis.array_info(display) {
+                            lower_bounds_check(
+                                builder,
+                                idx_value.clone(),
+                                index_ty,
+                                Operand::Const(Const::Int(info.len as i64)),
+                            );
+                        }
+                        llvm
+                    }
+                    _ => return Err("cannot index a non-array value".to_string()),
+                };
+                let dst = builder.new_value();
+                builder.emit(Inst::IndexPtr {
+                    dst,
+                    base: base_ptr,
+                    array_type,
+                    index: idx_value,
+                    elem_ty: IrType::from_type(elem_ty),
+                });
+                Ok(dst)
+            }
         }
         ExprKind::Tuple(elements) => {
             let ty = analysis
@@ -1747,12 +1800,17 @@ fn lower_array_place(
                     index: idx,
                     elem_ty: elem_ir,
                 });
-                let value = lower_expr(builder, element, scopes, storage, analysis, elem)?;
-                builder.emit(Inst::Store {
-                    ptr: elem_ptr,
-                    value,
-                    ty: elem_ir,
-                });
+                if let Type::Struct(struct_name) = elem {
+                    let source = lower_struct_place(builder, element, scopes, storage, analysis)?;
+                    copy_struct(builder, elem_ptr, source, struct_name, analysis)?;
+                } else {
+                    let value = lower_expr(builder, element, scopes, storage, analysis, elem)?;
+                    builder.emit(Inst::Store {
+                        ptr: elem_ptr,
+                        value,
+                        ty: elem_ir,
+                    });
+                }
             }
             Ok(ptr)
         }
@@ -1767,8 +1825,32 @@ fn copy_array(
     array_type: &'static str,
     elem: Type,
     len: usize,
+    analysis: &Analysis,
 ) -> Result<(), String> {
     let elem_ir = IrType::from_type(elem);
+    if let Type::Struct(struct_name) = elem {
+        for index in 0..len {
+            let idx = Operand::Const(Const::Int(index as i64));
+            let dst_field = builder.new_value();
+            builder.emit(Inst::IndexPtr {
+                dst: dst_field,
+                base: dst,
+                array_type,
+                index: idx.clone(),
+                elem_ty: elem_ir,
+            });
+            let src_field = builder.new_value();
+            builder.emit(Inst::IndexPtr {
+                dst: src_field,
+                base: src,
+                array_type,
+                index: idx,
+                elem_ty: elem_ir,
+            });
+            copy_struct(builder, dst_field, src_field, struct_name, analysis)?;
+        }
+        return Ok(());
+    }
     for index in 0..len {
         let idx = Operand::Const(Const::Int(index as i64));
         let dst_field = builder.new_value();
@@ -1865,12 +1947,17 @@ fn lower_dyn_array_literal(
             index: Operand::Const(Const::Int(index as i64)),
             elem_ty: elem_ir,
         });
-        let value = lower_expr(builder, element, scopes, storage, analysis, elem)?;
-        builder.emit(Inst::Store {
-            ptr: elem_ptr_value,
-            value,
-            ty: elem_ir,
-        });
+        if let Type::Struct(struct_name) = elem {
+            let source = lower_struct_place(builder, element, scopes, storage, analysis)?;
+            copy_struct(builder, elem_ptr_value, source, struct_name, analysis)?;
+        } else {
+            let value = lower_expr(builder, element, scopes, storage, analysis, elem)?;
+            builder.emit(Inst::Store {
+                ptr: elem_ptr_value,
+                value,
+                ty: elem_ir,
+            });
+        }
     }
 
     Ok(header)
@@ -1954,6 +2041,10 @@ fn lower_dyn_index(
         elem_ty: elem_ir,
     });
 
+    if matches!(elem_ty, Type::Struct(_)) {
+        return Ok(Operand::Value(elem_ptr));
+    }
+
     let loaded = builder.new_value();
     builder.emit(Inst::Load {
         dst: loaded,
@@ -2007,6 +2098,11 @@ fn lower_dyn_assign_index(
         index: idx_value,
         elem_ty: elem_ir,
     });
+    if let Type::Struct(struct_name) = elem_ty {
+        let source = lower_struct_place(builder, value, scopes, storage, analysis)?;
+        copy_struct(builder, target, source, struct_name, analysis)?;
+        return Ok(());
+    }
     let value = lower_expr(builder, value, scopes, storage, analysis, elem_ty)?;
     builder.emit(Inst::Store {
         ptr: target,
@@ -3643,6 +3739,9 @@ fn lower_expr(
                 index: idx_value,
                 elem_ty: elem_ir,
             });
+            if matches!(elem_ty, Type::Struct(_)) {
+                return Ok(Operand::Value(dst));
+            }
             let loaded = builder.new_value();
             builder.emit(Inst::Load {
                 dst: loaded,

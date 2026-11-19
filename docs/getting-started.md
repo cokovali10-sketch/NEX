@@ -81,9 +81,8 @@ fn main():
 `for value in points` iterates over the fixed array, and the f-string inserts
 computed values into the printed string.
 
-Arrays currently support scalar and string elements. Arrays of structs or
-tuples are not lowered yet; store those values in separate bindings or use a
-growable array of scalars.
+Arrays of structs and tuples are supported for fixed and growable arrays,
+including `for` iteration and element assignment.
 
 ## Next steps
 

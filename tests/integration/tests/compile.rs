@@ -1742,6 +1742,38 @@ fn main():
 }
 
 #[test]
+fn arrays_of_structs_and_tuples() {
+    let source = r#"
+struct Point:
+    x: i64
+    y: i64
+
+fn main():
+    let fixed: [Point; 2] = [Point(1, 2), Point(3, 4)]
+    print(fixed[0].x)
+    print(fixed[1].y)
+
+    var growable: [Point] = []
+    push(growable, Point(5, 6))
+    push(growable, Point(7, 8))
+    for point in growable:
+        print(point.x)
+        print(point.y)
+
+    growable[1] = Point(9, 10)
+    print(growable[1].x)
+    print(growable[1].y)
+
+    let tuples: [(i64, i64); 2] = [(1, 2), (3, 4)]
+    print(tuples[0].0)
+    print(tuples[1].1)
+"#;
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "14567891014");
+}
+
+#[test]
 fn for_each_over_arrays() {
     let source = r#"
 fn main():
