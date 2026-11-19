@@ -1817,6 +1817,33 @@ fn main():
 }
 
 #[test]
+fn contains_finds_elements() {
+    let source = r#"
+struct Point:
+    x: i64
+    y: i64
+
+fn main():
+    let fixed: [i64; 4] = [1, 2, 3, 4]
+    print(contains(fixed, 3))
+    print(contains(fixed, 9))
+
+    var growable: [string] = []
+    push(growable, "a")
+    push(growable, "b")
+    print(contains(growable, "b"))
+    print(contains(growable, "z"))
+
+    let points: [Point; 2] = [Point(1, 2), Point(3, 4)]
+    print(contains(points, Point(3, 4)))
+    print(contains(points, Point(9, 9)))
+"#;
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "truefalsetruefalsetruefalse");
+}
+
+#[test]
 fn parallel_assignment_swaps_values() {
     let source = r#"
 fn main():
