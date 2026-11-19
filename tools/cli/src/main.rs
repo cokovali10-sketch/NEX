@@ -157,7 +157,7 @@ fn cmd_fmt(args: &[String]) -> ExitCode {
                 println!("  --write   rewrite the file in place");
                 println!();
                 println!("With no flag the formatted source is printed to stdout.");
-                println!("Comments are dropped: NEX comments are not preserved yet.");
+                println!("`#` comments and module-level `var` declarations are preserved.");
                 return ExitCode::SUCCESS;
             }
             other => paths.push(other.to_string()),
@@ -195,10 +195,6 @@ fn cmd_fmt(args: &[String]) -> ExitCode {
             eprintln!("nex: `{path}` was left untouched: {reason}");
             status = ExitCode::from(1);
             continue;
-        }
-
-        if result.had_comments {
-            eprintln!("nex: warning: comments in `{path}` are dropped by `fmt`");
         }
 
         let changed = result.source != source;

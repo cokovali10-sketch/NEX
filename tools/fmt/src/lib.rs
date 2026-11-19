@@ -1,16 +1,18 @@
 //! NEX source formatter.
 //!
 //! The formatter works on the AST rather than on raw text: it parses the file
-//! and prints it again with a canonical layout. That means the output is
-//! guaranteed to be syntactically valid NEX, but it also means comments are
-//! lost, because the lexer discards them. Callers should check
-//! [`FormatResult::had_comments`] and warn before overwriting a file.
+//! and prints it again with a canonical layout. `#` comments are re-attached
+//! from the lexer's trivia table (before the statement they annotate, or
+//! appended to the statement on the same source line), so formatting a
+//! commented file keeps its comments.
 
 use nex_ast::{
-    BinOp, Block, ConstDecl, EnumDecl, Expr, ExprKind, FnDecl, ImplBlock, MatchArm, Param, Program,
-    Stmt, StmtKind, StructDecl, TraitDecl, TypeAliasDecl, TypeExpr, UnaryOp, UseDecl,
+    BinOp, Block, ConstDecl, EnumDecl, Expr, ExprKind, FnDecl, GlobalDecl, ImplBlock, MatchArm,
+    Param, Program, Stmt, StmtKind, StructDecl, TraitDecl, TypeAliasDecl, TypeExpr, UnaryOp,
+    UseDecl,
 };
-use nex_diagnostics::Diagnostic;
+use nex_diagnostics::{Diagnostic, Span};
+use nex_lexer::Comment;
 
 const INDENT: &str = "    ";
 
@@ -21,7 +23,8 @@ pub struct FormatResult {
     /// Lexer or parser diagnostics. Empty when formatting succeeded.
     pub diagnostics: Vec<Diagnostic>,
     /// True when the input contained a `#` comment outside of a string literal.
-    /// Formatting such a file drops the comments.
+    /// Comments are preserved in the output; this flag only reports their
+    /// presence, for callers that want to warn.
     pub had_comments: bool,
     /// Set when the file parsed but the formatter cannot reproduce it yet.
     /// The source is returned unchanged in that case.
@@ -73,7 +76,7 @@ pub fn format_source(source: &str) -> FormatResult {
     printer.program(&parsed.program);
 
     FormatResult {
-        source: printer.finish(),
+        source: printer.finish(lexed.comments),
         diagnostics: Vec::new(),
         had_comments,
         unsupported: None,
@@ -104,6 +107,8 @@ pub fn contains_comment(source: &str) -> bool {
 
 struct Printer<'a> {
     lines: Vec<String>,
+    /// Span of the node that produced each line, used to place comments.
+    nodes: Vec<Option<Span>>,
     indent: usize,
     source: &'a str,
 }
@@ -112,6 +117,7 @@ impl<'a> Printer<'a> {
     fn new(source: &'a str) -> Self {
         Self {
             lines: Vec::new(),
+            nodes: Vec::new(),
             indent: 0,
             source,
         }
@@ -133,17 +139,59 @@ impl<'a> Printer<'a> {
         newlines >= 2
     }
 
-    fn finish(self) -> String {
-        let mut out = self.lines.join("\n");
+    fn finish(mut self, comments: Vec<Comment>) -> String {
+        let mut kept: Vec<(String, Option<Span>)> =
+            self.lines.drain(..).zip(self.nodes.drain(..)).collect();
+        let starts = line_starts(self.source);
+
+        let mut cursor = 0usize;
+        for comment in &comments {
+            let comment_line = line_index(&starts, comment.span.start);
+            let mut target: Option<CommentTarget> = None;
+            for (index, (_, node)) in kept.iter().enumerate().skip(cursor) {
+                let Some(span) = node else { continue };
+                let node_line = line_index(&starts, span.start);
+                if node_line == comment_line && comment.span.start >= span.start {
+                    target = Some(CommentTarget::Trailing(index));
+                    break;
+                }
+                if span.start > comment.span.start {
+                    target = Some(CommentTarget::Before(index));
+                    break;
+                }
+            }
+            match target {
+                Some(CommentTarget::Trailing(index)) => {
+                    kept[index].0.push_str(&format!("  {}", comment.text));
+                }
+                Some(CommentTarget::Before(index)) => {
+                    let indent: String = kept[index]
+                        .0
+                        .chars()
+                        .take_while(|character| *character == ' ')
+                        .collect();
+                    kept.insert(index, (format!("{indent}{}", comment.text), None));
+                    cursor = index + 1;
+                }
+                None => kept.push((comment.text.clone(), None)),
+            }
+        }
+
+        let mut out = kept
+            .into_iter()
+            .map(|(line, _)| line)
+            .collect::<Vec<_>>()
+            .join("\n");
         if !out.is_empty() {
             out.push('\n');
         }
         out
     }
 
-    fn push<S: Into<String>>(&mut self, text: S) {
+    fn push_node<S: Into<String>>(&mut self, text: S, node: Option<Span>) {
         let padding = INDENT.repeat(self.indent);
         self.lines.push(format!("{padding}{}", text.into()));
+        self.nodes.push(node);
     }
 
     fn blank(&mut self) {
@@ -153,6 +201,7 @@ impl<'a> Printer<'a> {
             .is_some_and(|line| !line.trim().is_empty())
         {
             self.lines.push(String::new());
+            self.nodes.push(None);
         }
     }
 
@@ -162,7 +211,7 @@ impl<'a> Printer<'a> {
             if !first {
                 self.blank();
             }
-            self.push(format!("module {module}:"));
+            self.push_node(format!("module {module}:"), None);
             first = false;
         }
         for item in &program.uses {
@@ -170,6 +219,13 @@ impl<'a> Printer<'a> {
                 self.blank();
             }
             self.use_decl(item);
+            first = false;
+        }
+        for item in &program.globals {
+            if !first {
+                self.blank();
+            }
+            self.global_decl(item);
             first = false;
         }
         for item in &program.structs {
@@ -223,6 +279,18 @@ impl<'a> Printer<'a> {
         }
     }
 
+    fn global_decl(&mut self, item: &GlobalDecl) {
+        let annotation = item
+            .ty
+            .as_ref()
+            .map(|ty| format!(": {}", type_str(ty)))
+            .unwrap_or_default();
+        self.push_node(
+            format!("var {}{annotation} = {}", item.name, expr_str(&item.init)),
+            Some(item.span),
+        );
+    }
+
     fn use_decl(&mut self, item: &UseDecl) {
         let mut text = String::from("use ");
         text.push_str(&item.path.join("."));
@@ -230,35 +298,41 @@ impl<'a> Printer<'a> {
             text.push_str(" from ");
             text.push_str(file);
         }
-        self.push(&text);
+        self.push_node(&text, Some(item.span));
     }
 
     fn struct_decl(&mut self, item: &StructDecl) {
         let visibility = if item.public { "pub " } else { "" };
-        self.push(format!("{visibility}struct {}:", item.name));
+        self.push_node(
+            format!("{visibility}struct {}:", item.name),
+            Some(item.span),
+        );
         self.indent += 1;
         for field in &item.fields {
-            self.push(format!("{}: {}", field.name, type_str(&field.ty)));
+            self.push_node(
+                format!("{}: {}", field.name, type_str(&field.ty)),
+                Some(field.span),
+            );
         }
         self.indent -= 1;
     }
 
     fn enum_decl(&mut self, item: &EnumDecl) {
         let visibility = if item.public { "pub " } else { "" };
-        self.push(format!("{visibility}enum {}:", item.name));
+        self.push_node(format!("{visibility}enum {}:", item.name), Some(item.span));
         self.indent += 1;
         for variant in &item.variants {
-            self.push(&variant.name);
+            self.push_node(&variant.name, Some(variant.span));
         }
         self.indent -= 1;
     }
 
     fn trait_decl(&mut self, item: &TraitDecl) {
         let visibility = if item.public { "pub " } else { "" };
-        self.push(format!("{visibility}trait {}:", item.name));
+        self.push_node(format!("{visibility}trait {}:", item.name), Some(item.span));
         self.indent += 1;
         if item.methods.is_empty() {
-            self.push("pass");
+            self.push_node("pass", Some(item.span));
         }
         for method in &item.methods {
             let params: Vec<String> = method.params.iter().map(param_str).collect();
@@ -271,7 +345,7 @@ impl<'a> Printer<'a> {
             if let Some(ret) = &method.ret {
                 text.push_str(&format!(" -> {}", type_str(ret)));
             }
-            self.push(&text);
+            self.push_node(&text, Some(method.span));
         }
         self.indent -= 1;
     }
@@ -282,10 +356,10 @@ impl<'a> Printer<'a> {
         } else {
             format!("impl {} for {}:", item.trait_name, item.type_name)
         };
-        self.push(head);
+        self.push_node(head, Some(item.span));
         self.indent += 1;
         if item.methods.is_empty() {
-            self.push("pass");
+            self.push_node("pass", Some(item.span));
         }
         for (index, method) in item.methods.iter().enumerate() {
             if index > 0 {
@@ -309,7 +383,7 @@ impl<'a> Printer<'a> {
             text.push_str(&format!(" -> {}", type_str(ret)));
         }
         text.push(':');
-        self.push(&text);
+        self.push_node(&text, Some(item.span));
         self.indent += 1;
         self.block(&item.body);
         self.indent -= 1;
@@ -317,11 +391,10 @@ impl<'a> Printer<'a> {
 
     fn type_alias_decl(&mut self, item: &TypeAliasDecl) {
         let visibility = if item.public { "pub " } else { "" };
-        self.push(format!(
-            "{visibility}type {} = {}",
-            item.name,
-            type_str(&item.ty)
-        ));
+        self.push_node(
+            format!("{visibility}type {} = {}", item.name, type_str(&item.ty)),
+            Some(item.span),
+        );
     }
 
     fn const_decl(&mut self, item: &ConstDecl) {
@@ -331,11 +404,14 @@ impl<'a> Printer<'a> {
             .as_ref()
             .map(|ty| format!(": {}", type_str(ty)))
             .unwrap_or_default();
-        self.push(format!(
-            "{visibility}const {}{annotation} = {}",
-            item.name,
-            expr_str(&item.init)
-        ));
+        self.push_node(
+            format!(
+                "{visibility}const {}{annotation} = {}",
+                item.name,
+                expr_str(&item.init)
+            ),
+            Some(item.span),
+        );
     }
 
     fn fn_decl(&mut self, item: &FnDecl) {
@@ -354,7 +430,7 @@ impl<'a> Printer<'a> {
             text.push_str(&format!(" -> {}", type_str(ret)));
         }
         text.push(':');
-        self.push(&text);
+        self.push_node(&text, Some(item.span));
         self.indent += 1;
         self.block(&item.body);
         self.indent -= 1;
@@ -362,7 +438,7 @@ impl<'a> Printer<'a> {
 
     fn block(&mut self, block: &Block) {
         if block.stmts.is_empty() {
-            self.push("pass");
+            self.push_node("pass", Some(block.span));
             return;
         }
         for (index, stmt) in block.stmts.iter().enumerate() {
@@ -392,24 +468,30 @@ impl<'a> Printer<'a> {
                 } else {
                     name.clone()
                 };
-                self.push(format!(
-                    "{keyword} {target}{annotation} = {}",
-                    expr_str(init)
-                ));
+                self.push_node(
+                    format!("{keyword} {target}{annotation} = {}", expr_str(init)),
+                    Some(stmt.span),
+                );
             }
             StmtKind::AssignMany { names, values } => {
                 let targets = names.join(", ");
                 let rendered: Vec<String> = values.iter().map(expr_str).collect();
-                self.push(format!("{targets} = {}", rendered.join(", ")));
+                self.push_node(
+                    format!("{targets} = {}", rendered.join(", ")),
+                    Some(stmt.span),
+                );
             }
             StmtKind::Assign { name, value } => {
                 // The parser desugars `x += 1` into `x = x + 1`. Restore the
                 // compound form so formatting never rewrites one into the other.
                 if let Some(symbol) = compound_symbol_for(name, value) {
-                    self.push(format!("{name} {symbol}= {}", expr_str(rhs_of(value))));
+                    self.push_node(
+                        format!("{name} {symbol}= {}", expr_str(rhs_of(value))),
+                        Some(stmt.span),
+                    );
                     return;
                 }
-                self.push(format!("{name} = {}", expr_str(value)));
+                self.push_node(format!("{name} = {}", expr_str(value)), Some(stmt.span));
             }
             StmtKind::AssignField { base, path, value } => {
                 let mut target = base.clone();
@@ -418,18 +500,24 @@ impl<'a> Printer<'a> {
                     target.push_str(field);
                 }
                 if let Some(symbol) = compound_symbol_for(&target, value) {
-                    self.push(format!("{target} {symbol}= {}", expr_str(rhs_of(value))));
+                    self.push_node(
+                        format!("{target} {symbol}= {}", expr_str(rhs_of(value))),
+                        Some(stmt.span),
+                    );
                     return;
                 }
-                self.push(format!("{target} = {}", expr_str(value)));
+                self.push_node(format!("{target} = {}", expr_str(value)), Some(stmt.span));
             }
             StmtKind::AssignIndex { base, index, value } => {
                 let target = format!("{base}[{}]", expr_str(index));
                 if let Some(symbol) = compound_symbol_for(&target, value) {
-                    self.push(format!("{target} {symbol}= {}", expr_str(rhs_of(value))));
+                    self.push_node(
+                        format!("{target} {symbol}= {}", expr_str(rhs_of(value))),
+                        Some(stmt.span),
+                    );
                     return;
                 }
-                self.push(format!("{target} = {}", expr_str(value)));
+                self.push_node(format!("{target} = {}", expr_str(value)), Some(stmt.span));
             }
             StmtKind::If {
                 branches,
@@ -437,20 +525,20 @@ impl<'a> Printer<'a> {
             } => {
                 for (position, (cond, body)) in branches.iter().enumerate() {
                     let keyword = if position == 0 { "if" } else { "elif" };
-                    self.push(format!("{} {}:", keyword, expr_str(cond)));
+                    self.push_node(format!("{} {}:", keyword, expr_str(cond)), Some(stmt.span));
                     self.indent += 1;
                     self.block(body);
                     self.indent -= 1;
                 }
                 if let Some(else_branch) = else_branch {
-                    self.push("else:");
+                    self.push_node("else:", Some(stmt.span));
                     self.indent += 1;
                     self.block(else_branch);
                     self.indent -= 1;
                 }
             }
             StmtKind::While { cond, body } => {
-                self.push(format!("while {}:", expr_str(cond)));
+                self.push_node(format!("while {}:", expr_str(cond)), Some(stmt.span));
                 self.indent += 1;
                 self.block(body);
                 self.indent -= 1;
@@ -461,21 +549,22 @@ impl<'a> Printer<'a> {
                 end,
                 body,
             } => {
-                self.push(format!(
-                    "for {var} in {}..{}:",
-                    expr_str(start),
-                    expr_str(end)
-                ));
+                self.push_node(
+                    format!("for {var} in {}..{}:", expr_str(start), expr_str(end)),
+                    Some(stmt.span),
+                );
                 self.indent += 1;
                 self.block(body);
                 self.indent -= 1;
             }
             StmtKind::Return(value) => match value {
-                Some(value) => self.push(format!("return {}", expr_str(value))),
-                None => self.push("return"),
+                Some(value) => {
+                    self.push_node(format!("return {}", expr_str(value)), Some(stmt.span))
+                }
+                None => self.push_node("return", Some(stmt.span)),
             },
             StmtKind::Match { scrutinee, arms } => {
-                self.push(format!("match {}:", expr_str(scrutinee)));
+                self.push_node(format!("match {}:", expr_str(scrutinee)), Some(stmt.span));
                 self.indent += 1;
                 for arm in arms {
                     self.match_arm(arm);
@@ -483,21 +572,21 @@ impl<'a> Printer<'a> {
                 self.indent -= 1;
             }
             StmtKind::Unsafe(block) => {
-                self.push("unsafe:".to_string());
+                self.push_node("unsafe:".to_string(), Some(stmt.span));
                 self.indent += 1;
                 self.block(block);
                 self.indent -= 1;
             }
             StmtKind::Defer(block) => {
-                self.push("defer:".to_string());
+                self.push_node("defer:".to_string(), Some(stmt.span));
                 self.indent += 1;
                 self.block(block);
                 self.indent -= 1;
             }
-            StmtKind::Pass => self.push("pass"),
-            StmtKind::Break => self.push("break"),
-            StmtKind::Continue => self.push("continue"),
-            StmtKind::Expr(expr) => self.push(expr_str(expr)),
+            StmtKind::Pass => self.push_node("pass", Some(stmt.span)),
+            StmtKind::Break => self.push_node("break", Some(stmt.span)),
+            StmtKind::Continue => self.push_node("continue", Some(stmt.span)),
+            StmtKind::Expr(expr) => self.push_node(expr_str(expr), Some(stmt.span)),
         }
     }
 
@@ -516,7 +605,7 @@ impl<'a> Printer<'a> {
         } else {
             format!("{head}:")
         };
-        self.push(text);
+        self.push_node(text, Some(arm.span));
         self.indent += 1;
         self.block(&arm.body);
         self.indent -= 1;
@@ -576,6 +665,27 @@ fn type_str(ty: &TypeExpr) -> String {
         return format!("({})", parts.join(", "));
     }
     ty.name.clone()
+}
+
+fn line_starts(text: &str) -> Vec<usize> {
+    let mut starts = vec![0usize];
+    for (index, byte) in text.bytes().enumerate() {
+        if byte == b'\n' {
+            starts.push(index + 1);
+        }
+    }
+    starts
+}
+
+fn line_index(starts: &[usize], offset: usize) -> usize {
+    starts
+        .partition_point(|start| *start <= offset)
+        .saturating_sub(1)
+}
+
+enum CommentTarget {
+    Trailing(usize),
+    Before(usize),
 }
 
 fn expr_str(expr: &Expr) -> String {
@@ -784,6 +894,44 @@ mod tests {
         let source = "struct Item:\n    price: f64\nfn main():\n    var item = Item(1.0)\n    item.price -= 0.5\n    print(item.price)\n";
         let out = format(source);
         assert!(out.contains("item.price -= 0.5"), "{out}");
+    }
+
+    #[test]
+    fn preserves_standalone_comments() {
+        let source = "# header\nfn main():\n    # greeting\n    print(\"hi\")\n";
+        let out = format(source);
+        assert!(out.contains("# header"), "{out}");
+        assert!(out.contains("# greeting"), "{out}");
+        assert!(out.contains("fn main():"), "{out}");
+    }
+
+    #[test]
+    fn preserves_trailing_comments_on_the_same_line() {
+        let source = "fn main():\n    var x = 1 # keep me\n    println(x)\n";
+        let out = format(source);
+        assert!(out.contains("var x = 1  # keep me"), "{out}");
+    }
+
+    #[test]
+    fn preserves_globals_and_comments_around_them() {
+        let source = "# module state\nvar router = 0\nvar lock = 0\n\n# helper\nfn bump():\n    router = router + 1\n";
+        let out = format(source);
+        assert!(out.contains("var router = 0"), "{out}");
+        assert!(out.contains("var lock = 0"), "{out}");
+        assert!(out.contains("# module state"), "{out}");
+        assert!(
+            out.find("var router").unwrap() < out.find("fn bump").unwrap(),
+            "{out}"
+        );
+    }
+
+    #[test]
+    fn formatting_with_comments_is_idempotent() {
+        let source = "# top\nvar counter = 0 # counts\n\n# even\nfn main():\n    # first\n    counter += 1 # mutation\n    # last\n    println(counter)\n";
+        let once = format(source);
+        let twice = format(&once);
+        assert_eq!(once, twice);
+        assert_eq!(format(&once), once);
     }
 
     #[test]

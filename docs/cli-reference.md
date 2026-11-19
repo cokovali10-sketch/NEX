@@ -49,10 +49,11 @@ Behaviour worth knowing:
 - Compound assignments are preserved: `x += 1` stays `x += 1`.
 - `x = x + 1` is normalized to `x += 1`, because the parser records both forms
   as the same statement.
-- **Comments are dropped.** NEX comments (`#`) are discarded by the lexer, so
-  formatting a commented file loses them. `nex fmt` prints a warning to stderr
-  before overwriting such a file, and refuses to touch a file that does not
-  parse.
+- **Comments are preserved.** The formatter re-attaches `#` comments from the
+  lexer's trivia table: a comment on the same line as a statement stays on
+  that line; a comment on its own line is placed before the following
+  statement, at the same indent. Module-level `var` globals are preserved as
+  well. `nex fmt` refuses to touch a file that does not parse.
 
 ### `nex lint`
 

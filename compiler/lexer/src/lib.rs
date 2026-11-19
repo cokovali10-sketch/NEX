@@ -7,7 +7,7 @@
 mod lexer;
 mod token;
 
-pub use lexer::{LexResult, Lexer};
+pub use lexer::{Comment, LexResult, Lexer};
 pub use token::{Token, TokenKind};
 
 #[cfg(test)]

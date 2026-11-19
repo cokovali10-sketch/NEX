@@ -25,6 +25,12 @@
 - Comments and blank lines are legal as the first line of a block (they
   produced `NXP002` before).
 
+### Changed
+
+- `nex fmt` preserves `#` comments (re-attached before the statement they
+  annotate, or kept on the same line) and module-level `var` declarations
+  (which it used to drop).
+
 ## 1.0.1 (2026-11-19)
 
 The first NEX release with downloadable binaries. The `v1.0.0` tag was cut

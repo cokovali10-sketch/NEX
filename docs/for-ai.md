@@ -56,9 +56,10 @@ project root or on a single file.
 
 ### Comments
 
-`#` starts a comment. Comments are discarded by the lexer and are allowed
+`#` starts a comment. The lexer keeps comments in a trivia table (used by
+`nex fmt` and `nex lsp`) and otherwise ignores them; they are allowed
 anywhere whitespace is allowed, including as the first lines of a block
-(blank lines are also legal there).
+(blank lines are also legal there). `nex fmt` preserves them.
 
 ```nex
 # a comment
@@ -277,9 +278,11 @@ unsafe:
 
 ### Comments and the formatter
 
-`nex fmt` drops `#` comments because the lexer discards them, so it refuses
-to rewrite files that contain comments. Blank lines and comment-only lines
-are legal as the first line of a block; the formatter normalizes this.
+`nex fmt` preserves `#` comments: a comment on the same line as a statement
+stays on that line; a comment on its own line is placed before the following
+statement at the same indent. Module-level `var` declarations are preserved
+too. Blank lines and comment-only lines are legal as the first line of a
+block; the formatter normalizes this.
 
 ## Standard library
 
@@ -396,7 +399,8 @@ see `docs/language-server.md` for the LSP handshake and capabilities.
   them (see `docs/memory-model.md`).
 - Strings are indexable (`s[1]`) and sliceable (`s[1..3]`), but are not
   iterable with `for`.
-- `nex fmt` drops `#` comments.
+- `nex fmt` preserves `#` comments and module-level `var` declarations; the
+  output is syntactically valid NEX, but blank lines are normalized.
 - Cross-platform claims: Windows x86-64 is the primary tested host; CI also
   tests Ubuntu. macOS is untested. Do not claim platform support you have not
   measured.

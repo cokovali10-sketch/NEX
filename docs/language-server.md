@@ -74,7 +74,7 @@ does full semantic analysis (not just a parse), LSP diagnostics match
 - The server operates on the open file plus whatever the compiler resolves
   for it (imports included). There is no project-wide index, so renaming a
   public symbol in a large project does not update call sites automatically.
-- Formatting replaces the whole document. `nex fmt` drops comments because
-  the lexer discards them; files with `#` comments are left untouched.
+- Formatting replaces the whole document. `nex fmt` preserves `#` comments;
+  they are re-attached before the statement they annotate.
 - Incremental compilation is not implemented yet; each keystroke recompiles
   the open file. For small to medium NEX projects this is fast enough.

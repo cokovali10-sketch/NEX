@@ -6,6 +6,17 @@ use crate::token::{Token, TokenKind};
 pub struct LexResult {
     pub tokens: Vec<Token>,
     pub diagnostics: Vec<Diagnostic>,
+    /// Every `#` comment in source order. Comments are also skipped during
+    /// token emission; this table keeps them available for trivia-aware
+    /// tools such as the formatter.
+    pub comments: Vec<Comment>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Comment {
+    pub span: Span,
+    /// Comment text including the leading `#`, with trailing whitespace trimmed.
+    pub text: String,
 }
 
 pub struct Lexer<'a> {
@@ -16,6 +27,7 @@ pub struct Lexer<'a> {
     indents: Vec<usize>,
     at_line_start: bool,
     bracket_depth: usize,
+    comments: Vec<Comment>,
 }
 
 impl<'a> Lexer<'a> {
@@ -28,6 +40,7 @@ impl<'a> Lexer<'a> {
             indents: vec![0],
             at_line_start: true,
             bracket_depth: 0,
+            comments: Vec::new(),
         }
     }
 
@@ -91,6 +104,7 @@ impl<'a> Lexer<'a> {
         LexResult {
             tokens: self.tokens,
             diagnostics: self.diagnostics,
+            comments: self.comments,
         }
     }
 
@@ -176,12 +190,18 @@ impl<'a> Lexer<'a> {
     }
 
     fn skip_comment(&mut self) {
+        let start = self.pos;
         while let Some(byte) = self.byte_at(self.pos) {
             if matches!(byte, b'\r' | b'\n') {
                 break;
             }
             self.pos += self.current_char().map(char::len_utf8).unwrap_or(1);
         }
+        let text = self.source[start..self.pos].trim_end().to_string();
+        self.comments.push(Comment {
+            span: Span::new(start, self.pos),
+            text,
+        });
     }
 
     fn scan_ident(&mut self) {
