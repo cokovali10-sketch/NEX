@@ -11,6 +11,7 @@
 - `contains(array, value)` reports whether a value is present.
 - `index_of(array, value)` returns the first matching index, or `-1`.
 - `expr?` propagates `None`/`Err` from `Option`/`Result`-shaped structs.
+- Generic type arguments in type annotations (`Box<i64>`).
 
 ## 1.0.1 (2026-11-19)
 

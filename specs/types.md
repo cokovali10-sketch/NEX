@@ -15,6 +15,7 @@
 - Growable arrays `[T]` (`push`, `len`, indexed read/write)
 - User-defined `tuple` (anonymous struct with positional fields)
 - Traits implemented as static dispatch targets
+- Generic struct annotations (`Box<i64>`)
 - Type aliases (`type Name = Type`)
 
 ## Type inference
@@ -130,8 +131,6 @@ let z = true as i64
 
 ## Planned
 
-- Generic type arguments in annotations (for example `Box<i64>`); generic
-  calls and constructors currently infer their arguments.
 - Generic type constraints and bounds.
 - Optional and result types.
 - Broader type inference across function boundaries.

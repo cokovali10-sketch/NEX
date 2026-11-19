@@ -143,6 +143,7 @@ pub struct TypeExpr {
     /// the growable form `[T]`.
     pub array: Option<(Box<TypeExpr>, Option<usize>)>,
     pub tuple: Option<Vec<TypeExpr>>,
+    pub generic_args: Vec<TypeExpr>,
     pub span: Span,
 }
 

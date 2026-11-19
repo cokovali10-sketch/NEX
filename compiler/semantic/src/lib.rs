@@ -182,6 +182,35 @@ struct Checker<'a> {
     loop_depth: usize,
 }
 
+fn substitute_type_expr(
+    ty: &nex_ast::TypeExpr,
+    mapping: &std::collections::HashMap<String, Type>,
+) -> nex_ast::TypeExpr {
+    let mut result = ty.clone();
+    if let Some(concrete) = mapping.get(&ty.name) {
+        result.name = concrete.name().to_string();
+        result.generic_args.clear();
+    } else {
+        result.generic_args = ty
+            .generic_args
+            .iter()
+            .map(|arg| substitute_type_expr(arg, mapping))
+            .collect();
+    }
+    if let Some((elem, size)) = &ty.array {
+        result.array = Some((Box::new(substitute_type_expr(elem, mapping)), *size));
+    }
+    if let Some(elems) = &ty.tuple {
+        result.tuple = Some(
+            elems
+                .iter()
+                .map(|e| substitute_type_expr(e, mapping))
+                .collect(),
+        );
+    }
+    result
+}
+
 pub fn analyze(program: &Program) -> Analysis {
     Checker::analyze_program(program)
 }
@@ -4662,6 +4691,66 @@ impl<'a> Checker<'a> {
         if let Some(ty) = self.analysis.type_aliases.get(&ty.name).copied() {
             return ty;
         }
+        if !ty.generic_args.is_empty() {
+            if let Some(base_info) = self.analysis.structs.get(&ty.name).cloned() {
+                if !base_info.type_params.is_empty()
+                    && base_info.type_params.len() == ty.generic_args.len()
+                {
+                    let mut arg_types = Vec::new();
+                    for arg in &ty.generic_args {
+                        let resolved = self.resolve_type(arg);
+                        if resolved == Type::Error {
+                            return Type::Error;
+                        }
+                        arg_types.push(resolved);
+                    }
+                    let mut mapping = std::collections::HashMap::new();
+                    for (param, concrete) in base_info.type_params.iter().zip(arg_types.iter()) {
+                        mapping.insert(param.clone(), *concrete);
+                    }
+                    let mut concrete_names = Vec::new();
+                    for param in &base_info.type_params {
+                        let concrete = mapping.get(param).copied().unwrap_or(Type::Error);
+                        concrete_names.push(concrete.name());
+                    }
+                    let mono_name = format!("{}_{}", ty.name, concrete_names.join("_"));
+                    if !self.analysis.structs.contains_key(&mono_name) {
+                        let generic_struct = self
+                            .program
+                            .structs
+                            .iter()
+                            .find(|decl| decl.name == ty.name)
+                            .cloned();
+                        if let Some(mut generic_decl) = generic_struct {
+                            generic_decl.name = mono_name.clone();
+                            for field in &mut generic_decl.fields {
+                                field.ty = substitute_type_expr(&field.ty, &mapping);
+                            }
+                            let mut fields = Vec::new();
+                            for field in &generic_decl.fields {
+                                let field_ty = self.resolve_type(&field.ty);
+                                fields.push((field.name.clone(), field_ty));
+                            }
+                            let name_static = Box::leak(mono_name.clone().into_boxed_str());
+                            self.analysis.structs.insert(
+                                mono_name.clone(),
+                                StructInfo {
+                                    name: mono_name.clone(),
+                                    type_params: Vec::new(),
+                                    name_static,
+                                    fields,
+                                    public: base_info.public,
+                                },
+                            );
+                        }
+                    }
+                    if let Some(mono_info) = self.analysis.structs.get(&mono_name) {
+                        return Type::Struct(mono_info.name_static);
+                    }
+                }
+            }
+        }
+
         if let Some(info) = self.analysis.structs.get(&ty.name) {
             return Type::Struct(info.name_static);
         }

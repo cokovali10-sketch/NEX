@@ -460,6 +460,7 @@ impl<'a> Parser<'a> {
                         name: type_name.to_string(),
                         array: None,
                         tuple: None,
+                        generic_args: Vec::new(),
                         span: receiver_span,
                     },
                     span: receiver_span,
@@ -1116,6 +1117,7 @@ impl<'a> Parser<'a> {
                     name: String::new(),
                     array: None,
                     tuple: Some(elems),
+                    generic_args: Vec::new(),
                     span: start.merge(end_span),
                 };
             }
@@ -1132,6 +1134,7 @@ impl<'a> Parser<'a> {
                 name: first.name,
                 array: first.array,
                 tuple: first.tuple,
+                generic_args: first.generic_args.clone(),
                 span: first.span.merge(end_span),
             };
         }
@@ -1150,6 +1153,7 @@ impl<'a> Parser<'a> {
                     name: "<error>".to_string(),
                     array: None,
                     tuple: None,
+                    generic_args: Vec::new(),
                     span: start,
                 };
             }
@@ -1175,24 +1179,48 @@ impl<'a> Parser<'a> {
                 name: String::new(),
                 array: Some((Box::new(elem), size)),
                 tuple: None,
+                generic_args: Vec::new(),
                 span: start.merge(end_span),
             };
         }
 
         if let Some((name, span)) = self.expect_ident("as a type name") {
             if self.check(&TokenKind::Lt) {
-                let generic_span = self.peek_token().span;
-                self.error(
-                    "NXP011",
-                    "explicit generic type arguments are not supported yet; generic calls infer them",
-                    generic_span,
-                );
-                self.skip_balanced_angles();
+                self.advance(); // <
+                let mut args = Vec::new();
+                loop {
+                    args.push(self.parse_type());
+                    if !self.eat(&TokenKind::Comma) {
+                        break;
+                    }
+                }
+                if !self.check(&TokenKind::Gt) {
+                    let span = self.peek_token().span;
+                    self.error("NXP011", "expected `>` in generic type arguments", span);
+                } else {
+                    let end_span = self.peek_token().span;
+                    self.advance();
+                    return TypeExpr {
+                        name,
+                        array: None,
+                        tuple: None,
+                        generic_args: args,
+                        span: span.merge(end_span),
+                    };
+                }
+                return TypeExpr {
+                    name,
+                    array: None,
+                    tuple: None,
+                    generic_args: args,
+                    span,
+                };
             }
             TypeExpr {
                 name,
                 array: None,
                 tuple: None,
+                generic_args: Vec::new(),
                 span,
             }
         } else {
@@ -1201,6 +1229,7 @@ impl<'a> Parser<'a> {
                 name: "<error>".to_string(),
                 array: None,
                 tuple: None,
+                generic_args: Vec::new(),
                 span,
             }
         }
@@ -2217,24 +2246,6 @@ impl<'a> Parser<'a> {
 
     fn skip_until(&mut self, kinds: &[TokenKind]) {
         while !self.check(&TokenKind::Eof) && !kinds.iter().any(|kind| self.check(kind)) {
-            self.advance();
-        }
-    }
-
-    fn skip_balanced_angles(&mut self) {
-        let mut depth = 0usize;
-        while !self.check(&TokenKind::Eof) {
-            match self.peek() {
-                TokenKind::Lt => depth += 1,
-                TokenKind::Gt => {
-                    depth = depth.saturating_sub(1);
-                    if depth == 0 {
-                        self.advance();
-                        return;
-                    }
-                }
-                _ => {}
-            }
             self.advance();
         }
     }

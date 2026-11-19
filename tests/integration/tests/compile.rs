@@ -1921,6 +1921,23 @@ fn main():
 }
 
 #[test]
+fn generic_type_annotations_work() {
+    let source = r#"
+struct Box<T>:
+    value: T
+
+fn main():
+    let b: Box<i64> = Box(42)
+    let s: Box<string> = Box("hi")
+    print(b.value)
+    print(s.value)
+"#;
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "42hi");
+}
+
+#[test]
 fn parallel_assignment_swaps_values() {
     let source = r#"
 fn main():

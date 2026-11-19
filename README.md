@@ -54,7 +54,8 @@ runtime (`runtime/core/nex_rt.c`) — not a hidden language runtime.
   `match`, arrays (fixed and growable `[T]`, including struct and tuple elements)
   and tuples with type annotations
   and function parameters and returns, traits and inherent `impl` methods with
-  static dispatch, generics via monomorphization, type aliases, modules and
+  static dispatch, generics via monomorphization (including type annotations
+  such as `Box<i64>`), type aliases, modules and
   file imports, f-strings, string indexing/slicing, bitwise operators,
   `unsafe:` blocks, external C calls, error propagation with `?`, and printing.
 - Runtime: string helpers, files, blocking TCP and HTTP helpers, JSON, maps,
