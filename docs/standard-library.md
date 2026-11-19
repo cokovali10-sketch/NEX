@@ -15,6 +15,19 @@ process control, structured logging, and async I/O. See `ROADMAP.md`.
 
 These are global functions, not methods, so no imports are required.
 
+### Arrays
+
+| Function | Signature | Notes |
+|---|---|---|
+| `push` | `(array, value) -> void` | Append an element to a growable `[T]`; grows capacity as needed. |
+| `pop` | `(array) -> T` | Remove and return the last element; bounds-checked, LIFO. |
+| `contains` | `(array, value) -> bool` | `true` when `value` is present. |
+| `index_of` | `(array, value) -> i64` | Index of the first match, or `-1`. |
+| `reverse` | `(array) -> void` | Reverse the elements in place. |
+
+These work on both `[T]` and `[T; N]`. `len` reports the element count of an
+array.
+
 ### Printing
 
 | Function | Signature | Notes |

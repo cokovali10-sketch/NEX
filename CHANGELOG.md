@@ -10,6 +10,7 @@
 - `pop(array)` removes and returns the last element of a growable array.
 - `contains(array, value)` reports whether a value is present.
 - `index_of(array, value)` returns the first matching index, or `-1`.
+- `reverse(array)` reverses a fixed or growable array in place.
 - `expr?` propagates `None`/`Err` from `Option`/`Result`-shaped structs.
 - Generic type arguments in type annotations (`Box<i64>`).
 - `defer:` blocks run at function exit, in reverse order, only when reached.
