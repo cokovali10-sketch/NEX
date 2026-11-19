@@ -2006,6 +2006,41 @@ fn main():
 }
 
 #[test]
+fn reverse_arrays() {
+    let source = r#"
+struct Point:
+    x: i64
+    y: i64
+
+fn main():
+    var a: [i64; 4] = [1, 2, 3, 4]
+    reverse(a)
+    for x in a:
+        print(x)
+    print("|")
+
+    var b: [string] = []
+    push(b, "a")
+    push(b, "b")
+    push(b, "c")
+    reverse(b)
+    for s in b:
+        print(s)
+    print("|")
+
+    var c: [Point; 2] = [Point(1, 2), Point(3, 4)]
+    reverse(c)
+    print(c[0].x)
+    print(c[0].y)
+    print(c[1].x)
+    print(c[1].y)
+"#;
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "4321|cba|3412");
+}
+
+#[test]
 fn parallel_assignment_swaps_values() {
     let source = r#"
 fn main():
