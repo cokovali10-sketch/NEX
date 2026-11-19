@@ -1788,6 +1788,7 @@ impl<'a> Checker<'a> {
             ExprKind::Str(_) => Type::String,
             ExprKind::Char(_) => Type::Char,
             ExprKind::Bool(_) => Type::Bool,
+            ExprKind::Try(inner) => self.infer_try(inner, expr.span),
             ExprKind::Ident(name) => {
                 if let Some(qualified) = self.analysis.aliases.get(name).cloned() {
                     // Resolve the alias by walking the qualified path.
@@ -2321,6 +2322,115 @@ impl<'a> Checker<'a> {
             },
         );
         Some(signature.ret)
+    }
+
+    fn infer_try(&mut self, expr: &Expr, span: Span) -> Type {
+        let scrut_ty = self.infer(expr);
+        if scrut_ty == Type::Error {
+            return Type::Error;
+        }
+        if let Some(value_ty) = self.option_value_type(&scrut_ty) {
+            if let Some(current) = &self.current_fn {
+                if let Some(ret_value) = self.option_value_type(&current.ret) {
+                    if ret_value != value_ty {
+                        self.error(
+                            "NXS004",
+                            format!(
+                                "`?` requires matching Option types: found `{value_ty}`, function returns `{ret_value}`"
+                            ),
+                            span,
+                        );
+                        return Type::Error;
+                    }
+                } else {
+                    self.error(
+                        "NXS004",
+                        "`?` requires the function to return `Option<T>`".to_string(),
+                        span,
+                    );
+                    return Type::Error;
+                }
+            } else {
+                self.error(
+                    "NXS004",
+                    "`?` can only be used inside a function".to_string(),
+                    span,
+                );
+                return Type::Error;
+            }
+            return value_ty;
+        }
+        if let Some((value_ty, err_ty)) = self.result_types(&scrut_ty) {
+            if let Some(current) = &self.current_fn {
+                if let Some((ret_value, ret_err)) = self.result_types(&current.ret) {
+                    if ret_value != value_ty || ret_err != err_ty {
+                        self.error(
+                            "NXS004",
+                            format!(
+                                "`?` requires matching Result types: found `Result<{value_ty}, {err_ty}>`, function returns `Result<{ret_value}, {ret_err}>`"
+                            ),
+                            span,
+                        );
+                        return Type::Error;
+                    }
+                } else {
+                    self.error(
+                        "NXS004",
+                        "`?` requires the function to return `Result<T, E>`".to_string(),
+                        span,
+                    );
+                    return Type::Error;
+                }
+            } else {
+                self.error(
+                    "NXS004",
+                    "`?` can only be used inside a function".to_string(),
+                    span,
+                );
+                return Type::Error;
+            }
+            return value_ty;
+        }
+        self.error(
+            "NXS004",
+            format!("`?` requires `Option<T>` or `Result<T, E>`, found `{scrut_ty}`"),
+            span,
+        );
+        Type::Error
+    }
+
+    fn option_value_type(&self, ty: &Type) -> Option<Type> {
+        let Type::Struct(name) = ty else {
+            return None;
+        };
+        let info = self.analysis.struct_info(name)?;
+        if info.fields.len() != 2 {
+            return None;
+        }
+        if info.fields[0].0 != "has" || info.fields[1].0 != "value" {
+            return None;
+        }
+        if info.fields[0].1 != Type::Bool {
+            return None;
+        }
+        Some(info.fields[1].1)
+    }
+
+    fn result_types(&self, ty: &Type) -> Option<(Type, Type)> {
+        let Type::Struct(name) = ty else {
+            return None;
+        };
+        let info = self.analysis.struct_info(name)?;
+        if info.fields.len() != 3 {
+            return None;
+        }
+        if info.fields[0].0 != "ok" || info.fields[1].0 != "value" || info.fields[2].0 != "error" {
+            return None;
+        }
+        if info.fields[0].1 != Type::Bool {
+            return None;
+        }
+        Some((info.fields[1].1, info.fields[2].1))
     }
 
     fn check_call(&mut self, callee: &str, callee_span: Span, args: &[Expr], span: Span) -> Type {

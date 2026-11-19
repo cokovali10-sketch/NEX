@@ -281,6 +281,8 @@ pub enum ExprKind {
         name: String,
         name_span: Span,
     },
+    /// Error propagation: `expr?`.
+    Try(Box<Expr>),
     /// Parser recovery node. It must be rejected by semantic analysis.
     Error,
 }

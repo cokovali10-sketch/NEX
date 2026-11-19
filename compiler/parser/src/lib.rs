@@ -1947,6 +1947,15 @@ impl<'a> Parser<'a> {
                 continue;
             }
 
+            if self.check(&TokenKind::Question) {
+                let qspan = self.advance().span;
+                expr = Expr {
+                    kind: ExprKind::Try(Box::new(expr.clone())),
+                    span: expr.span.merge(qspan),
+                };
+                continue;
+            }
+
             break;
         }
         expr

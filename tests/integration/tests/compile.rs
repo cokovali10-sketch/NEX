@@ -1871,6 +1871,56 @@ fn main():
 }
 
 #[test]
+fn try_operator_propagates_option_and_result() {
+    let source = r#"
+struct OptionInt:
+    has: bool
+    value: i64
+
+struct ResultIntStr:
+    ok: bool
+    value: i64
+    error: string
+
+fn find(xs: [i64], target: i64) -> OptionInt:
+    for x in xs:
+        if x == target:
+            return OptionInt(true, x)
+    return OptionInt(false, 0)
+
+fn use_option(target: i64) -> OptionInt:
+    let xs: [i64] = [1, 2, 3]
+    let found = find(xs, target)?
+    return OptionInt(true, found + 10)
+
+fn may_fail(fail: bool) -> ResultIntStr:
+    if fail:
+        return ResultIntStr(false, 0, "boom")
+    return ResultIntStr(true, 42, "")
+
+fn use_result(fail: bool) -> ResultIntStr:
+    let value = may_fail(fail)?
+    return ResultIntStr(true, value, "")
+
+fn main():
+    let o1 = use_option(2)
+    print(o1.has)
+    print(o1.value)
+    let o2 = use_option(9)
+    print(o2.has)
+    let r1 = use_result(false)
+    print(r1.ok)
+    print(r1.value)
+    let r2 = use_result(true)
+    print(r2.ok)
+    print(r2.error)
+"#;
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "true12falsetrue42falseboom");
+}
+
+#[test]
 fn parallel_assignment_swaps_values() {
     let source = r#"
 fn main():

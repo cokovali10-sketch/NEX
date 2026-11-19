@@ -4253,7 +4253,414 @@ fn lower_expr(
             });
             Ok(Operand::Value(dst))
         }
+        ExprKind::Try(inner) => lower_try(builder, inner, scopes, storage, analysis),
         ExprKind::Error => Err("invalid expression reached code generation".to_string()),
+    }
+}
+
+fn lower_try(
+    builder: &mut FunctionBuilder,
+    inner: &Expr,
+    scopes: &mut Vec<HashMap<String, Slot>>,
+    storage: &HashMap<nex_diagnostics::Span, (ValueId, IrType)>,
+    analysis: &Analysis,
+) -> Result<Operand, String> {
+    let scrut_ty = analysis.expr_type(inner.span).unwrap_or(Type::Error);
+    let scrut_place = lower_struct_place(builder, inner, scopes, storage, analysis)?;
+    if let Some(value_ty) = option_value_type(analysis, &scrut_ty) {
+        let struct_name = match &scrut_ty {
+            Type::Struct(name) => *name,
+            _ => return Err("not an Option value".to_string()),
+        };
+        let has_ptr = {
+            let dst = builder.new_value();
+            builder.emit(Inst::FieldPtr {
+                dst,
+                base: scrut_place,
+                struct_name,
+                index: 0,
+                field_ty: IrType::Bool,
+            });
+            dst
+        };
+        let has = {
+            let dst = builder.new_value();
+            builder.emit(Inst::Load {
+                dst,
+                ptr: has_ptr,
+                ty: IrType::Bool,
+            });
+            dst
+        };
+        let true_bb = builder.new_block();
+        let false_bb = builder.new_block();
+        builder.terminate(Terminator::CondBr {
+            cond: Operand::Value(has),
+            then_bb: true_bb,
+            else_bb: false_bb,
+        });
+        builder.current = false_bb;
+        let default = lower_default_value(builder, scrut_ty, scopes, storage, analysis)?;
+        builder.terminate(Terminator::Ret(Some(default)));
+        builder.current = true_bb;
+        let value_ptr = {
+            let dst = builder.new_value();
+            builder.emit(Inst::FieldPtr {
+                dst,
+                base: scrut_place,
+                struct_name,
+                index: 1,
+                field_ty: IrType::from_type(value_ty),
+            });
+            dst
+        };
+        let value = {
+            let dst = builder.new_value();
+            builder.emit(Inst::Load {
+                dst,
+                ptr: value_ptr,
+                ty: IrType::from_type(value_ty),
+            });
+            dst
+        };
+        return Ok(Operand::Value(value));
+    }
+    if let Some((value_ty, err_ty)) = result_types(analysis, &scrut_ty) {
+        let struct_name = match &scrut_ty {
+            Type::Struct(name) => *name,
+            _ => return Err("not a Result value".to_string()),
+        };
+        let ok_ptr = {
+            let dst = builder.new_value();
+            builder.emit(Inst::FieldPtr {
+                dst,
+                base: scrut_place,
+                struct_name,
+                index: 0,
+                field_ty: IrType::Bool,
+            });
+            dst
+        };
+        let ok = {
+            let dst = builder.new_value();
+            builder.emit(Inst::Load {
+                dst,
+                ptr: ok_ptr,
+                ty: IrType::Bool,
+            });
+            dst
+        };
+        let true_bb = builder.new_block();
+        let false_bb = builder.new_block();
+        builder.terminate(Terminator::CondBr {
+            cond: Operand::Value(ok),
+            then_bb: true_bb,
+            else_bb: false_bb,
+        });
+        builder.current = false_bb;
+        let err_ptr = {
+            let dst = builder.new_value();
+            builder.emit(Inst::FieldPtr {
+                dst,
+                base: scrut_place,
+                struct_name,
+                index: 2,
+                field_ty: IrType::from_type(err_ty),
+            });
+            dst
+        };
+        let err_value = {
+            let dst = builder.new_value();
+            builder.emit(Inst::Load {
+                dst,
+                ptr: err_ptr,
+                ty: IrType::from_type(err_ty),
+            });
+            dst
+        };
+        let ptr = builder.alloca_at_entry(IrType::Struct(struct_name));
+        let ok_field = builder.new_value();
+        builder.emit(Inst::FieldPtr {
+            dst: ok_field,
+            base: ptr,
+            struct_name,
+            index: 0,
+            field_ty: IrType::Bool,
+        });
+        builder.emit(Inst::Store {
+            ptr: ok_field,
+            value: Operand::Const(Const::Bool(false)),
+            ty: IrType::Bool,
+        });
+        let value_field = builder.new_value();
+        builder.emit(Inst::FieldPtr {
+            dst: value_field,
+            base: ptr,
+            struct_name,
+            index: 1,
+            field_ty: IrType::from_type(value_ty),
+        });
+        let default_value = lower_default_value(builder, value_ty, scopes, storage, analysis)?;
+        builder.emit(Inst::Store {
+            ptr: value_field,
+            value: default_value,
+            ty: IrType::from_type(value_ty),
+        });
+        let error_field = builder.new_value();
+        builder.emit(Inst::FieldPtr {
+            dst: error_field,
+            base: ptr,
+            struct_name,
+            index: 2,
+            field_ty: IrType::from_type(err_ty),
+        });
+        builder.emit(Inst::Store {
+            ptr: error_field,
+            value: Operand::Value(err_value),
+            ty: IrType::from_type(err_ty),
+        });
+        let ret_value = {
+            let dst = builder.new_value();
+            builder.emit(Inst::Load {
+                dst,
+                ptr,
+                ty: IrType::Struct(struct_name),
+            });
+            dst
+        };
+        builder.terminate(Terminator::Ret(Some(Operand::Value(ret_value))));
+        builder.current = true_bb;
+        let value_ptr = {
+            let dst = builder.new_value();
+            builder.emit(Inst::FieldPtr {
+                dst,
+                base: scrut_place,
+                struct_name,
+                index: 1,
+                field_ty: IrType::from_type(value_ty),
+            });
+            dst
+        };
+        let value = {
+            let dst = builder.new_value();
+            builder.emit(Inst::Load {
+                dst,
+                ptr: value_ptr,
+                ty: IrType::from_type(value_ty),
+            });
+            dst
+        };
+        return Ok(Operand::Value(value));
+    }
+    Err("cannot use `?` on a non-Option/Result value".to_string())
+}
+
+fn option_value_type(analysis: &Analysis, ty: &Type) -> Option<Type> {
+    let Type::Struct(name) = ty else {
+        return None;
+    };
+    let info = analysis.struct_info(name)?;
+    if info.fields.len() != 2 {
+        return None;
+    }
+    if info.fields[0].0 != "has" || info.fields[1].0 != "value" {
+        return None;
+    }
+    if info.fields[0].1 != Type::Bool {
+        return None;
+    }
+    Some(info.fields[1].1)
+}
+
+fn result_types(analysis: &Analysis, ty: &Type) -> Option<(Type, Type)> {
+    let Type::Struct(name) = ty else {
+        return None;
+    };
+    let info = analysis.struct_info(name)?;
+    if info.fields.len() != 3 {
+        return None;
+    }
+    if info.fields[0].0 != "ok" || info.fields[1].0 != "value" || info.fields[2].0 != "error" {
+        return None;
+    }
+    if info.fields[0].1 != Type::Bool {
+        return None;
+    }
+    Some((info.fields[1].1, info.fields[2].1))
+}
+
+fn lower_default_value(
+    builder: &mut FunctionBuilder,
+    ty: Type,
+    scopes: &mut Vec<HashMap<String, Slot>>,
+    storage: &HashMap<nex_diagnostics::Span, (ValueId, IrType)>,
+    analysis: &Analysis,
+) -> Result<Operand, String> {
+    match ty {
+        Type::Bool => Ok(Operand::Const(Const::Bool(false))),
+        Type::Char => Ok(Operand::Const(Const::Char('\0'))),
+        Type::I8
+        | Type::I16
+        | Type::I32
+        | Type::I64
+        | Type::U8
+        | Type::U16
+        | Type::U32
+        | Type::U64 => Ok(Operand::Const(Const::Int(0))),
+        Type::F32 | Type::F64 => Ok(Operand::Const(Const::Float(0.0))),
+        Type::String => Ok(Operand::Const(Const::Str(String::new()))),
+        Type::Struct(name) => {
+            let info = analysis
+                .struct_info(name)
+                .ok_or_else(|| format!("unknown struct `{name}`"))?;
+            let ptr = builder.alloca_at_entry(IrType::Struct(name));
+            if info.fields.len() == 2
+                && info.fields[0].0 == "has"
+                && info.fields[1].0 == "value"
+                && info.fields[0].1 == Type::Bool
+            {
+                let field_ptr = builder.new_value();
+                builder.emit(Inst::FieldPtr {
+                    dst: field_ptr,
+                    base: ptr,
+                    struct_name: name,
+                    index: 0,
+                    field_ty: IrType::Bool,
+                });
+                builder.emit(Inst::Store {
+                    ptr: field_ptr,
+                    value: Operand::Const(Const::Bool(false)),
+                    ty: IrType::Bool,
+                });
+                let value_field = builder.new_value();
+                builder.emit(Inst::FieldPtr {
+                    dst: value_field,
+                    base: ptr,
+                    struct_name: name,
+                    index: 1,
+                    field_ty: IrType::from_type(info.fields[1].1),
+                });
+                let default_value =
+                    lower_default_value(builder, info.fields[1].1, scopes, storage, analysis)?;
+                builder.emit(Inst::Store {
+                    ptr: value_field,
+                    value: default_value,
+                    ty: IrType::from_type(info.fields[1].1),
+                });
+            } else if info.fields.len() == 3
+                && info.fields[0].0 == "ok"
+                && info.fields[1].0 == "value"
+                && info.fields[2].0 == "error"
+                && info.fields[0].1 == Type::Bool
+            {
+                let field_ptr = builder.new_value();
+                builder.emit(Inst::FieldPtr {
+                    dst: field_ptr,
+                    base: ptr,
+                    struct_name: name,
+                    index: 0,
+                    field_ty: IrType::Bool,
+                });
+                builder.emit(Inst::Store {
+                    ptr: field_ptr,
+                    value: Operand::Const(Const::Bool(false)),
+                    ty: IrType::Bool,
+                });
+                let value_field = builder.new_value();
+                builder.emit(Inst::FieldPtr {
+                    dst: value_field,
+                    base: ptr,
+                    struct_name: name,
+                    index: 1,
+                    field_ty: IrType::from_type(info.fields[1].1),
+                });
+                let default_value =
+                    lower_default_value(builder, info.fields[1].1, scopes, storage, analysis)?;
+                builder.emit(Inst::Store {
+                    ptr: value_field,
+                    value: default_value,
+                    ty: IrType::from_type(info.fields[1].1),
+                });
+                let error_field = builder.new_value();
+                builder.emit(Inst::FieldPtr {
+                    dst: error_field,
+                    base: ptr,
+                    struct_name: name,
+                    index: 2,
+                    field_ty: IrType::from_type(info.fields[2].1),
+                });
+                let default_error =
+                    lower_default_value(builder, info.fields[2].1, scopes, storage, analysis)?;
+                builder.emit(Inst::Store {
+                    ptr: error_field,
+                    value: default_error,
+                    ty: IrType::from_type(info.fields[2].1),
+                });
+            } else {
+                for (index, (_, field_ty)) in info.fields.iter().enumerate() {
+                    let field_ptr = builder.new_value();
+                    builder.emit(Inst::FieldPtr {
+                        dst: field_ptr,
+                        base: ptr,
+                        struct_name: name,
+                        index: index as u32,
+                        field_ty: IrType::from_type(*field_ty),
+                    });
+                    let default_value =
+                        lower_default_value(builder, *field_ty, scopes, storage, analysis)?;
+                    builder.emit(Inst::Store {
+                        ptr: field_ptr,
+                        value: default_value,
+                        ty: IrType::from_type(*field_ty),
+                    });
+                }
+            }
+            let dst = builder.new_value();
+            builder.emit(Inst::Load {
+                dst,
+                ptr,
+                ty: IrType::Struct(name),
+            });
+            Ok(Operand::Value(dst))
+        }
+        Type::Array { display, llvm, .. } => {
+            let info = analysis
+                .array_info(display)
+                .ok_or_else(|| "missing array type information".to_string())?;
+            let ptr = builder.alloca_at_entry(IrType::Array(llvm));
+            let elem_ir = IrType::from_type(info.elem);
+            for index in 0..info.len {
+                let idx = Operand::Const(Const::Int(index as i64));
+                let elem_ptr = builder.new_value();
+                builder.emit(Inst::IndexPtr {
+                    dst: elem_ptr,
+                    base: ptr,
+                    array_type: llvm,
+                    index: idx,
+                    elem_ty: elem_ir,
+                });
+                let default_value =
+                    lower_default_value(builder, info.elem, scopes, storage, analysis)?;
+                builder.emit(Inst::Store {
+                    ptr: elem_ptr,
+                    value: default_value,
+                    ty: elem_ir,
+                });
+            }
+            let dst = builder.new_value();
+            builder.emit(Inst::Load {
+                dst,
+                ptr,
+                ty: IrType::Array(llvm),
+            });
+            Ok(Operand::Value(dst))
+        }
+        Type::DynArray(display) => {
+            lower_dyn_array_literal(builder, &[], display, analysis, scopes, storage)
+                .map(Operand::Value)
+        }
+        Type::Error => Ok(Operand::Const(Const::Int(0))),
+        _ => Err(format!("cannot create a default value for `{ty}`")),
     }
 }
 

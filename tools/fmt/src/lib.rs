@@ -691,6 +691,10 @@ fn write_expr_inner(expr: &Expr, own: u8, out: &mut String) {
             out.push('.');
             out.push_str(name);
         }
+        ExprKind::Try(inner) => {
+            write_expr(inner, own, out);
+            out.push('?');
+        }
         ExprKind::Error => out.push_str("/* invalid expression */"),
     }
 }
