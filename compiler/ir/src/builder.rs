@@ -879,6 +879,22 @@ fn lower_struct_place(
                 Err(format!("variable `{name}` does not have a struct type"))
             }
         }
+        ExprKind::Call { callee, args, .. } if callee == "pop" => {
+            let ty = analysis
+                .expr_type(expr.span)
+                .ok_or_else(|| "missing type information for `pop`".to_string())?;
+            let Type::Struct(name) = ty else {
+                return Err("`pop` does not return a struct value".to_string());
+            };
+            let value = lower_expr(builder, expr, scopes, storage, analysis, ty)?;
+            let ptr = builder.alloca_at_entry(IrType::Struct(name));
+            builder.emit(Inst::Store {
+                ptr,
+                value,
+                ty: IrType::Struct(name),
+            });
+            Ok(ptr)
+        }
         ExprKind::Call { callee, args, .. } => {
             if analysis.method_call(expr.span).is_some() {
                 let ty = analysis
@@ -2939,6 +2955,75 @@ fn lower_expr(
                     return Ok(Operand::Value(dst));
                 }
                 return Ok(Operand::Value(raw));
+            }
+
+            if callee == "pop" {
+                if args.len() != 1 {
+                    return Err("`pop` expects 1 argument".to_string());
+                }
+                let array_ty = analysis.expr_type(args[0].span).unwrap_or(Type::Error);
+                let element = match array_ty {
+                    Type::DynArray(display) => analysis
+                        .array_info(display)
+                        .map(|info| info.elem)
+                        .unwrap_or(Type::Error),
+                    _ => Type::Error,
+                };
+                if element == Type::Error {
+                    return Err("`pop` expects a growable array".to_string());
+                }
+                let elem_ir = IrType::from_type(element);
+                let header_operand =
+                    lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
+                let header = operand_value_id(builder, header_operand)?;
+                let len_slot = field_ptr(builder, header, 1, IrType::I64);
+                let current_len = builder.new_value();
+                builder.emit(Inst::Load {
+                    dst: current_len,
+                    ptr: len_slot,
+                    ty: IrType::I64,
+                });
+                let data_slot = field_ptr(builder, header, 0, IrType::String);
+                let data = builder.new_value();
+                builder.emit(Inst::Load {
+                    dst: data,
+                    ptr: data_slot,
+                    ty: IrType::String,
+                });
+                let one = builder.new_value();
+                builder.emit(Inst::Bin {
+                    dst: one,
+                    op: BinOp::Sub,
+                    ty: IrType::I64,
+                    lhs: Operand::Value(current_len),
+                    rhs: Operand::Const(Const::Int(1)),
+                });
+                lower_bounds_check(
+                    builder,
+                    Operand::Value(one),
+                    Type::I64,
+                    Operand::Value(current_len),
+                );
+                let elem_ptr = builder.new_value();
+                builder.emit(Inst::DynIndexPtr {
+                    dst: elem_ptr,
+                    base: data,
+                    index: Operand::Value(one),
+                    elem_ty: elem_ir,
+                });
+                let result = builder.new_value();
+                builder.emit(Inst::Load {
+                    dst: result,
+                    ptr: elem_ptr,
+                    ty: elem_ir,
+                });
+                // decrement len
+                builder.emit(Inst::Store {
+                    ptr: len_slot,
+                    value: Operand::Value(one),
+                    ty: IrType::I64,
+                });
+                return Ok(Operand::Value(result));
             }
 
             if callee == "push" {

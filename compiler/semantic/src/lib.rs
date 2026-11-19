@@ -3776,6 +3776,34 @@ impl<'a> Checker<'a> {
             return Type::Bool;
         }
 
+        if callee == "pop" {
+            if args.len() != 1 {
+                self.error(
+                    "NXS004",
+                    format!("`pop` expects 1 argument, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let arg_ty = self.infer(&args[0]);
+            if let Type::DynArray(display) = arg_ty {
+                if let Some(info) = self.analysis.array_info(display) {
+                    return info.elem;
+                }
+            }
+            if arg_ty != Type::Error {
+                self.error(
+                    "NXS004",
+                    format!("`pop` expects a growable array, found `{arg_ty}`"),
+                    args[0].span,
+                );
+            }
+            return Type::Error;
+        }
+
         if callee == "push" {
             if args.len() != 2 {
                 self.error(

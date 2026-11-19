@@ -7,6 +7,7 @@
 - Fixed and growable arrays of struct and tuple values, including indexing,
   element assignment, and `for x in array`.
 - `assert(condition, "message")` for assertion failures with a custom message.
+- `pop(array)` removes and returns the last element of a growable array.
 
 ## 1.0.1 (2026-11-19)
 

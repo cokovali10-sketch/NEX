@@ -1803,6 +1803,20 @@ fn main():
 }
 
 #[test]
+fn pop_removes_last_element() {
+    let source = r#"
+fn main():
+    var values: [i64] = [1, 2, 3]
+    print(pop(values))
+    print(pop(values))
+    print(len(values))
+"#;
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "321");
+}
+
+#[test]
 fn parallel_assignment_swaps_values() {
     let source = r#"
 fn main():
