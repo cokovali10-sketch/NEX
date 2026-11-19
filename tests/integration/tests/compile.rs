@@ -1791,6 +1791,18 @@ fn main():
 }
 
 #[test]
+fn assert_with_message_reports_it() {
+    let source = r#"
+fn main():
+    assert(false, "boom")
+"#;
+    let (stdout, stderr, code) = run_source(source);
+    assert_ne!(code, 0);
+    assert!(stderr.contains("boom"), "stderr: {stderr}");
+    let _ = stdout;
+}
+
+#[test]
 fn parallel_assignment_swaps_values() {
     let source = r#"
 fn main():

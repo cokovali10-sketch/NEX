@@ -2504,10 +2504,10 @@ impl<'a> Checker<'a> {
         }
 
         if callee == "assert" {
-            if args.len() != 1 {
+            if args.is_empty() || args.len() > 2 {
                 self.error(
                     "NXS004",
-                    format!("`assert` expects 1 argument, found {}", args.len()),
+                    format!("`assert` expects 1 or 2 arguments, found {}", args.len()),
                     span,
                 );
                 for arg in args {
@@ -2522,6 +2522,16 @@ impl<'a> Checker<'a> {
                     format!("`assert` expects `bool`, found `{arg_ty}`"),
                     args[0].span,
                 );
+            }
+            if let Some(message) = args.get(1) {
+                let message_ty = self.infer(message);
+                if message_ty != Type::String && message_ty != Type::Error {
+                    self.error(
+                        "NXS004",
+                        format!("`assert` message must be `string`, found `{message_ty}`"),
+                        message.span,
+                    );
+                }
             }
             return Type::Void;
         }

@@ -3106,10 +3106,15 @@ fn lower_expr(
                     else_bb: panic_bb,
                 });
                 builder.current = panic_bb;
+                let message = if args.len() == 2 {
+                    lower_expr(builder, &args[1], scopes, storage, analysis, Type::Error)?
+                } else {
+                    Operand::Const(Const::Str("assertion failed".to_string()))
+                };
                 builder.emit(Inst::Call {
                     dst: None,
                     name: "nex_rt_panic".to_string(),
-                    args: vec![Operand::Const(Const::Str("assertion failed".to_string()))],
+                    args: vec![message],
                     ret: IrType::Void,
                 });
                 builder.terminate(Terminator::Unreachable);
