@@ -27,17 +27,24 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - name: Install Clang (Ubuntu)
+      - name: Ensure Clang (Ubuntu)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y clang
+        run: |
+          if ! command -v clang >/dev/null 2>&1; then
+            for attempt in 1 2 3; do
+              sudo apt-get update && sudo apt-get install -y clang && break
+              sleep 15
+            done
+          fi
+          clang --version
       - name: Format
         run: cargo fmt --check
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Tests
         run: cargo test --workspace
-      - name: Build release binary
-        run: cargo build --release -p nex-cli
+      - name: Build release binaries
+        run: cargo build --release -p nex-cli -p nex-driver
       - name: Package (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -46,6 +53,7 @@ jobs:
           $name = "nex-$tag-windows-x86_64.zip"
           New-Item -ItemType Directory -Path dist -Force | Out-Null
           Copy-Item target/release/nex.exe dist/
+          Copy-Item target/release/nexc.exe dist/
           Copy-Item README.md, CHANGELOG.md, LICENSE, install.ps1 dist/
           Compress-Archive -Path dist/* -DestinationPath $name -Force
           $hash = (Get-FileHash $name -Algorithm SHA256).Hash.ToLower()
@@ -58,6 +66,7 @@ jobs:
           name="nex-${tag}-linux-x86_64.tar.gz"
           mkdir -p dist
           cp target/release/nex dist/
+          cp target/release/nexc dist/
           cp README.md CHANGELOG.md LICENSE install.sh dist/
           tar -czf "$name" -C dist .
           sha256sum "$name" > "$name.sha256"

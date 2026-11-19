@@ -17,9 +17,16 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - name: Install Clang (Ubuntu)
+      - name: Ensure Clang (Ubuntu)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y clang
+        run: |
+          if ! command -v clang >/dev/null 2>&1; then
+            for attempt in 1 2 3; do
+              sudo apt-get update && sudo apt-get install -y clang && break
+              sleep 15
+            done
+          fi
+          clang --version
       - name: Format
         run: cargo fmt --check
       - name: Clippy

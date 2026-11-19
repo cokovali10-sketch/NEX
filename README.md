@@ -10,7 +10,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/Rust-1.85%2B-orange.svg)](https://www.rust-lang.org/)
 [![LLVM](https://img.shields.io/badge/Backend-LLVM%20IR-blue.svg)](https://llvm.org/)
-[![Platform](https://img.shields.io/badge/Platform-Windows%20x86--64-lightgrey.svg)](#status)
+[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-lightgrey.svg)](#status)
 [![Release](https://img.shields.io/github/v/release/cokovali10-sketch/NEX?include_prereleases)](https://github.com/cokovali10-sketch/NEX/releases)
 
 *Readable syntax. Real native code. No interpreter. No VM.*
@@ -28,7 +28,7 @@ interoperability, and a professional toolchain.
 
 | | |
 |---|---|
-| **Native** | Compiles to a real Windows executable via LLVM IR + Clang. No bytecode, no interpreter, no VM. |
+| **Native** | Compiles to a real native executable via LLVM IR + Clang. No bytecode, no interpreter, no VM. |
 | **Honest** | The integration suite covers the compiler end to end; known gaps are documented, not hidden. |
 | **Readable** | Python-style indentation, static typing, clear error codes (`NXS007`, `NXP010`...). |
 | **Small core** | Std-only Rust workspace, minimal supply chain, no hidden dependencies. |

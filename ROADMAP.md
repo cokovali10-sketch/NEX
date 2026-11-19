@@ -81,22 +81,22 @@
 
 - [ ] Security testing.
 - [x] Performance benchmarks (`nex benchmark`).
-- [ ] Cross-platform CI.
+- [x] Cross-platform CI.
 - [x] Documentation completion.
 
-## NEX 1.0 - Stable Release
+## NEX 1.0 - Stable Release (v1.0.1)
 
 - [x] Stable language specification (see `specs/`).
 - [x] Stable compiler and runtime for the implemented feature set.
 - [x] Installer scripts (`install.ps1`, `install.sh`).
-- [ ] Published release binaries and archives.
-- [ ] Green CI at the release commit.
+- [x] Published release binaries and archives (Windows and Linux, with SHA-256 checksums).
+- [x] Release checks green at the `v1.0.1` tag (fmt, Clippy, tests on Windows and Ubuntu).
 - [ ] First stable integrations.
 
 ## Post-1.0 (planned)
 
 - Full ownership, borrowing and lifetime analysis.
-- Cross-platform CI matrix with green end-to-end runs.
+- Broader platform coverage (macOS, ARM64, cross-compilation).
 - NEX Studio (editor, project explorer, LSP integration).
 - Foreign adapters for Python and Rust.
 - Full debugger and sampling profiler integration.

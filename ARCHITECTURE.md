@@ -36,18 +36,22 @@ first lowered to `nex-ir`, which is independent of LLVM. This keeps the frontend
 portable and leaves room for future backends, optimization passes, and a stable
 debug representation.
 
-## Memory model in 0.2
+## Memory model in 1.0
 
-NEX 0.1 uses stack allocation and value semantics. Local variables are lowered to
-`alloca` instructions. There is no heap allocator, ownership checker, or garbage
-collector in this milestone. The memory model is specified in
-`specs/memory-model.md` and will be implemented incrementally.
+NEX uses stack allocation and value semantics for scalars, structs, fixed
+arrays, and tuples. Local variables are lowered to `alloca` instructions.
+Strings, growable arrays, maps, JSON trees, the string builder, and the thread
+pool are allocated through the C runtime heap (`malloc`/`realloc`). There is no
+ownership checker and no garbage collector, so heap values are not freed
+automatically. The model is documented in `specs/memory-model.md`.
 
 ## Runtime
 
-Generated programs link a small C runtime, `runtime/core/nex_rt.c`. In 0.1 it
-provides printing and panic support. The compiler embeds this source at build
-time, so the toolchain does not depend on an installed NEX runtime.
+Generated programs link a small C runtime, `runtime/core/nex_rt.c`. In 1.0 it
+provides printing and panic support, strings, files, blocking TCP/HTTP helpers,
+JSON, maps, threads and mutexes, a thread pool, a router, a string builder, time
+and math functions. The compiler embeds this source at build time, so the
+toolchain does not depend on an installed NEX runtime.
 
 ## Toolchain
 

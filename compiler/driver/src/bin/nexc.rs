@@ -5,6 +5,10 @@ use std::process::ExitCode;
 
 fn main() -> ExitCode {
     let args = std::env::args().skip(1).collect::<Vec<_>>();
+    if args.iter().any(|arg| arg == "--version" || arg == "-V") {
+        println!("nexc {}", env!("CARGO_PKG_VERSION"));
+        return ExitCode::SUCCESS;
+    }
     if args.is_empty() || args.iter().any(|arg| arg == "--help" || arg == "-h") {
         print_help();
         return ExitCode::SUCCESS;
@@ -12,6 +16,7 @@ fn main() -> ExitCode {
 
     let mut input: Option<PathBuf> = None;
     let mut output: Option<PathBuf> = None;
+    let mut target: Option<String> = None;
     let mut emit = Emit::Executable;
     let mut profile = Profile::Debug;
 
@@ -36,6 +41,17 @@ fn main() -> ExitCode {
                         return ExitCode::from(2);
                     }
                 };
+                index += 2;
+            }
+            "--target" => {
+                let value = match args.get(index + 1) {
+                    Some(value) => value.clone(),
+                    None => {
+                        eprintln!("nexc: `--target` requires a triple");
+                        return ExitCode::from(2);
+                    }
+                };
+                target = Some(value);
                 index += 2;
             }
             "--output" | "-o" => {
@@ -86,7 +102,7 @@ fn main() -> ExitCode {
         profile,
         output,
         build_dir: None,
-        target: None,
+        target,
     };
 
     match compile_file(&input, options) {
@@ -120,16 +136,19 @@ fn main() -> ExitCode {
 
 fn print_help() {
     println!(
-        "nexc 0.1.0\n\
+        "nexc {}\n\
          \n\
          Usage: nexc [options] <file.nex>\n\
          \n\
          Options:\n\
            -o, --output <path>   Write the requested artifact to this path\n\
            --emit <kind>         exe | obj | llvm-ir | check\n\
+           --target <triple>     Clang target triple\n\
            --debug               Debug build (default)\n\
            --release             Release build\n\
            --max                 Maximum optimization build\n\
-           -h, --help            Show this help"
+           --version, -V         Show version\n\
+           -h, --help            Show this help",
+        env!("CARGO_PKG_VERSION")
     );
 }
