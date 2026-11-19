@@ -9,6 +9,7 @@
 - `assert(condition, "message")` for assertion failures with a custom message.
 - `pop(array)` removes and returns the last element of a growable array.
 - `contains(array, value)` reports whether a value is present.
+- `index_of(array, value)` returns the first matching index, or `-1`.
 
 ## 1.0.1 (2026-11-19)
 

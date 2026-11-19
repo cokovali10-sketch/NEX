@@ -3843,6 +3843,45 @@ impl<'a> Checker<'a> {
             return Type::Bool;
         }
 
+        if callee == "index_of" {
+            if args.len() != 2 {
+                self.error(
+                    "NXS004",
+                    format!("`index_of` expects 2 arguments, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let array_ty = self.infer(&args[0]);
+            let elem_ty = match array_ty {
+                Type::Array { display, .. } | Type::DynArray(display) => self
+                    .analysis
+                    .array_info(display)
+                    .map(|info| info.elem)
+                    .unwrap_or(Type::Error),
+                _ => Type::Error,
+            };
+            let value_ty = self.infer(&args[1]);
+            if array_ty != Type::Error && elem_ty == Type::Error {
+                self.error(
+                    "NXS004",
+                    format!("`index_of` expects an array, found `{array_ty}`"),
+                    args[0].span,
+                );
+            }
+            if elem_ty != Type::Error && value_ty != Type::Error && elem_ty != value_ty {
+                self.error(
+                    "NXS004",
+                    format!("`index_of` expects `{elem_ty}`, found `{value_ty}`"),
+                    args[1].span,
+                );
+            }
+            return Type::I64;
+        }
+
         if callee == "push" {
             if args.len() != 2 {
                 self.error(

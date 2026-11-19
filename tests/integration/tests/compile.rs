@@ -1844,6 +1844,33 @@ fn main():
 }
 
 #[test]
+fn index_of_finds_position() {
+    let source = r#"
+struct Point:
+    x: i64
+    y: i64
+
+fn main():
+    let fixed: [i64; 4] = [1, 2, 3, 4]
+    print(index_of(fixed, 3))
+    print(index_of(fixed, 9))
+
+    var growable: [string] = []
+    push(growable, "a")
+    push(growable, "b")
+    print(index_of(growable, "b"))
+    print(index_of(growable, "z"))
+
+    let points: [Point; 2] = [Point(1, 2), Point(3, 4)]
+    print(index_of(points, Point(3, 4)))
+    print(index_of(points, Point(9, 9)))
+"#;
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "2-11-11-1");
+}
+
+#[test]
 fn parallel_assignment_swaps_values() {
     let source = r#"
 fn main():

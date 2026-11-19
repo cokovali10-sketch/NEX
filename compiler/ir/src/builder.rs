@@ -3229,6 +3229,200 @@ fn lower_expr(
                 return Ok(Operand::Value(result));
             }
 
+            if callee == "index_of" {
+                if args.len() != 2 {
+                    return Err("`index_of` expects 2 arguments".to_string());
+                }
+                let array_ty = analysis.expr_type(args[0].span).unwrap_or(Type::Error);
+                let (base_ptr, len_operand, array_type, elem_ty, is_dyn) = match array_ty {
+                    Type::Array { display, llvm, .. } => {
+                        let info = analysis
+                            .array_info(display)
+                            .ok_or_else(|| "missing array type information".to_string())?;
+                        let base = lower_array_place(builder, &args[0], scopes, storage, analysis)?;
+                        (
+                            base,
+                            Operand::Const(Const::Int(info.len as i64)),
+                            llvm,
+                            info.elem,
+                            false,
+                        )
+                    }
+                    Type::DynArray(display) => {
+                        let info = analysis
+                            .array_info(display)
+                            .ok_or_else(|| "missing array type information".to_string())?;
+                        let header_operand =
+                            lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
+                        let header = operand_value_id(builder, header_operand)?;
+                        let data_slot = field_ptr(builder, header, 0, IrType::String);
+                        let data = builder.new_value();
+                        builder.emit(Inst::Load {
+                            dst: data,
+                            ptr: data_slot,
+                            ty: IrType::String,
+                        });
+                        let len_slot = field_ptr(builder, header, 1, IrType::I64);
+                        let len_value = builder.new_value();
+                        builder.emit(Inst::Load {
+                            dst: len_value,
+                            ptr: len_slot,
+                            ty: IrType::I64,
+                        });
+                        (data, Operand::Value(len_value), "", info.elem, true)
+                    }
+                    _ => return Err("`index_of` expects an array".to_string()),
+                };
+                let elem_ir = IrType::from_type(elem_ty);
+                let value_place = if matches!(elem_ty, Type::Struct(_)) {
+                    Some(lower_struct_place(
+                        builder, &args[1], scopes, storage, analysis,
+                    )?)
+                } else {
+                    None
+                };
+                let result_slot = builder.alloca_at_entry(IrType::I64);
+                builder.emit(Inst::Store {
+                    ptr: result_slot,
+                    value: Operand::Const(Const::Int(-1)),
+                    ty: IrType::I64,
+                });
+                let index_slot = builder.alloca_at_entry(IrType::I64);
+                builder.emit(Inst::Store {
+                    ptr: index_slot,
+                    value: Operand::Const(Const::Int(0)),
+                    ty: IrType::I64,
+                });
+
+                let cond_bb = builder.new_block();
+                let body_bb = builder.new_block();
+                let exit_bb = builder.new_block();
+
+                builder.terminate(Terminator::Br(cond_bb));
+                builder.current = cond_bb;
+                let index_value = {
+                    let dst = builder.new_value();
+                    builder.emit(Inst::Load {
+                        dst,
+                        ptr: index_slot,
+                        ty: IrType::I64,
+                    });
+                    dst
+                };
+                let cmp = builder.new_value();
+                builder.emit(Inst::Bin {
+                    dst: cmp,
+                    op: BinOp::Lt,
+                    ty: IrType::I64,
+                    lhs: Operand::Value(index_value),
+                    rhs: len_operand.clone(),
+                });
+                builder.terminate(Terminator::CondBr {
+                    cond: Operand::Value(cmp),
+                    then_bb: body_bb,
+                    else_bb: exit_bb,
+                });
+
+                builder.current = body_bb;
+                let elem_ptr = builder.new_value();
+                if is_dyn {
+                    builder.emit(Inst::DynIndexPtr {
+                        dst: elem_ptr,
+                        base: base_ptr,
+                        index: Operand::Value(index_value),
+                        elem_ty: elem_ir,
+                    });
+                } else {
+                    builder.emit(Inst::IndexPtr {
+                        dst: elem_ptr,
+                        base: base_ptr,
+                        array_type,
+                        index: Operand::Value(index_value),
+                        elem_ty: elem_ir,
+                    });
+                }
+                let equal = if let Some(rhs_place) = value_place {
+                    lower_place_equality(builder, elem_ptr, rhs_place, elem_ty, analysis)?
+                } else {
+                    let lhs = {
+                        let dst = builder.new_value();
+                        builder.emit(Inst::Load {
+                            dst,
+                            ptr: elem_ptr,
+                            ty: elem_ir,
+                        });
+                        dst
+                    };
+                    let rhs = lower_expr(builder, &args[1], scopes, storage, analysis, elem_ty)?;
+                    let dst = builder.new_value();
+                    builder.emit(Inst::Bin {
+                        dst,
+                        op: BinOp::Eq,
+                        ty: elem_ir,
+                        lhs: Operand::Value(lhs),
+                        rhs,
+                    });
+                    Operand::Value(dst)
+                };
+                let equal_bool = match equal {
+                    Operand::Value(v) => v,
+                    other => {
+                        let slot = builder.alloca_at_entry(IrType::Bool);
+                        builder.emit(Inst::Store {
+                            ptr: slot,
+                            value: other,
+                            ty: IrType::Bool,
+                        });
+                        let loaded = builder.new_value();
+                        builder.emit(Inst::Load {
+                            dst: loaded,
+                            ptr: slot,
+                            ty: IrType::Bool,
+                        });
+                        loaded
+                    }
+                };
+                let then_bb = builder.new_block();
+                let cont_bb = builder.new_block();
+                builder.terminate(Terminator::CondBr {
+                    cond: Operand::Value(equal_bool),
+                    then_bb,
+                    else_bb: cont_bb,
+                });
+                builder.current = then_bb;
+                builder.emit(Inst::Store {
+                    ptr: result_slot,
+                    value: Operand::Value(index_value),
+                    ty: IrType::I64,
+                });
+                builder.terminate(Terminator::Br(exit_bb));
+                builder.current = cont_bb;
+
+                let next = builder.new_value();
+                builder.emit(Inst::Bin {
+                    dst: next,
+                    op: BinOp::Add,
+                    ty: IrType::I64,
+                    lhs: Operand::Value(index_value),
+                    rhs: Operand::Const(Const::Int(1)),
+                });
+                builder.emit(Inst::Store {
+                    ptr: index_slot,
+                    value: Operand::Value(next),
+                    ty: IrType::I64,
+                });
+                builder.terminate(Terminator::Br(cond_bb));
+
+                builder.current = exit_bb;
+                let result = builder.new_value();
+                builder.emit(Inst::Load {
+                    dst: result,
+                    ptr: result_slot,
+                    ty: IrType::I64,
+                });
+                return Ok(Operand::Value(result));
+            }
+
             if callee == "push" {
                 if args.len() != 2 {
                     return Err("`push` expects 2 arguments".to_string());
