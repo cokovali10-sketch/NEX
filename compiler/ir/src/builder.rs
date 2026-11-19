@@ -206,6 +206,7 @@ pub fn build(program: &Program, analysis: &Analysis) -> Result<IrModule, String>
             storage.insert(span, (ptr, ir_ty));
         }
 
+        let mut deferred: Vec<(ValueId, Block)> = Vec::new();
         scopes.push(HashMap::new());
         lower_stmts(
             &mut builder,
@@ -213,10 +214,12 @@ pub fn build(program: &Program, analysis: &Analysis) -> Result<IrModule, String>
             &mut scopes,
             &storage,
             analysis,
+            &mut deferred,
         )?;
         scopes.pop();
 
         if !builder.current_terminated() {
+            lower_deferred(&mut builder, &deferred, &mut scopes, &storage, analysis)?;
             if ret == IrType::Void {
                 builder.terminate(Terminator::Ret(None));
             } else {
@@ -270,6 +273,9 @@ fn collect_locals(
             StmtKind::Unsafe(block) => {
                 collect_locals(block, analysis, out);
             }
+            StmtKind::Defer(block) => {
+                collect_locals(block, analysis, out);
+            }
             _ => {}
         }
     }
@@ -281,12 +287,16 @@ fn lower_stmts(
     scopes: &mut Vec<HashMap<String, Slot>>,
     storage: &HashMap<nex_diagnostics::Span, (ValueId, IrType)>,
     analysis: &Analysis,
+    deferred: &mut Vec<(ValueId, Block)>,
 ) -> Result<(), String> {
     for statement in statements {
         if builder.current_terminated() {
             break;
         }
-        lower_statement(builder, statement, scopes, storage, analysis)?;
+        lower_statement(builder, statement, scopes, storage, analysis, deferred)?;
+    }
+    if !builder.current_terminated() {
+        lower_deferred(builder, deferred, scopes, storage, analysis)?;
     }
     Ok(())
 }
@@ -297,6 +307,7 @@ fn lower_statement(
     scopes: &mut Vec<HashMap<String, Slot>>,
     storage: &HashMap<nex_diagnostics::Span, (ValueId, IrType)>,
     analysis: &Analysis,
+    deferred: &mut Vec<(ValueId, Block)>,
 ) -> Result<(), String> {
     match &statement.kind {
         StmtKind::Let {
@@ -531,19 +542,36 @@ fn lower_statement(
         StmtKind::If {
             branches,
             else_branch,
-        } => lower_if(builder, branches, else_branch, scopes, storage, analysis),
+        } => lower_if(
+            builder,
+            branches,
+            else_branch,
+            scopes,
+            storage,
+            analysis,
+            deferred,
+        ),
         StmtKind::While { cond, body } => {
-            lower_while(builder, cond, body, scopes, storage, analysis)
+            lower_while(builder, cond, body, scopes, storage, analysis, deferred)
         }
         StmtKind::For {
             var,
             start,
             end,
             body,
-        } => lower_for(builder, var, (start, end), body, scopes, storage, analysis),
-        StmtKind::Match { scrutinee, arms } => {
-            lower_match(builder, scrutinee, arms, scopes, storage, analysis)
-        }
+        } => lower_for(
+            builder,
+            var,
+            (start, end),
+            body,
+            scopes,
+            storage,
+            analysis,
+            deferred,
+        ),
+        StmtKind::Match { scrutinee, arms } => lower_match(
+            builder, scrutinee, arms, scopes, storage, analysis, deferred,
+        ),
         StmtKind::AssignIndex { base, index, value } => {
             let slot = lookup_slot(scopes, base)
                 .ok_or_else(|| format!("unknown variable `{base}` during code generation"))?;
@@ -609,8 +637,10 @@ fn lower_statement(
         StmtKind::Return(value) => {
             if let Some(value) = value {
                 let operand = lower_expr(builder, value, scopes, storage, analysis, Type::Error)?;
+                lower_deferred(builder, deferred, scopes, storage, analysis)?;
                 builder.terminate(Terminator::Ret(Some(operand)));
             } else {
+                lower_deferred(builder, deferred, scopes, storage, analysis)?;
                 builder.terminate(Terminator::Ret(None));
             }
             Ok(())
@@ -625,7 +655,24 @@ fn lower_statement(
             Ok(())
         }
         StmtKind::Pass => Ok(()),
-        StmtKind::Unsafe(block) => lower_stmts(builder, &block.stmts, scopes, storage, analysis),
+        StmtKind::Unsafe(block) => {
+            lower_stmts(builder, &block.stmts, scopes, storage, analysis, deferred)
+        }
+        StmtKind::Defer(block) => {
+            let flag = builder.alloca_at_entry(IrType::Bool);
+            builder.emit(Inst::Store {
+                ptr: flag,
+                value: Operand::Const(Const::Bool(false)),
+                ty: IrType::Bool,
+            });
+            deferred.push((flag, block.clone()));
+            builder.emit(Inst::Store {
+                ptr: flag,
+                value: Operand::Const(Const::Bool(true)),
+                ty: IrType::Bool,
+            });
+            Ok(())
+        }
         StmtKind::Continue => {
             let (_, continue_bb) = builder
                 .loop_stack
@@ -649,6 +696,7 @@ fn lower_if(
     scopes: &mut Vec<HashMap<String, Slot>>,
     storage: &HashMap<nex_diagnostics::Span, (ValueId, IrType)>,
     analysis: &Analysis,
+    deferred: &mut Vec<(ValueId, Block)>,
 ) -> Result<(), String> {
     let merge = builder.new_block();
     let mut merge_reachable = else_branch.is_none();
@@ -667,7 +715,7 @@ fn lower_if(
 
         builder.current = body_bb;
         scopes.push(HashMap::new());
-        lower_stmts(builder, &body.stmts, scopes, storage, analysis)?;
+        lower_stmts(builder, &body.stmts, scopes, storage, analysis, deferred)?;
         scopes.pop();
         if !builder.current_terminated() {
             merge_reachable = true;
@@ -682,7 +730,7 @@ fn lower_if(
 
     if let Some(body) = else_branch {
         scopes.push(HashMap::new());
-        lower_stmts(builder, &body.stmts, scopes, storage, analysis)?;
+        lower_stmts(builder, &body.stmts, scopes, storage, analysis, deferred)?;
         scopes.pop();
         if !builder.current_terminated() {
             merge_reachable = true;
@@ -709,6 +757,7 @@ fn lower_while(
     scopes: &mut Vec<HashMap<String, Slot>>,
     storage: &HashMap<nex_diagnostics::Span, (ValueId, IrType)>,
     analysis: &Analysis,
+    deferred: &mut Vec<(ValueId, Block)>,
 ) -> Result<(), String> {
     let cond_bb = builder.new_block();
     let body_bb = builder.new_block();
@@ -726,7 +775,7 @@ fn lower_while(
     builder.current = body_bb;
     builder.loop_stack.push((exit_bb, cond_bb));
     scopes.push(HashMap::new());
-    lower_stmts(builder, &body.stmts, scopes, storage, analysis)?;
+    lower_stmts(builder, &body.stmts, scopes, storage, analysis, deferred)?;
     scopes.pop();
     builder.loop_stack.pop();
     if !builder.current_terminated() {
@@ -740,6 +789,7 @@ fn lower_while(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn lower_for(
     builder: &mut FunctionBuilder,
     var: &str,
@@ -748,6 +798,7 @@ fn lower_for(
     scopes: &mut Vec<HashMap<String, Slot>>,
     storage: &HashMap<nex_diagnostics::Span, (ValueId, IrType)>,
     analysis: &Analysis,
+    deferred: &mut Vec<(ValueId, Block)>,
 ) -> Result<(), String> {
     let (start, end) = range;
     let start_val = lower_expr(builder, start, scopes, storage, analysis, Type::Error)?;
@@ -806,7 +857,7 @@ fn lower_for(
             },
         );
     }
-    lower_stmts(builder, &body.stmts, scopes, storage, analysis)?;
+    lower_stmts(builder, &body.stmts, scopes, storage, analysis, deferred)?;
     scopes.pop();
     builder.loop_stack.pop();
 
@@ -1474,6 +1525,7 @@ fn lower_match(
     scopes: &mut Vec<HashMap<String, Slot>>,
     storage: &HashMap<nex_diagnostics::Span, (ValueId, IrType)>,
     analysis: &Analysis,
+    deferred: &mut Vec<(ValueId, Block)>,
 ) -> Result<(), String> {
     let scrut = lower_expr(builder, scrutinee, scopes, storage, analysis, Type::Error)?;
     let merge_bb = builder.new_block();
@@ -1494,7 +1546,14 @@ fn lower_match(
                 builder.terminate(Terminator::Br(body_bb));
                 builder.current = body_bb;
                 scopes.push(HashMap::new());
-                lower_stmts(builder, &arm.body.stmts, scopes, storage, analysis)?;
+                lower_stmts(
+                    builder,
+                    &arm.body.stmts,
+                    scopes,
+                    storage,
+                    analysis,
+                    deferred,
+                )?;
                 scopes.pop();
                 if !builder.current_terminated() {
                     merge_reachable = true;
@@ -1630,7 +1689,14 @@ fn lower_match(
 
                 builder.current = body_bb;
                 scopes.push(HashMap::new());
-                lower_stmts(builder, &arm.body.stmts, scopes, storage, analysis)?;
+                lower_stmts(
+                    builder,
+                    &arm.body.stmts,
+                    scopes,
+                    storage,
+                    analysis,
+                    deferred,
+                )?;
                 scopes.pop();
                 if !builder.current_terminated() {
                     merge_reachable = true;
@@ -4662,6 +4728,47 @@ fn lower_default_value(
         Type::Error => Ok(Operand::Const(Const::Int(0))),
         _ => Err(format!("cannot create a default value for `{ty}`")),
     }
+}
+
+fn lower_deferred(
+    builder: &mut FunctionBuilder,
+    deferred: &[(ValueId, Block)],
+    scopes: &mut Vec<HashMap<String, Slot>>,
+    storage: &HashMap<nex_diagnostics::Span, (ValueId, IrType)>,
+    analysis: &Analysis,
+) -> Result<(), String> {
+    for (flag, block) in deferred.iter().rev() {
+        let cond = {
+            let dst = builder.new_value();
+            builder.emit(Inst::Load {
+                dst,
+                ptr: *flag,
+                ty: IrType::Bool,
+            });
+            dst
+        };
+        let run_bb = builder.new_block();
+        let skip_bb = builder.new_block();
+        builder.terminate(Terminator::CondBr {
+            cond: Operand::Value(cond),
+            then_bb: run_bb,
+            else_bb: skip_bb,
+        });
+        builder.current = run_bb;
+        lower_stmts(
+            builder,
+            &block.stmts,
+            scopes,
+            storage,
+            analysis,
+            &mut Vec::new(),
+        )?;
+        if !builder.current_terminated() {
+            builder.terminate(Terminator::Br(skip_bb));
+        }
+        builder.current = skip_bb;
+    }
+    Ok(())
 }
 
 fn lower_and(

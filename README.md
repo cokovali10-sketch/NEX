@@ -57,7 +57,7 @@ runtime (`runtime/core/nex_rt.c`) — not a hidden language runtime.
   static dispatch, generics via monomorphization (including type annotations
   such as `Box<i64>`), type aliases, modules and
   file imports, f-strings, string indexing/slicing, bitwise operators,
-  `unsafe:` blocks, external C calls, error propagation with `?`, and printing.
+  `unsafe:` blocks, external C calls, error propagation with `?`, `defer`, and printing.
 - Runtime: string helpers, files, blocking TCP and HTTP helpers, JSON, maps,
   threads/mutexes, a thread pool, a router, a string builder, time and math
   functions (see `docs/standard-library.md`).

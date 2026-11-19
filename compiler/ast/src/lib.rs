@@ -214,6 +214,8 @@ pub enum StmtKind {
     /// `unsafe:` block. NEX treats the body like a normal block; the
     /// keyword documents intent and is reserved for future checks.
     Unsafe(Block),
+    /// `defer:` block. The body runs at function exit.
+    Defer(Block),
     Expr(Expr),
 }
 

@@ -1315,6 +1315,15 @@ impl<'a> Parser<'a> {
                     span,
                 })
             }
+            TokenKind::Defer => {
+                let start = self.advance().span;
+                let body = self.parse_block();
+                let span = start.merge(body.span);
+                Some(Stmt {
+                    kind: StmtKind::Defer(body),
+                    span,
+                })
+            }
             TokenKind::Semicolon => {
                 let token = self.advance();
                 self.error(

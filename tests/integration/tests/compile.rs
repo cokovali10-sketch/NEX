@@ -1938,6 +1938,27 @@ fn main():
 }
 
 #[test]
+fn defer_runs_at_function_exit() {
+    let source = r#"
+fn maybe(flag: bool):
+    if flag:
+        defer:
+            print("defer-in-if")
+        print("in-if")
+        return
+    print("after-if")
+
+fn main():
+    maybe(true)
+    print("|")
+    maybe(false)
+"#;
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "in-ifdefer-in-if|after-if");
+}
+
+#[test]
 fn parallel_assignment_swaps_values() {
     let source = r#"
 fn main():

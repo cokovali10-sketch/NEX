@@ -1710,6 +1710,11 @@ impl<'a> Checker<'a> {
                 self.check_block(block, false);
                 self.scopes.pop();
             }
+            StmtKind::Defer(block) => {
+                self.scopes.push(HashMap::new());
+                self.check_block(block, false);
+                self.scopes.pop();
+            }
             StmtKind::Break | StmtKind::Continue => {
                 if self.loop_depth == 0 {
                     let keyword = match statement.kind {

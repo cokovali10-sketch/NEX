@@ -12,6 +12,7 @@
 - `index_of(array, value)` returns the first matching index, or `-1`.
 - `expr?` propagates `None`/`Err` from `Option`/`Result`-shaped structs.
 - Generic type arguments in type annotations (`Box<i64>`).
+- `defer:` blocks run at function exit, in reverse order, only when reached.
 
 ## 1.0.1 (2026-11-19)
 

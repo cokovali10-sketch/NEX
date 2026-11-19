@@ -488,6 +488,12 @@ impl<'a> Printer<'a> {
                 self.block(block);
                 self.indent -= 1;
             }
+            StmtKind::Defer(block) => {
+                self.push("defer:".to_string());
+                self.indent += 1;
+                self.block(block);
+                self.indent -= 1;
+            }
             StmtKind::Pass => self.push("pass"),
             StmtKind::Break => self.push("break"),
             StmtKind::Continue => self.push("continue"),

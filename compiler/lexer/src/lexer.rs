@@ -229,6 +229,7 @@ impl<'a> Lexer<'a> {
             "match" => TokenKind::Match,
             "extern" => TokenKind::Extern,
             "unsafe" => TokenKind::Unsafe,
+            "defer" => TokenKind::Defer,
             "type" => TokenKind::Type,
             "module" => TokenKind::Module,
             "use" => TokenKind::Use,
