@@ -26,6 +26,7 @@ planned and are not yet implemented.
 - `while`.
 - `for ... in ... .. ...`.
 - `for x in array` iteration over fixed and growable arrays.
+- Error propagation with `?` on `Option`/`Result`-shaped structs.
 - `return`, `break`, `continue`.
 - Function calls.
 - Built-in `print` and `println`.

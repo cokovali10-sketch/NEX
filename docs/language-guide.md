@@ -77,7 +77,36 @@ fn main():
 Assigning one name to another copies the header, so both names see the same
 elements; see `docs/memory-model.md`.
 
-## Global variables
+## Error propagation
+
+`?` works on structs shaped like `Option` or `Result`:
+
+```nex
+struct OptionInt:
+    has: bool
+    value: i64
+
+struct ResultIntStr:
+    ok: bool
+    value: i64
+    error: string
+
+fn find(xs: [i64], target: i64) -> OptionInt:
+    for x in xs:
+        if x == target:
+            return OptionInt(true, x)
+    return OptionInt(false, 0)
+
+fn use_option(target: i64) -> OptionInt:
+    let xs: [i64] = [1, 2, 3]
+    let found = find(xs, target)?
+    return OptionInt(true, found + 10)
+```
+
+`expr?` returns the inner value on success and returns early from the
+function on `None`/`Err`. The function must return the same Option/Result
+shape.
+
 
 A `var` at the top level is a module-level binding. Globals are shared by every
 function and every thread, which is what makes shared state possible:
