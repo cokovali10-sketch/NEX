@@ -119,15 +119,10 @@ fn read_message(mut reader: impl BufRead) -> Option<Incoming> {
 impl Server {
     fn write_response(&mut self, response: &Value) -> bool {
         let body = response.to_string();
-        if self
-            .writer
+        self.writer
             .write_all(format!("Content-Length: {}\r\n\r\n{body}", body.len()).as_bytes())
             .and_then(|()| self.writer.flush())
-            .is_err()
-        {
-            return false;
-        }
-        true
+            .is_ok()
     }
 
     fn send_notification(&mut self, method: &str, params: Value) -> bool {
