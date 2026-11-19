@@ -2218,6 +2218,10 @@ impl<'a> Parser<'a> {
 
     fn expect_line_end(&mut self) {
         if self.eat(&TokenKind::Newline) {
+            // Allow blank lines (and comment-only lines) between a `:` and
+            // the indented block it introduces. The lexer emits a `Newline`
+            // for comment-only lines, so eat them here too.
+            while self.eat(&TokenKind::Newline) {}
             return;
         }
         if matches!(self.peek(), TokenKind::Dedent | TokenKind::Eof) {

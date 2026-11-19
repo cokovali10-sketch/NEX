@@ -1977,6 +1977,35 @@ fn main():
 }
 
 #[test]
+fn comments_immediately_after_block_colon_are_legal() {
+    let source = r#"
+fn helper() -> i64:
+    # a comment as the first line of the body
+    return 42
+
+fn main():
+    # another comment first
+    var value = helper()
+    print(value)
+"#;
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "42");
+}
+
+#[test]
+fn blank_line_immediately_after_block_colon_is_legal() {
+    let source = r#"
+fn main():
+
+    print("ok")
+"#;
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "ok");
+}
+
+#[test]
 fn parallel_assignment_swaps_values() {
     let source = r#"
 fn main():
