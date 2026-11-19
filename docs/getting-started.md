@@ -91,3 +91,5 @@ including `for` iteration and element assignment.
 - [CLI reference](cli-reference.md)
 - [Language specification](../specs/language.md)
 - [Examples](../examples)
+- [For AI agents](for-ai.md)
+- [Language server](language-server.md)

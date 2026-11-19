@@ -90,3 +90,21 @@ Review the code just written:
 - The server example is deliberately one request per connection: keep-alive
   needs a socket read timeout first, otherwise pool workers block on idle
   connections. Do not re-enable keep-alive without `tcp_set_timeout`.
+
+## Writing NEX code (not just the compiler)
+
+If your task involves writing or reviewing NEX *programs* (examples, tools,
+tests in `.nex`, user-facing code), not only the Rust toolchain:
+
+- Read `docs/for-ai.md` first. It is the self-contained language reference:
+  workflow, syntax, builtin list, error codes, and a full ambitious example.
+  Do not improvise the language from memory.
+- The builtins in `docs/standard-library.md` are exhaustive; do not invent
+  functions. If a name is not there, NEX does not have it.
+- `nex check --json <path>` prints machine-readable diagnostics (exit 0 means
+  clean) for automated fixing loops.
+- `nex lsp` provides the same compiler as a Language Server over stdio
+  (hover, go-to-definition, completion, document symbols, formatting, live
+  diagnostics); see `docs/language-server.md`.
+- `examples/kv_store` is a complete JSON HTTP key-value service verified
+  end-to-end; use it as the template for ambitious, networked projects.

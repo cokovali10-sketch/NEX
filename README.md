@@ -63,7 +63,9 @@ runtime (`runtime/core/nex_rt.c`) — not a hidden language runtime.
   functions (see `docs/standard-library.md`).
 - Not implemented yet: ownership, borrowing and lifetime checking; async/await;
   the full standard library (collections, crypto, process, logging); a package
-  registry; LSP/NEX Studio; Python and Rust adapters. `nex debug` and
+  registry; Python and Rust adapters; NEX Studio. `nex lsp` is a built-in
+  language server (hover, go-to-definition, completion, document symbols,
+  formatting, live diagnostics). `nex debug` and
   `nex profile` build a debug/release executable and run it; they are not a
   full debugger or profiler.
 - Platform support: Windows x86-64 is the primary tested host. CI also builds
@@ -151,6 +153,21 @@ NEX/
   studio/        Reserved for NEX Studio
 ```
 
+## Using NEX from an AI agent
+
+NEX is designed so that any AI (not just humans) can read, write, verify and
+ship NEX programs without guessing:
+
+- `docs/for-ai.md` — a single self-contained language reference for agents:
+  workflow, syntax, all builtins, error codes, and a full annotated example.
+- `AGENTS.md` — repository guide for agents (verification loop, layout,
+  honest status).
+- `nex check --json` — machine-readable diagnostics for automated fixing.
+- `nex lsp` — a Language Server over stdio (hover, go-to-definition,
+  completion, document symbols, formatting, live diagnostics).
+- `examples/kv_store` — a complete, verified JSON HTTP key-value service for
+  ambitious programs.
+
 ## Documentation
 
 - [Architecture](ARCHITECTURE.md)
@@ -163,6 +180,8 @@ NEX/
 - [Type system](specs/types.md)
 - [Memory model](specs/memory-model.md)
 - [Compiler architecture](specs/compiler.md)
+- [For AI agents](docs/for-ai.md)
+- [Language server](docs/language-server.md)
 
 ## Design principles
 

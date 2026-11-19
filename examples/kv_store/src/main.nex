@@ -1,0 +1,118 @@
+# kv_store: a small JSON HTTP key-value service written in NEX.
+#
+#   GET  /kv/health                -> 200 {"status":"ok"}
+#   POST /kv/set   {"key":"a","value":"1"}  -> 200 {"stored":true}
+#   GET  /kv/get/<key>             -> 200 {"value":"..."} or 404
+#
+# It uses the built-in router, a read-only JSON DOM, a mutex-guarded
+# string map and a worker pool. Every feature used here is implemented
+# in the runtime and exercised by the integration suite.
+
+var router = 0
+var store = 0
+var lock = 0
+var pool = 0
+
+fn respond(status: string, body: string) -> string:
+    return http_response(status, "application/json; charset=utf-8", body)
+
+fn read_request(client: i64) -> string:
+    # Reads until the request head is complete, plus any declared body bytes.
+    var request = ""
+
+    while true:
+        var chunk = tcp_read(client, 4096)
+        if len(chunk) == 0:
+            return request
+
+        request = concat(request, chunk)
+
+        if not str_contains(request, "\r\n\r\n"):
+            continue
+
+        var declared = parse_i64(http_header(request, "content-length"))
+        if declared <= 0:
+            return request
+
+        var have = len(http_body(request))
+        while have < declared:
+            var more = tcp_read(client, 4096)
+            if len(more) == 0:
+                return request
+            request = concat(request, more)
+            have = have + len(more)
+        return request
+
+fn dispatch(request: string) -> string:
+    var route = router_match(router, http_method(request), http_path(request))
+
+    if route == 1:
+        return respond("200 OK", "{\"status\":\"ok\"}")
+
+    if route == 2:
+        var doc = json_parse(http_body(request))
+        if doc == 0:
+            return respond("400 Bad Request", "{\"error\":\"invalid JSON body\"}")
+        var key = json_str(json_get(doc, "key"))
+        if len(key) == 0:
+            return respond("400 Bad Request", "{\"error\":\"missing `key`\"}")
+        var value = json_str(json_get(doc, "value"))
+        mutex_lock(lock)
+        map_set(store, key, value)
+        mutex_unlock(lock)
+        return respond("200 OK", "{\"stored\":true}")
+
+    if route == 3:
+        var key = router_param(router, "key")
+        mutex_lock(lock)
+        var found = map_has(store, key)
+        var value = map_get(store, key)
+        mutex_unlock(lock)
+        if not found:
+            return respond("404 Not Found", "{\"error\":\"key not found\"}")
+        return respond("200 OK", concat("{\"value\":", concat(json_quote(value), "}")))
+
+    if route == -1:
+        return respond("405 Method Not Allowed", "{\"error\":\"method not allowed\"}")
+
+    return respond("404 Not Found", "{\"error\":\"not found\"}")
+
+fn serve(client: i64):
+    tcp_set_timeout(client, 1000)
+
+    var request = read_request(client)
+    if len(request) == 0:
+        tcp_close(client)
+        return
+
+    var response = dispatch(request)
+    tcp_write(client, response, len(response))
+    tcp_close(client)
+
+fn main():
+    router = router_new()
+    router_add(router, "GET", "/kv/health")
+    router_add(router, "POST", "/kv/set")
+    router_add(router, "GET", "/kv/get/:key")
+
+    store = map_new()
+    lock = mutex_new()
+
+    var server = tcp_listen(8080, 128)
+    if server < 0:
+        print("failed to listen on 8080")
+        return
+
+    pool = pool_new(4, 64)
+    if pool == 0:
+        print("failed to create the worker pool")
+        tcp_close(server)
+        return
+
+    print("NEX kv_store on http://127.0.0.1:8080")
+
+    while true:
+        var client = tcp_accept(server)
+        if client < 0:
+            continue
+        pool_submit(pool, "serve", client)

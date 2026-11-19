@@ -7,7 +7,10 @@
 - `nex build [path]`: build a project (`--release`, `--max`, `--debug`,
   `--target <triple>`, `--emit exe|obj|llvm-ir|check`).
 - `nex run [path] [-- args]`: build and run.
-- `nex check [path]`: type-check without producing an executable.
+- `nex check [path]`: type-check without producing an executable. `nex check
+  --json [file.nex|project]` prints diagnostics as JSON for tooling and AI
+  agents; `nex check` without `--json` prints the human-readable diagnostic
+  report. A bare `.nex` file can be checked in isolation, outside any project.
 - `nex test [path]`: compile and run every `.nex` file in `tests/`.
 - `nex clean [path]`: remove `build/`.
 - `nex doctor [path] [--target <triple>]`: check the toolchain, target, and a
@@ -22,6 +25,11 @@
   a convenience wrapper; it does not attach a debugger.
 - `nex profile [path]`: build with `--release`, run once, and print wall-clock
   time. This is not a sampling profiler.
+- `nex lsp`: start a language server over stdio (`initialize`,
+  `textDocument/didOpen|didChange|didSave`, `textDocument/hover`,
+  `textDocument/definition`, `textDocument/completion`,
+  `textDocument/documentSymbol`, `textDocument/formatting`,
+  `textDocument/publishDiagnostics`). See `docs/language-server.md`.
 
 ### `nex fmt`
 

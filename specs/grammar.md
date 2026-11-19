@@ -47,6 +47,7 @@ statement      := let_stmt
                 | for_stmt
                 | match_stmt
                 | unsafe_stmt
+                | defer_stmt
                 | return_stmt
                 | break_stmt
                 | continue_stmt
@@ -72,6 +73,7 @@ match_arm      := "case" pattern [ "if" expression ] ":" block
 pattern        := literal [ ".." literal ] | IDENT
 
 unsafe_stmt    := "unsafe" ":" block
+defer_stmt     := "defer" ":" block
 return_stmt    := "return" [ expression ] NEWLINE
 break_stmt     := "break" NEWLINE
 continue_stmt  := "continue" NEWLINE
@@ -95,7 +97,8 @@ additive       := multiplicative { ( "+" | "-" ) multiplicative }
 multiplicative := cast { ( "*" | "/" | "%" ) cast }
 cast           := unary { "as" type }
 unary          := ( "-" | "not" | "!" | "~" ) unary | postfix
-postfix        := primary { "(" [ arguments ] ")" | "." IDENT | "[" slice "]" }
+postfix        := primary { "(" [ arguments ] ")" | "." IDENT
+                          | "[" slice "]" | "?" }
 slice          := [ expression ] [ ".." [ expression ] ]
 arguments      := expression { "," expression } [ "," ]
 
@@ -106,7 +109,10 @@ primary        := INT | FLOAT | STRING | "f" STRING | CHAR
                 | "(" expression ")"
                 | IDENT "(" [ arguments ] ")"
 
-type           := IDENT
+type           := array_type | tuple_type | named_type
+array_type     := "[" type [ ";" INT ] "]"
+tuple_type     := "(" type { "," type } [ "," ] ")"
+named_type     := IDENT [ "<" type { "," type } ">" ]
 literal        := INT | FLOAT | STRING | CHAR | "true" | "false"
 ```
 
@@ -114,8 +120,13 @@ Notes:
 
 - `for x in collection` and `for i in start..end` share the same statement;
   the first form is lowered to an indexed loop plus an element binding.
-- Generic type arguments in type positions (`Box<i64>`) are not accepted yet.
-  Generic calls and constructors infer their type arguments, e.g. `Box(42)`.
+- Generic type arguments in type positions are accepted, e.g. `Box<i64>` and
+  `Option<Result<i64, string>, string>`. Generic calls and constructors
+  infer their type arguments, e.g. `Box(42)`.
+- `expr?` propagates `None`/`Err` by returning early from the enclosing
+  function; the function must return the same `Option`/`Result` shape.
+- `defer:` blocks run at function exit in reverse order of declaration,
+  but only along paths that actually reach them.
 - `pattern` covers literals, inclusive ranges, booleans, characters, strings,
   enum variants (identifiers), and guards. Scalar `match` statements require an
   `else` arm.

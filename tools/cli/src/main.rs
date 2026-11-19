@@ -1,8 +1,11 @@
 mod doctor;
+mod lsp;
 mod project;
 
 use nex_diagnostics::render_all;
-use nex_driver::{CompileOptions, Emit, Profile, compile_file, compile_source};
+use nex_driver::{
+    CompileOptions, CompileResult, DriverError, Emit, Profile, compile_file, compile_source,
+};
 use project::{create, discover, init};
 use std::env;
 use std::fs;
@@ -62,6 +65,7 @@ fn main() -> ExitCode {
         }
         "fmt" => cmd_fmt(&args[1..]),
         "lint" => cmd_lint(&args[1..]),
+        "lsp" => cmd_lsp(),
         "add" => cmd_add(&args[1..]),
         "benchmark" => cmd_benchmark(&args[1..]),
         "debug" => cmd_debug(&args[1..]),
@@ -219,6 +223,10 @@ fn cmd_fmt(args: &[String]) -> ExitCode {
 
     status
 }
+fn cmd_lsp() -> ExitCode {
+    lsp::run()
+}
+
 fn cmd_new(args: &[String]) -> ExitCode {
     if args.is_empty() {
         eprintln!("nex: `new` requires a project name");
@@ -340,34 +348,142 @@ fn cmd_build(args: &[String]) -> ExitCode {
     }
 }
 
-fn cmd_check(args: &[String]) -> ExitCode {
-    let (path, _emit, _profile, _output, _target) = match parse_build_args(args, false) {
-        Ok(value) => value,
-        Err(error) => {
-            eprintln!("nex: {error}");
-            return ExitCode::from(2);
+fn json_string(value: &str) -> String {
+    let mut out = String::from("\"");
+    for ch in value.chars() {
+        match ch {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
+            c => out.push(c),
         }
-    };
+    }
+    out.push('"');
+    out
+}
 
-    let project = match discover(Path::new(&path)) {
-        Ok(project) => project,
-        Err(error) => {
-            eprintln!("nex: {error}");
-            return ExitCode::from(1);
+fn cmd_check(args: &[String]) -> ExitCode {
+    let mut json = false;
+    let mut path: Option<String> = None;
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--json" => {
+                json = true;
+                index += 1;
+            }
+            value => {
+                if path.is_some() {
+                    eprintln!("nex: unexpected argument `{value}`");
+                    return ExitCode::from(2);
+                }
+                path = Some(value.to_string());
+                index += 1;
+            }
         }
-    };
+    }
+    let path = path.unwrap_or_else(|| ".".to_string());
 
     let options = CompileOptions {
         emit: Emit::Check,
         profile: Profile::Debug,
         output: None,
-        build_dir: Some(project.root.join("build")),
+        build_dir: None,
         target: None,
     };
 
-    match compile_file(&project.entry, options) {
+    // `nex check` works two ways: inside a project it checks the entry
+    // point, and given a bare `.nex` file it checks that file in isolation.
+    let result = match discover(Path::new(&path)) {
+        Ok(project) => compile_file(
+            &project.entry,
+            CompileOptions {
+                build_dir: Some(project.root.join("build")),
+                ..options
+            },
+        ),
+        Err(error) => {
+            let candidate = PathBuf::from(&path);
+            if candidate.is_file()
+                && candidate.extension().and_then(|ext| ext.to_str()) == Some("nex")
+            {
+                match fs::read_to_string(&candidate) {
+                    Ok(source) => compile_source(path.clone(), source, options),
+                    Err(io_error) => return print_check_error(&io_error.to_string(), json, 2),
+                }
+            } else {
+                return print_check_error(&error.to_string(), json, 1);
+            }
+        }
+    };
+
+    check_report(result, json)
+}
+
+fn print_check_error(message: &str, json: bool, exit_code: u8) -> ExitCode {
+    if json {
+        println!("{{\"ok\":false,\"error\":{}}}", json_string(message));
+    } else {
+        eprintln!("nex: {message}");
+    }
+    ExitCode::from(exit_code)
+}
+
+fn check_report(result: Result<CompileResult, DriverError>, json: bool) -> ExitCode {
+    match result {
         Ok(result) => {
-            if result.has_errors() {
+            if json {
+                let mut output = String::from("{\"ok\":");
+                output.push_str(if result.has_errors() { "false" } else { "true" });
+                output.push_str(",\"diagnostics\":[");
+                for (i, diagnostic) in result.diagnostics.iter().enumerate() {
+                    if i > 0 {
+                        output.push(',');
+                    }
+                    let (line, column) = diagnostic
+                        .span
+                        .map(|span| result.source.line_col(span.start))
+                        .unwrap_or((0, 0));
+                    output.push_str(&format!(
+                        "{{\"severity\":{},\"code\":{},\"message\":{},\"file\":{},\"line\":{},\"column\":{},\"span\":",
+                        json_string(&diagnostic.severity.label().to_lowercase()),
+                        json_string(&diagnostic.code),
+                        json_string(&diagnostic.message),
+                        json_string(result.source.name()),
+                        line,
+                        column,
+                    ));
+                    if let Some(span) = diagnostic.span {
+                        output.push_str(&format!(
+                            "{{\"start\":{},\"end\":{}}}",
+                            span.start, span.end
+                        ));
+                    } else {
+                        output.push_str("null");
+                    }
+                    if !diagnostic.notes.is_empty() {
+                        output.push_str(",\"notes\":[");
+                        for (j, note) in diagnostic.notes.iter().enumerate() {
+                            if j > 0 {
+                                output.push(',');
+                            }
+                            output.push_str(&json_string(note));
+                        }
+                        output.push(']');
+                    }
+                    output.push('}');
+                }
+                output.push_str("]}");
+                println!("{output}");
+                if result.has_errors() {
+                    ExitCode::from(1)
+                } else {
+                    ExitCode::SUCCESS
+                }
+            } else if result.has_errors() {
                 eprintln!("{}", render_all(&result.source, &result.diagnostics));
                 ExitCode::from(1)
             } else {
@@ -376,7 +492,14 @@ fn cmd_check(args: &[String]) -> ExitCode {
             }
         }
         Err(error) => {
-            eprintln!("nex: {error}");
+            if json {
+                println!(
+                    "{{\"ok\":false,\"error\":{}}}",
+                    json_string(&error.to_string())
+                );
+            } else {
+                eprintln!("nex: {error}");
+            }
             ExitCode::from(2)
         }
     }
@@ -938,6 +1061,8 @@ fn print_help() {
            test [path]           Run .nex files in tests/\n\
            clean [path]          Remove build artifacts\n\
            doctor [path]         Check the toolchain and project\n\
+           lint [--deny-warnings] <file.nex>...   Lint NEX source files\n\
+           lsp                   Start the language server (stdio JSON-RPC)\n\
            version               Print version information\n\
            help                  Show this help\n\
          \n\

@@ -74,7 +74,7 @@
 ## NEX 0.8 - NEX Studio
 
 - [ ] Editor, project explorer, terminal.
-- [ ] LSP integration.
+- [x] LSP integration (`nex lsp`: hover, go-to-definition, completion, document symbols, formatting, diagnostics).
 - [ ] Debugger and profiler integration.
 
 ## NEX 0.9 - Stabilization

@@ -13,7 +13,16 @@
 - `expr?` propagates `None`/`Err` from `Option`/`Result`-shaped structs.
 - Generic type arguments in type annotations (`Box<i64>`).
 - `defer:` blocks run at function exit, in reverse order, only when reached.
+- `nex lsp` starts a language server over stdio (hover, go-to-definition,
+  completion, document symbols, formatting, and live diagnostics).
+- `nex check --json` prints diagnostics as JSON for tooling and AI agents.
+- `docs/for-ai.md` and `AGENTS.md`: a self-contained reference for AI agents,
+  including the `nex check` JSON format and an annotated ambitious example.
+- `examples/kv_store`: a JSON HTTP key-value service (router, JSON DOM,
+  mutex-guarded map, worker pool) verified end-to-end against a live server.
 - Fixed synthetic span collisions between multiple `for x in array` loops.
+- Comments and blank lines are legal as the first line of a block (they
+  produced `NXP002` before).
 
 ## 1.0.1 (2026-11-19)
 

@@ -27,7 +27,9 @@ that each stage can be tested independently and reused by both `nexc` and `nex`.
 - `nex-ir`: NEX's own intermediate representation and AST-to-IR lowering.
 - `nex-backend`: LLVM textual IR emission and Clang toolchain integration.
 - `nex-driver`: full pipeline used by `nexc` and `nex`.
-- `nex-cli`: project-oriented command-line interface.
+- `nex-cli`: project-oriented command-line interface, including
+  `nex lsp` (a stdio language server built on the same compiler frontend)
+  and `nex check --json` (machine-readable diagnostics).
 
 ## Why NEX has its own IR
 
