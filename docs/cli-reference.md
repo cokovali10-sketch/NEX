@@ -77,4 +77,6 @@ nexc file.nex --emit exe -o file.exe
 nexc file.nex --emit llvm-ir
 nexc file.nex --emit obj
 nexc file.nex --emit check
+nexc file.nex --target x86_64-w64-windows-gnu
+nexc --version
 ```
