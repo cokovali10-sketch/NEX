@@ -3489,6 +3489,233 @@ fn lower_expr(
                 return Ok(Operand::Value(result));
             }
 
+            if callee == "reverse" {
+                if args.len() != 1 {
+                    return Err("`reverse` expects 1 argument".to_string());
+                }
+                let array_ty = analysis.expr_type(args[0].span).unwrap_or(Type::Error);
+                let (base_ptr, len_operand, array_type, elem_ty, is_dyn) = match array_ty {
+                    Type::Array { display, llvm, .. } => {
+                        let info = analysis
+                            .array_info(display)
+                            .ok_or_else(|| "missing array type information".to_string())?;
+                        let base = lower_array_place(builder, &args[0], scopes, storage, analysis)?;
+                        (
+                            base,
+                            Operand::Const(Const::Int(info.len as i64)),
+                            llvm,
+                            info.elem,
+                            false,
+                        )
+                    }
+                    Type::DynArray(display) => {
+                        let info = analysis
+                            .array_info(display)
+                            .ok_or_else(|| "missing array type information".to_string())?;
+                        let header_operand =
+                            lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
+                        let header = operand_value_id(builder, header_operand)?;
+                        let data_slot = field_ptr(builder, header, 0, IrType::String);
+                        let data = builder.new_value();
+                        builder.emit(Inst::Load {
+                            dst: data,
+                            ptr: data_slot,
+                            ty: IrType::String,
+                        });
+                        let len_slot = field_ptr(builder, header, 1, IrType::I64);
+                        let len_value = builder.new_value();
+                        builder.emit(Inst::Load {
+                            dst: len_value,
+                            ptr: len_slot,
+                            ty: IrType::I64,
+                        });
+                        (data, Operand::Value(len_value), "", info.elem, true)
+                    }
+                    _ => return Err("`reverse` expects an array".to_string()),
+                };
+                let elem_ir = IrType::from_type(elem_ty);
+                let struct_name = match elem_ty {
+                    Type::Struct(name) => Some(name),
+                    _ => None,
+                };
+                // temp slot for one element
+                let temp = builder.alloca_at_entry(elem_ir);
+                let i_slot = builder.alloca_at_entry(IrType::I64);
+                builder.emit(Inst::Store {
+                    ptr: i_slot,
+                    value: Operand::Const(Const::Int(0)),
+                    ty: IrType::I64,
+                });
+
+                let cond_bb = builder.new_block();
+                let body_bb = builder.new_block();
+                let inc_bb = builder.new_block();
+                let exit_bb = builder.new_block();
+
+                builder.terminate(Terminator::Br(cond_bb));
+                builder.current = cond_bb;
+                let i_value = {
+                    let dst = builder.new_value();
+                    builder.emit(Inst::Load {
+                        dst,
+                        ptr: i_slot,
+                        ty: IrType::I64,
+                    });
+                    dst
+                };
+                // i < len / 2
+                let half = {
+                    let dst = builder.new_value();
+                    // len / 2 via integer division by 2
+                    builder.emit(Inst::Bin {
+                        dst,
+                        op: BinOp::Div,
+                        ty: IrType::I64,
+                        lhs: len_operand.clone(),
+                        rhs: Operand::Const(Const::Int(2)),
+                    });
+                    dst
+                };
+                let cmp = builder.new_value();
+                builder.emit(Inst::Bin {
+                    dst: cmp,
+                    op: BinOp::Lt,
+                    ty: IrType::I64,
+                    lhs: Operand::Value(i_value),
+                    rhs: Operand::Value(half),
+                });
+                builder.terminate(Terminator::CondBr {
+                    cond: Operand::Value(cmp),
+                    then_bb: body_bb,
+                    else_bb: exit_bb,
+                });
+
+                builder.current = body_bb;
+                // j = len - 1 - i
+                let j_value = {
+                    let dst = builder.new_value();
+                    builder.emit(Inst::Bin {
+                        dst,
+                        op: BinOp::Sub,
+                        ty: IrType::I64,
+                        lhs: len_operand.clone(),
+                        rhs: Operand::Const(Const::Int(1)),
+                    });
+                    let dst2 = builder.new_value();
+                    builder.emit(Inst::Bin {
+                        dst: dst2,
+                        op: BinOp::Sub,
+                        ty: IrType::I64,
+                        lhs: Operand::Value(dst),
+                        rhs: Operand::Value(i_value),
+                    });
+                    dst2
+                };
+                // pointers
+                let ptr_i = builder.new_value();
+                if is_dyn {
+                    builder.emit(Inst::DynIndexPtr {
+                        dst: ptr_i,
+                        base: base_ptr,
+                        index: Operand::Value(i_value),
+                        elem_ty: elem_ir,
+                    });
+                } else {
+                    builder.emit(Inst::IndexPtr {
+                        dst: ptr_i,
+                        base: base_ptr,
+                        array_type,
+                        index: Operand::Value(i_value),
+                        elem_ty: elem_ir,
+                    });
+                }
+                let ptr_j = builder.new_value();
+                if is_dyn {
+                    builder.emit(Inst::DynIndexPtr {
+                        dst: ptr_j,
+                        base: base_ptr,
+                        index: Operand::Value(j_value),
+                        elem_ty: elem_ir,
+                    });
+                } else {
+                    builder.emit(Inst::IndexPtr {
+                        dst: ptr_j,
+                        base: base_ptr,
+                        array_type,
+                        index: Operand::Value(j_value),
+                        elem_ty: elem_ir,
+                    });
+                }
+                // temp = a[i]
+                if let Some(name) = struct_name {
+                    copy_struct(builder, temp, ptr_i, name, analysis)?;
+                } else {
+                    let loaded = builder.new_value();
+                    builder.emit(Inst::Load {
+                        dst: loaded,
+                        ptr: ptr_i,
+                        ty: elem_ir,
+                    });
+                    builder.emit(Inst::Store {
+                        ptr: temp,
+                        value: Operand::Value(loaded),
+                        ty: elem_ir,
+                    });
+                }
+                // a[i] = a[j]
+                if let Some(name) = struct_name {
+                    copy_struct(builder, ptr_i, ptr_j, name, analysis)?;
+                } else {
+                    let loaded = builder.new_value();
+                    builder.emit(Inst::Load {
+                        dst: loaded,
+                        ptr: ptr_j,
+                        ty: elem_ir,
+                    });
+                    builder.emit(Inst::Store {
+                        ptr: ptr_i,
+                        value: Operand::Value(loaded),
+                        ty: elem_ir,
+                    });
+                }
+                // a[j] = temp
+                if let Some(name) = struct_name {
+                    copy_struct(builder, ptr_j, temp, name, analysis)?;
+                } else {
+                    let loaded = builder.new_value();
+                    builder.emit(Inst::Load {
+                        dst: loaded,
+                        ptr: temp,
+                        ty: elem_ir,
+                    });
+                    builder.emit(Inst::Store {
+                        ptr: ptr_j,
+                        value: Operand::Value(loaded),
+                        ty: elem_ir,
+                    });
+                }
+
+                builder.terminate(Terminator::Br(inc_bb));
+                builder.current = inc_bb;
+                let next = builder.new_value();
+                builder.emit(Inst::Bin {
+                    dst: next,
+                    op: BinOp::Add,
+                    ty: IrType::I64,
+                    lhs: Operand::Value(i_value),
+                    rhs: Operand::Const(Const::Int(1)),
+                });
+                builder.emit(Inst::Store {
+                    ptr: i_slot,
+                    value: Operand::Value(next),
+                    ty: IrType::I64,
+                });
+                builder.terminate(Terminator::Br(cond_bb));
+
+                builder.current = exit_bb;
+                return Ok(Operand::Const(Const::Bool(false)));
+            }
+
             if callee == "push" {
                 if args.len() != 2 {
                     return Err("`push` expects 2 arguments".to_string());

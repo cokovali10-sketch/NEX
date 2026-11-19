@@ -4026,6 +4026,34 @@ impl<'a> Checker<'a> {
             return Type::I64;
         }
 
+        if callee == "reverse" {
+            if args.len() != 1 {
+                self.error(
+                    "NXS004",
+                    format!("`reverse` expects 1 argument, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Void;
+            }
+            let arg_ty = self.infer(&args[0]);
+            match arg_ty {
+                Type::Array { .. } | Type::DynArray(_) => {}
+                _ => {
+                    if arg_ty != Type::Error {
+                        self.error(
+                            "NXS004",
+                            format!("`reverse` expects an array, found `{arg_ty}`"),
+                            args[0].span,
+                        );
+                    }
+                }
+            }
+            return Type::Void;
+        }
+
         if callee == "push" {
             if args.len() != 2 {
                 self.error(

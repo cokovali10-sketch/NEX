@@ -11,6 +11,9 @@ use nex_ast::{
 };
 use nex_diagnostics::{Diagnostic, Span};
 use nex_lexer::{Token, TokenKind};
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+static FOREACH_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 #[derive(Debug, Clone)]
 pub struct ParseResult {
@@ -1523,7 +1526,8 @@ impl<'a> Parser<'a> {
             // `for x in collection`: desugar to an index loop plus a binding.
             let iterable = first;
             let index_var = "__nex_index".to_string();
-            let synthetic_base = 1_000_000_000usize;
+            let foreach_id = FOREACH_COUNTER.fetch_add(1, Ordering::Relaxed);
+            let synthetic_base = 1_000_000_000usize + foreach_id * 100;
             let zero = Expr {
                 kind: ExprKind::Int(0),
                 span: Span::new(synthetic_base, synthetic_base + 1),

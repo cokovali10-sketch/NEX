@@ -13,6 +13,7 @@
 - `expr?` propagates `None`/`Err` from `Option`/`Result`-shaped structs.
 - Generic type arguments in type annotations (`Box<i64>`).
 - `defer:` blocks run at function exit, in reverse order, only when reached.
+- Fixed synthetic span collisions between multiple `for x in array` loops.
 
 ## 1.0.1 (2026-11-19)
 

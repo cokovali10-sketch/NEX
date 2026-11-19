@@ -1959,6 +1959,24 @@ fn main():
 }
 
 #[test]
+fn multiple_for_each_loops_do_not_share_synthetic_spans() {
+    let source = r#"
+fn main():
+    var ints: [i64; 2] = [1, 2]
+    for x in ints:
+        print(x)
+    var strs: [string] = []
+    push(strs, "a")
+    push(strs, "b")
+    for s in strs:
+        print(s)
+"#;
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "12ab");
+}
+
+#[test]
 fn parallel_assignment_swaps_values() {
     let source = r#"
 fn main():
