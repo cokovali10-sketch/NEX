@@ -2041,6 +2041,74 @@ fn main():
 }
 
 #[test]
+fn builtin_option_and_result_types() {
+    let source = r#"
+fn find(xs: [i64], target: i64) -> Option<i64>:
+    for x in xs:
+        if x == target:
+            return Option(true, x)
+    return Option(false, 0)
+
+fn default_value(x: Option<i64>) -> i64:
+    if x.has:
+        return x.value
+    return -1
+
+fn wrap<T>(x: T) -> Option<T>:
+    return Option(true, x)
+
+fn compute(x: i64) -> Result<i64, string>:
+    if x == 0:
+        return Result(false, 0, "zero")
+    return Result(true, x * 2, "")
+
+fn use_result(x: i64) -> Result<i64, string>:
+    var doubled = compute(x)?
+    return Result(true, doubled + 1, "")
+
+fn main():
+    println(default_value(find([10, 20, 30], 20)))
+    println(default_value(find([10, 20, 30], 42)))
+
+    var wrapped = wrap(7)
+    println(wrapped.has)
+    println(wrapped.value)
+
+    var ok = use_result(21)
+    println(ok.ok)
+    println(ok.value)
+    var failed = use_result(0)
+    println(failed.ok)
+    println(failed.error)
+
+    var string_wrap = wrap("hello")
+    println(string_wrap.value)
+"#;
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "20\n-1\ntrue\n7\ntrue\n43\nfalse\nzero\nhello\n");
+}
+
+#[test]
+fn monomorphized_functions_do_not_clash_spans() {
+    // Same generic function instantiated twice in one program; the two
+    // instantiations must keep their own type information.
+    let source = r#"
+fn pick<T>(a: T, b: T, choose_first: bool) -> T:
+    if choose_first:
+        return a
+    return b
+
+fn main():
+    println(pick(10, 20, true))
+    println(pick("a", "b", false))
+"#;
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "10\nb\n");
+}
+
+#[test]
 fn parallel_assignment_swaps_values() {
     let source = r#"
 fn main():

@@ -125,6 +125,9 @@ Notes:
   infer their type arguments, e.g. `Box(42)`.
 - `expr?` propagates `None`/`Err` by returning early from the enclosing
   function; the function must return the same `Option`/`Result` shape.
+  `Option<T>` (`has: bool`, `value: T`) and `Result<T, E>`
+  (`ok: bool`, `value: T`, `error: E`) are built-in generic structs; no
+  declaration is required.
 - `defer:` blocks run at function exit in reverse order of declaration,
   but only along paths that actually reach them.
 - `pattern` covers literals, inclusive ranges, booleans, characters, strings,

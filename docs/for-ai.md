@@ -188,27 +188,25 @@ pass                       # empty statement, required in empty blocks
 `?` works on structs shaped like `Option` or `Result`:
 
 ```nex
-struct OptionInt:
-    has: bool
-    value: i64
-
-fn find(xs: [i64], target: i64) -> OptionInt:
+fn find(xs: [i64], target: i64) -> Option<i64>:
     for x in xs:
         if x == target:
-            return OptionInt(true, x)
-    return OptionInt(false, 0)
+            return Option(true, x)
+    return Option(false, 0)
 
-fn describe(target: i64) -> OptionInt:
+fn describe(target: i64) -> Option<i64>:
     let xs: [i64] = [1, 2, 3]
     let found = find(xs, target)?   # early return on None
-    return OptionInt(true, found * 10)
+    return Option(true, found * 10)
 ```
 
-The function must return the same `Option`/`Result` shape. NEX has no
-built-in `Option`/`Result` types yet, but user-declared generic structs such
-as `struct Option<T>:` work with generic annotations (`Option<i64>`); the
-`?` operator works on those structs by convention (fields `has`/`value` for
-option-like, `ok`/`value`/`error` for result-like).
+The function must return the same `Option`/`Result` shape. NEX has
+built-in generic `Option<T>` (fields `has: bool`, `value: T`) and
+`Result<T, E>` (fields `ok: bool`, `value: T`, `error: E`) structs: no
+declaration is required and `?` works on them out of the box. They are
+also the reference shapes; user-declared structs with the same field names
+get the same treatment via the `?` convention. Redeclaring `Option` or
+`Result` in a project is an error (duplicate declaration).
 
 `defer:` runs a cleanup block at function exit, in reverse order, but only
 along paths that reach it:

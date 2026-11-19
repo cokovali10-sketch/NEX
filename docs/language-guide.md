@@ -79,33 +79,27 @@ elements; see `docs/memory-model.md`.
 
 ## Error propagation
 
-`?` works on structs shaped like `Option` or `Result`:
+`?` works on `Option<T>` and `Result<T, E>`. NEX has both as built-in
+generic structs (`Option` has `has: bool`, `value: T`; `Result` has
+`ok: bool`, `value: T`, `error: E`), so no declaration is required:
 
 ```nex
-struct OptionInt:
-    has: bool
-    value: i64
-
-struct ResultIntStr:
-    ok: bool
-    value: i64
-    error: string
-
-fn find(xs: [i64], target: i64) -> OptionInt:
+fn find(xs: [i64], target: i64) -> Option<i64>:
     for x in xs:
         if x == target:
-            return OptionInt(true, x)
-    return OptionInt(false, 0)
+            return Option(true, x)
+    return Option(false, 0)
 
-fn use_option(target: i64) -> OptionInt:
+fn use_option(target: i64) -> Option<i64>:
     let xs: [i64] = [1, 2, 3]
     let found = find(xs, target)?
-    return OptionInt(true, found + 10)
+    return Option(true, found + 10)
 ```
 
 `expr?` returns the inner value on success and returns early from the
 function on `None`/`Err`. The function must return the same Option/Result
-shape.
+shape. User-declared structs with the same field names (`has`/`value`,
+`ok`/`value`/`error`) work too — `?` is convention-based.
 
 
 A `var` at the top level is a module-level binding. Globals are shared by every

@@ -2,6 +2,15 @@ mod types;
 
 pub use types::Type;
 
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+// Mono instantiations get a distinct span region so the span-keyed semantic
+// maps do not collide between copies of the same generic function.
+const MONO_SPAN_BASE: usize = 2_000_000_000;
+const MONO_SPAN_STRIDE: usize = 10_000;
+
+static MONO_SPAN_COUNTER: AtomicUsize = AtomicUsize::new(0);
+
 use nex_ast::{Expr, ExprKind, Program, Stmt, StmtKind};
 use nex_diagnostics::{Diagnostic, Span};
 use std::collections::{BTreeMap, HashMap};
@@ -251,6 +260,7 @@ impl<'a> Checker<'a> {
             current_type_params: Vec::new(),
             loop_depth: 0,
         };
+        checker.collect_prelude();
         checker.collect_modules();
         checker.collect_structs();
         checker.collect_enums();
@@ -722,6 +732,132 @@ impl<'a> Checker<'a> {
         }
     }
 
+    /// Register the built-in generic `Option<T>` and `Result<T, E>` structs.
+    ///
+    /// They are real generic structs with a `has`/`ok` discriminator, so
+    /// they flow through the same monomorphization path as user-declared
+    /// structs and compose with the `?` operator without any special
+    /// cases. A user-declared `Option`/`Result` is reported as a duplicate
+    /// rather than shadowed.
+    fn collect_prelude(&mut self) {
+        self.collect_prelude_struct("Option", &["T"], &[("has", "bool"), ("value", "T")]);
+        self.collect_prelude_struct(
+            "Result",
+            &["T", "E"],
+            &[("ok", "bool"), ("value", "T"), ("error", "E")],
+        );
+    }
+
+    fn collect_prelude_struct(&mut self, name: &str, params: &[&str], fields: &[(&str, &str)]) {
+        if self.analysis.structs.contains_key(name) {
+            // The user already declared one; the duplicate is reported by
+            // `collect_structs`.
+            return;
+        }
+        self.current_type_params = params.iter().map(ToString::to_string).collect();
+        let mut resolved = Vec::with_capacity(fields.len());
+        for (field_name, ty_name) in fields {
+            let ty = self.resolve_type(&nex_ast::TypeExpr {
+                name: ty_name.to_string(),
+                array: None,
+                tuple: None,
+                generic_args: Vec::new(),
+                span: Span::empty(0),
+            });
+            if ty == Type::Error {
+                self.current_type_params.clear();
+                return;
+            }
+            resolved.push((field_name.to_string(), ty));
+        }
+        self.current_type_params.clear();
+        let name_static: &'static str = Box::leak(name.to_string().into_boxed_str());
+        self.analysis.structs.insert(
+            name.to_string(),
+            StructInfo {
+                name: name.to_string(),
+                type_params: params.iter().map(ToString::to_string).collect(),
+                name_static,
+                fields: resolved,
+                public: true,
+            },
+        );
+    }
+
+    /// Monomorphize a generic struct: instantiate `name` for the concrete
+    /// type arguments in `mapping`, register the specialized struct in the
+    /// analysis table and return its name.
+    fn instantiate_generic_struct(
+        &mut self,
+        template_name: &str,
+        concrete_names: &[String],
+        mapping: &std::collections::HashMap<String, Type>,
+    ) {
+        let mono_name = format!("{}_{}", template_name, concrete_names.join("_"));
+        if self.analysis.structs.contains_key(&mono_name) {
+            return;
+        }
+        let base_info = self.analysis.structs.get(template_name).cloned();
+        if let Some(mut generic_decl) = self
+            .program
+            .structs
+            .iter()
+            .find(|decl| decl.name == template_name)
+            .cloned()
+        {
+            generic_decl.name = mono_name.clone();
+            for field in &mut generic_decl.fields {
+                field.ty = substitute_type_expr(&field.ty, mapping);
+            }
+            let mut fields = Vec::new();
+            for field in &generic_decl.fields {
+                let field_ty = self.resolve_type(&field.ty);
+                fields.push((field.name.clone(), field_ty));
+            }
+            let name_static = Box::leak(mono_name.clone().into_boxed_str());
+            self.analysis.structs.insert(
+                mono_name.clone(),
+                StructInfo {
+                    name: mono_name,
+                    type_params: Vec::new(),
+                    name_static,
+                    fields,
+                    public: base_info.map(|info| info.public).unwrap_or(false),
+                },
+            );
+            return;
+        }
+        // The struct is not declared in the program (built-in prelude
+        // `Option`/`Result`): synthesize the layout from the generic
+        // StructInfo.
+        if let Some(info) = base_info {
+            let fields = info
+                .fields
+                .iter()
+                .map(|(field_name, ty)| {
+                    let substituted = match ty {
+                        Type::TypeParam(param) => {
+                            mapping.get(*param).copied().unwrap_or(Type::Error)
+                        }
+                        other => *other,
+                    };
+                    (field_name.clone(), substituted)
+                })
+                .collect();
+            let name_static = Box::leak(mono_name.clone().into_boxed_str());
+            self.analysis.structs.insert(
+                mono_name.clone(),
+                StructInfo {
+                    name: mono_name,
+                    type_params: Vec::new(),
+                    name_static,
+                    fields,
+                    public: info.public,
+                },
+            );
+        }
+    }
+
     fn collect_modules(&mut self) {
         for name in &self.program.modules {
             self.analysis.modules.insert(name.clone());
@@ -1029,8 +1165,11 @@ impl<'a> Checker<'a> {
         if !sig.type_params.is_empty() {
             return;
         }
+        // Monomorphized instantiations are checked inline at the call site;
+        // save and restore the enclosing function's scope instead of clearing it.
+        let saved_scopes = std::mem::take(&mut self.scopes);
+        let saved_loop_depth = std::mem::replace(&mut self.loop_depth, 0);
         self.current_fn = Some(sig.clone());
-        self.scopes.clear();
         let mut param_scope = HashMap::new();
         for (param, ty) in function.params.iter().zip(sig.params.iter()) {
             if param_scope.contains_key(&param.name) {
@@ -1064,7 +1203,8 @@ impl<'a> Checker<'a> {
         }
 
         self.current_fn = None;
-        self.scopes.clear();
+        self.scopes = saved_scopes;
+        self.loop_depth = saved_loop_depth;
     }
 
     fn check_functions(&mut self) {
@@ -4333,45 +4473,7 @@ impl<'a> Checker<'a> {
                     concrete_names.push(ct.name().to_string());
                 }
                 let mono_name = format!("{}_{}", callee, concrete_names.join("_"));
-                if !self.analysis.structs.contains_key(&mono_name) {
-                    // find generic struct decl
-                    let generic_struct = self
-                        .program
-                        .structs
-                        .iter()
-                        .find(|s| s.name == callee)
-                        .cloned();
-                    if let Some(mut gs) = generic_struct {
-                        gs.name = mono_name.clone();
-                        // substitute fields
-                        for field in &mut gs.fields {
-                            // field ty is TypeExpr; substitute by name
-                            if info.type_params.contains(&field.ty.name) {
-                                if let Some(ct) = mapping.get(&field.ty.name) {
-                                    field.ty.name = ct.name().to_string();
-                                }
-                            }
-                        }
-                        // register
-                        let mut fields = Vec::new();
-                        for field in &gs.fields {
-                            let ty = self.resolve_type(&field.ty);
-                            fields.push((field.name.clone(), ty));
-                        }
-                        // intern name
-                        let name_static = Box::leak(mono_name.clone().into_boxed_str());
-                        self.analysis.structs.insert(
-                            mono_name.clone(),
-                            StructInfo {
-                                name: mono_name.clone(),
-                                type_params: Vec::new(),
-                                name_static,
-                                fields,
-                                public: info.public,
-                            },
-                        );
-                    }
-                }
+                self.instantiate_generic_struct(callee, &concrete_names, &mapping);
                 // check args against mono struct
                 let mono_info = self
                     .analysis
@@ -4476,19 +4578,18 @@ impl<'a> Checker<'a> {
                 if let Some(generic_fn) = generic_fn {
                     let mut mono_fn = generic_fn.clone();
                     mono_fn.name = mono_name.clone();
+                    // Offset the spans of this instantiation so the span-keyed
+                    // semantic maps (`mono_calls`, `mono_structs`, `expr_types`,
+                    // `decl_types`, ...) from different copies of the same
+                    // generic function do not collide.
+                    let offset = MONO_SPAN_BASE
+                        + MONO_SPAN_COUNTER.fetch_add(1, Ordering::Relaxed) * MONO_SPAN_STRIDE;
+                    nex_ast::offset_fn_decl(&mut mono_fn, offset);
                     for param in &mut mono_fn.params {
-                        if sig.type_params.contains(&param.ty.name) {
-                            if let Some(ct) = mapping.get(&param.ty.name) {
-                                param.ty.name = ct.name().to_string();
-                            }
-                        }
+                        param.ty = substitute_type_expr(&param.ty, &mapping);
                     }
                     if let Some(ret) = &mut mono_fn.ret {
-                        if sig.type_params.contains(&ret.name) {
-                            if let Some(ct) = mapping.get(&ret.name) {
-                                ret.name = ct.name().to_string();
-                            }
-                        }
+                        *ret = substitute_type_expr(ret, &mapping);
                     }
                     let mut mono_params = Vec::new();
                     for param in &mono_fn.params {
@@ -4744,39 +4845,10 @@ impl<'a> Checker<'a> {
                     let mut concrete_names = Vec::new();
                     for param in &base_info.type_params {
                         let concrete = mapping.get(param).copied().unwrap_or(Type::Error);
-                        concrete_names.push(concrete.name());
+                        concrete_names.push(concrete.name().to_string());
                     }
                     let mono_name = format!("{}_{}", ty.name, concrete_names.join("_"));
-                    if !self.analysis.structs.contains_key(&mono_name) {
-                        let generic_struct = self
-                            .program
-                            .structs
-                            .iter()
-                            .find(|decl| decl.name == ty.name)
-                            .cloned();
-                        if let Some(mut generic_decl) = generic_struct {
-                            generic_decl.name = mono_name.clone();
-                            for field in &mut generic_decl.fields {
-                                field.ty = substitute_type_expr(&field.ty, &mapping);
-                            }
-                            let mut fields = Vec::new();
-                            for field in &generic_decl.fields {
-                                let field_ty = self.resolve_type(&field.ty);
-                                fields.push((field.name.clone(), field_ty));
-                            }
-                            let name_static = Box::leak(mono_name.clone().into_boxed_str());
-                            self.analysis.structs.insert(
-                                mono_name.clone(),
-                                StructInfo {
-                                    name: mono_name.clone(),
-                                    type_params: Vec::new(),
-                                    name_static,
-                                    fields,
-                                    public: base_info.public,
-                                },
-                            );
-                        }
-                    }
+                    self.instantiate_generic_struct(&ty.name, &concrete_names, &mapping);
                     if let Some(mono_info) = self.analysis.structs.get(&mono_name) {
                         return Type::Struct(mono_info.name_static);
                     }

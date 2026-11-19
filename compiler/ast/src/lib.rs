@@ -129,6 +129,171 @@ pub struct FnDecl {
     pub span: Span,
 }
 
+/// Offset every span in a function declaration by `delta` bytes.
+///
+/// Monomorphized copies of a generic function reuse the source spans of the
+/// body they were cloned from. Offsetting the spans of each copy keeps the
+/// span-keyed semantic side tables (`expr_types`, `mono_calls`, `mono_structs`,
+/// `decl_types`, `field_reads`, ...) from colliding between instantiations.
+pub fn offset_fn_decl(decl: &mut FnDecl, delta: usize) {
+    decl.span = offset_span(decl.span, delta);
+    offset_params(&mut decl.params, delta);
+    if let Some(ret) = &mut decl.ret {
+        offset_type_expr(ret, delta);
+    }
+    offset_block(&mut decl.body, delta);
+}
+
+fn offset_span(span: Span, delta: usize) -> Span {
+    Span::new(
+        span.start.saturating_add(delta),
+        span.end.saturating_add(delta),
+    )
+}
+
+fn offset_params(params: &mut [Param], delta: usize) {
+    for param in params {
+        param.span = offset_span(param.span, delta);
+        offset_type_expr(&mut param.ty, delta);
+    }
+}
+
+fn offset_type_expr(ty: &mut TypeExpr, delta: usize) {
+    ty.span = offset_span(ty.span, delta);
+    if let Some((element, _)) = &mut ty.array {
+        offset_type_expr(element, delta);
+    }
+    if let Some(tuple) = &mut ty.tuple {
+        for element in tuple {
+            offset_type_expr(element, delta);
+        }
+    }
+    for arg in &mut ty.generic_args {
+        offset_type_expr(arg, delta);
+    }
+}
+
+fn offset_block(block: &mut Block, delta: usize) {
+    block.span = offset_span(block.span, delta);
+    for statement in &mut block.stmts {
+        offset_statement(statement, delta);
+    }
+}
+
+fn offset_statement(statement: &mut Stmt, delta: usize) {
+    statement.span = offset_span(statement.span, delta);
+    match &mut statement.kind {
+        StmtKind::Let { ty, init, .. } => {
+            if let Some(ty) = ty {
+                offset_type_expr(ty, delta);
+            }
+            offset_expr(init, delta);
+        }
+        StmtKind::Assign { value, .. } => offset_expr(value, delta),
+        StmtKind::AssignMany { values, .. } => {
+            for value in values {
+                offset_expr(value, delta);
+            }
+        }
+        StmtKind::AssignField { value, .. } => offset_expr(value, delta),
+        StmtKind::AssignIndex { index, value, .. } => {
+            offset_expr(index, delta);
+            offset_expr(value, delta);
+        }
+        StmtKind::If {
+            branches,
+            else_branch,
+        } => {
+            for (condition, body) in branches {
+                offset_expr(condition, delta);
+                offset_block(body, delta);
+            }
+            if let Some(body) = else_branch {
+                offset_block(body, delta);
+            }
+        }
+        StmtKind::While { cond, body } => {
+            offset_expr(cond, delta);
+            offset_block(body, delta);
+        }
+        StmtKind::For {
+            start, end, body, ..
+        } => {
+            offset_expr(start, delta);
+            offset_expr(end, delta);
+            offset_block(body, delta);
+        }
+        StmtKind::Return(value) => {
+            if let Some(value) = value {
+                offset_expr(value, delta)
+            }
+        }
+        StmtKind::Match { scrutinee, arms } => {
+            offset_expr(scrutinee, delta);
+            for arm in arms {
+                offset_arm(arm, delta);
+            }
+        }
+        StmtKind::Unsafe(block) | StmtKind::Defer(block) => offset_block(block, delta),
+        StmtKind::Expr(expr) => offset_expr(expr, delta),
+        StmtKind::Break | StmtKind::Continue | StmtKind::Pass => {}
+    }
+}
+
+fn offset_arm(arm: &mut MatchArm, delta: usize) {
+    arm.span = offset_span(arm.span, delta);
+    if let Some(guard) = &mut arm.guard {
+        offset_expr(guard, delta);
+    }
+    offset_block(&mut arm.body, delta);
+}
+
+fn offset_expr(expr: &mut Expr, delta: usize) {
+    expr.span = offset_span(expr.span, delta);
+    match &mut expr.kind {
+        ExprKind::Int(_)
+        | ExprKind::Float(_)
+        | ExprKind::Str(_)
+        | ExprKind::Char(_)
+        | ExprKind::Bool(_)
+        | ExprKind::Ident(_)
+        | ExprKind::Error => {}
+        ExprKind::Unary { operand, .. } => offset_expr(operand, delta),
+        ExprKind::Binary { left, right, .. } => {
+            offset_expr(left, delta);
+            offset_expr(right, delta);
+        }
+        ExprKind::Call {
+            callee_span, args, ..
+        } => {
+            *callee_span = offset_span(*callee_span, delta);
+            for arg in args {
+                offset_expr(arg, delta);
+            }
+        }
+        ExprKind::Cast { expr, ty } => {
+            offset_expr(expr, delta);
+            offset_type_expr(ty, delta);
+        }
+        ExprKind::Tuple(items) | ExprKind::Array(items) => {
+            for item in items {
+                offset_expr(item, delta);
+            }
+        }
+        ExprKind::Index { base, index } => {
+            offset_expr(base, delta);
+            offset_expr(index, delta);
+        }
+        ExprKind::Field {
+            base, name_span, ..
+        } => {
+            offset_expr(base, delta);
+            *name_span = offset_span(*name_span, delta);
+        }
+        ExprKind::Try(inner) => offset_expr(inner, delta),
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Param {
     pub name: String,

@@ -17,6 +17,10 @@
 - `nex lsp` starts a language server over stdio (hover, go-to-definition,
   completion, document symbols, formatting, and live diagnostics).
 - `nex check --json` prints diagnostics as JSON for tooling and AI agents.
+- Built-in generic `Option<T>` and `Result<T, E>` structs (no declaration
+  needed); `?` works on them out of the box.
+- Generic function calls passing type parameters inside generic struct
+  annotations (`fn wrap<T>(x: T) -> Option<T>`).
 - `docs/for-ai.md` and `AGENTS.md`: a self-contained reference for AI agents,
   including the `nex check` JSON format and an annotated ambitious example.
 - `examples/kv_store`: a JSON HTTP key-value service (router, JSON DOM,
@@ -24,6 +28,12 @@
 - Fixed synthetic span collisions between multiple `for x in array` loops.
 - Comments and blank lines are legal as the first line of a block (they
   produced `NXP002` before).
+- Monomorphized generic functions no longer share span-keyed type tables
+  with each other or with the generic definition (e.g. two instantiations of
+  the same `wrap<T>` no longer see each other's struct instantiations).
+- Semantic analysis no longer panics when a generic struct was
+  monomorphized from a definition outside the current program (built-in
+  `Option`/`Result`).
 
 ### Changed
 

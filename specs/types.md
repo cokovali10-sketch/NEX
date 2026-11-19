@@ -132,5 +132,4 @@ let z = true as i64
 ## Planned
 
 - Generic type constraints and bounds.
-- Optional and result types.
 - Broader type inference across function boundaries.

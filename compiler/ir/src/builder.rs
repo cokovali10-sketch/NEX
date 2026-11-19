@@ -101,7 +101,13 @@ pub fn build(program: &Program, analysis: &Analysis) -> Result<IrModule, String>
     let structs = analysis
         .structs
         .values()
-        .filter(|info| info.type_params.is_empty())
+        .filter(|info| {
+            info.type_params.is_empty()
+                && !info
+                    .fields
+                    .iter()
+                    .any(|(_, ty)| matches!(ty, Type::TypeParam(_)))
+        })
         .map(|info| StructDef {
             name: info.name_static,
             fields: info
@@ -995,7 +1001,9 @@ fn lower_struct_place(
             }
 
             let signature = analysis
-                .function(callee)
+                .mono_call(expr.span)
+                .and_then(|mono_name| analysis.function(mono_name))
+                .or_else(|| analysis.function(callee))
                 .ok_or_else(|| format!("unknown function `{callee}` during code generation"))?;
             let Type::Struct(name) = signature.ret else {
                 return Err(format!("`{callee}` does not return a struct value"));
@@ -1823,7 +1831,9 @@ fn lower_array_place(
                 .unwrap_or_else(|| callee.clone());
             let callee = resolved.as_str();
             let signature = analysis
-                .function(callee)
+                .mono_call(expr.span)
+                .and_then(|mono_name| analysis.function(mono_name))
+                .or_else(|| analysis.function(callee))
                 .ok_or_else(|| format!("unknown function `{callee}` during code generation"))?;
             let Type::Array { llvm, display, .. } = signature.ret else {
                 return Err(format!("`{callee}` does not return an array value"));
