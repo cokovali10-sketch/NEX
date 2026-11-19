@@ -1,4 +1,4 @@
-//! Recursive-descent parser for NEX 0.1.
+//! Recursive-descent parser for NEX.
 //!
 //! The parser is intentionally strict but performs statement-level recovery:
 //! after a syntax error it skips to the next line or block boundary, which lets
@@ -167,21 +167,11 @@ impl<'a> Parser<'a> {
                 }
             } else {
                 let token = self.peek_token().clone();
-                let message = match &token.kind {
-                    TokenKind::Impl
-                    | TokenKind::Trait
-                    | TokenKind::Import
-                    | TokenKind::From
-                    | TokenKind::Extern => format!(
-                        "`{}` declarations are not implemented in NEX 0.1",
-                        token.kind.symbol()
-                    ),
-                    _ => format!(
-                        "expected a function declaration, found {}",
-                        token.kind.describe()
-                    ),
-                };
-                self.error("NXP010", message, token.span);
+                self.error(
+                    "NXP010",
+                    format!("expected a declaration, found {}", token.kind.describe()),
+                    token.span,
+                );
                 self.synchronize_item();
             }
         }
@@ -711,7 +701,11 @@ impl<'a> Parser<'a> {
                     if self.eat(&TokenKind::DotDot) {
                         let TokenKind::Int(end) = self.peek().clone() else {
                             let span = self.peek_token().span;
-                            self.error("NXP013", "expected an integer after `..` in a range pattern", span);
+                            self.error(
+                                "NXP013",
+                                "expected an integer after `..` in a range pattern",
+                                span,
+                            );
                             return None;
                         };
                         self.advance();
@@ -724,7 +718,11 @@ impl<'a> Parser<'a> {
                     self.advance();
                     let TokenKind::Int(value) = self.peek().clone() else {
                         let span = self.peek_token().span;
-                        self.error("NXP013", "expected an integer after `-` in a match pattern", span);
+                        self.error(
+                            "NXP013",
+                            "expected an integer after `-` in a match pattern",
+                            span,
+                        );
                         return None;
                     };
                     self.advance();
@@ -964,7 +962,7 @@ impl<'a> Parser<'a> {
             } else if self.check(&TokenKind::Module) {
                 self.error(
                     "NXP010",
-                    "nested modules are not supported in NEX 0.2".to_string(),
+                    "nested modules are not supported yet".to_string(),
                     self.peek_token().span,
                 );
                 self.synchronize_item();
@@ -1064,11 +1062,7 @@ impl<'a> Parser<'a> {
         };
         let span = start.merge(self.peek_token().span);
         self.expect_line_end();
-        Some(UseDecl {
-            path,
-            file,
-            span,
-        })
+        Some(UseDecl { path, file, span })
     }
 
     fn parse_params(&mut self) -> Vec<Param> {
@@ -1190,7 +1184,7 @@ impl<'a> Parser<'a> {
                 let generic_span = self.peek_token().span;
                 self.error(
                     "NXP011",
-                    "generic types are not implemented in NEX 0.1",
+                    "explicit generic type arguments are not supported yet; generic calls infer them",
                     generic_span,
                 );
                 self.skip_balanced_angles();
@@ -1490,7 +1484,6 @@ impl<'a> Parser<'a> {
         } else {
             // `for x in collection`: desugar to an index loop plus a binding.
             let iterable = first;
-            let iterable_span = iterable.span;
             let index_var = "__nex_index".to_string();
             let synthetic_base = 1_000_000_000usize;
             let zero = Expr {
@@ -1562,7 +1555,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-fn parse_expression_or_assignment(&mut self) -> Stmt {
+    fn parse_expression_or_assignment(&mut self) -> Stmt {
         let expr = self.parse_expr();
 
         if self.check(&TokenKind::Comma) {
@@ -1575,9 +1568,11 @@ fn parse_expression_or_assignment(&mut self) -> Stmt {
                 while self.eat(&TokenKind::Comma) {
                     values.push(self.parse_expr());
                 }
-                let span = places.first().map(|e| e.span).unwrap_or_default().merge(
-                    values.last().map(|e| e.span).unwrap_or_default(),
-                );
+                let span = places
+                    .first()
+                    .map(|e| e.span)
+                    .unwrap_or_default()
+                    .merge(values.last().map(|e| e.span).unwrap_or_default());
                 self.expect_line_end();
                 let mut names = Vec::new();
                 for place in &places {
@@ -1846,21 +1841,13 @@ fn parse_expression_or_assignment(&mut self) -> Stmt {
                             parts.join(".")
                         } else {
                             let span = self.peek_token().span;
-                            self.error(
-                                "NXP004",
-                                "only named functions can be called in NEX 0.1",
-                                span,
-                            );
+                            self.error("NXP004", "only named functions can be called", span);
                             break;
                         }
                     }
                     _ => {
                         let span = self.peek_token().span;
-                        self.error(
-                            "NXP004",
-                            "only named functions can be called in NEX 0.1",
-                            span,
-                        );
+                        self.error("NXP004", "only named functions can be called", span);
                         break;
                     }
                 };
@@ -2111,7 +2098,7 @@ fn parse_expression_or_assignment(&mut self) -> Stmt {
                 self.advance();
                 if self.check(&TokenKind::RParen) {
                     let close = self.advance().span;
-                    self.error("NXP014", "empty tuples are not supported in NEX 0.2", close);
+                    self.error("NXP014", "empty tuples are not supported yet", close);
                     Expr {
                         kind: ExprKind::Error,
                         span: token.span.merge(close),

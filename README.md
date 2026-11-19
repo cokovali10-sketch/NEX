@@ -8,7 +8,7 @@
 
 [![CI](https://github.com/cokovali10-sketch/NEX/actions/workflows/ci.yml/badge.svg)](https://github.com/cokovali10-sketch/NEX/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Rust](https://img.shields.io/badge/Rust-1.99%2B-orange.svg)](https://www.rust-lang.org/)
+[![Rust](https://img.shields.io/badge/Rust-1.85%2B-orange.svg)](https://www.rust-lang.org/)
 [![LLVM](https://img.shields.io/badge/Backend-LLVM%20IR-blue.svg)](https://llvm.org/)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20x86--64-lightgrey.svg)](#status)
 [![Release](https://img.shields.io/github/v/release/cokovali10-sketch/NEX?include_prereleases)](https://github.com/cokovali10-sketch/NEX/releases)
@@ -29,7 +29,7 @@ interoperability, and a professional toolchain.
 | | |
 |---|---|
 | **Native** | Compiles to a real Windows executable via LLVM IR + Clang. No bytecode, no interpreter, no VM. |
-| **Honest** | Every supported feature has tests. No fake benchmarks, no vaporware. |
+| **Honest** | The integration suite covers the compiler end to end; known gaps are documented, not hidden. |
 | **Readable** | Python-style indentation, static typing, clear error codes (`NXS007`, `NXP010`...). |
 | **Small core** | Std-only Rust workspace, minimal supply chain, no hidden dependencies. |
 | **Growing** | Structs, enums, arrays, tuples, modules, match — all working today. |
@@ -42,23 +42,30 @@ runtime (`runtime/core/nex_rt.c`) — not a hidden language runtime.
 
 ## Status
 
-- Current release: **NEX 1.0 - Stable Core**.
+- Current release: **NEX 1.0 - Stable Core** (compiler, CLI, runtime, tests).
 - Implemented: lexer, parser, AST, semantic analysis, type checking, NEX IR,
   LLVM textual IR backend, native executable generation, CLI, and end-to-end
   tests.
 - Implemented in the language: functions, bindings, `if`/`elif`/`else`,
-  `while`, `for`, `const`, explicit casts, string equality and ordering,
-  compound assignment, structs with scalar or nested struct fields and
-  function parameters and returns, enums with `match`, arrays and tuples with
-  type annotations and function parameters and returns, printing,
-  constants, equality for aggregate values, external C calls, and
-  `len`/`abs`/`min`/`max`/`sqrt`/`pow`/`assert`/`panic`/`alloc`/`free`/
-  `peek`/`poke`/`concat`/`to_string` built-ins, tuples, and modules with `use`
-  aliases.
-- Not implemented yet: generics, traits, the full standard library, package
-  manager, debugger, profiler, and NEX Studio.
-- Platform support today: Windows x86-64 with Clang. The compiler is designed to
-  target other platforms, but only the host platform is tested.
+  `while`, `for` ranges and `for x in array`, `const`, explicit casts, string
+  equality and ordering, compound and parallel assignment, structs with scalar
+  or nested struct fields and function parameters and returns, enums with
+  `match`, arrays (fixed and growable `[T]`) and tuples with type annotations
+  and function parameters and returns, traits and inherent `impl` methods with
+  static dispatch, generics via monomorphization, type aliases, modules and
+  file imports, f-strings, string indexing/slicing, bitwise operators,
+  `unsafe:` blocks, external C calls, and printing.
+- Runtime: string helpers, files, blocking TCP and HTTP helpers, JSON, maps,
+  threads/mutexes, a thread pool, a router, a string builder, time and math
+  functions (see `docs/standard-library.md`).
+- Not implemented yet: ownership, borrowing and lifetime checking; async/await;
+  the full standard library (collections, crypto, process, logging); a package
+  registry; LSP/NEX Studio; Python and Rust adapters. `nex debug` and
+  `nex profile` build a debug/release executable and run it; they are not a
+  full debugger or profiler.
+- Platform support: Windows x86-64 is the primary tested host. CI also builds
+  and tests on Ubuntu. `--target <triple>` selects a Clang target, but only the
+  host platform is validated end to end by the test suite.
 
 ## Quick start
 
@@ -146,7 +153,8 @@ NEX/
 
 - Write simple programs.
 - Compile to native code.
-- Keep the compiler honest: every supported feature has tests.
+- Keep the compiler honest: supported features are covered by tests, and known
+  gaps are listed as limitations.
 - Do not claim performance or compatibility without measurements.
 - Do not hide language complexity behind unpredictable rules.
 

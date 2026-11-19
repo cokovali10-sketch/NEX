@@ -845,7 +845,11 @@ impl<'a> Checker<'a> {
         let aliases = self.program.type_aliases.clone();
         for alias in aliases {
             if self.analysis.type_aliases.contains_key(&alias.name) {
-                self.error("NXS003", format!("duplicate type alias `{}`", alias.name), alias.span);
+                self.error(
+                    "NXS003",
+                    format!("duplicate type alias `{}`", alias.name),
+                    alias.span,
+                );
                 continue;
             }
             self.current_type_params.clear();
@@ -971,18 +975,14 @@ impl<'a> Checker<'a> {
         };
 
         if !sig.params.is_empty() {
-            self.error(
-                "NXS011",
-                "NEX 0.1 `main` must not accept parameters",
-                sig.span,
-            );
+            self.error("NXS011", "NEX `main` must not accept parameters", sig.span);
         }
 
         if !matches!(sig.ret, Type::Void | Type::I32) {
             self.error(
                 "NXS011",
                 format!(
-                    "NEX 0.1 `main` must return `void` or `i32`, found `{}`",
+                    "NEX `main` must return `void` or `i32`, found `{}`",
                     sig.ret
                 ),
                 sig.span,
@@ -1090,7 +1090,8 @@ impl<'a> Checker<'a> {
                         if inferred != Type::Error {
                             self.error(
                                 "NXS005",
-                                "tuple destructuring requires a tuple or struct initializer".to_string(),
+                                "tuple destructuring requires a tuple or struct initializer"
+                                    .to_string(),
                                 statement.span,
                             );
                         }
@@ -1392,7 +1393,8 @@ impl<'a> Checker<'a> {
                 let is_char = scrut_ty == Type::Char;
                 let is_str = scrut_ty == Type::String;
 
-                if !is_enum && !is_int && !is_bool && !is_char && !is_str && scrut_ty != Type::Error {
+                if !is_enum && !is_int && !is_bool && !is_char && !is_str && scrut_ty != Type::Error
+                {
                     self.error(
                         "NXS031",
                         format!(
@@ -1404,10 +1406,14 @@ impl<'a> Checker<'a> {
 
                 let mut seen_variants: std::collections::HashSet<String> =
                     std::collections::HashSet::new();
-                let mut seen_ints: std::collections::HashSet<i64> = std::collections::HashSet::new();
-                let mut seen_strs: std::collections::HashSet<String> = std::collections::HashSet::new();
-                let mut seen_chars: std::collections::HashSet<char> = std::collections::HashSet::new();
-                let mut seen_bools: std::collections::HashSet<bool> = std::collections::HashSet::new();
+                let mut seen_ints: std::collections::HashSet<i64> =
+                    std::collections::HashSet::new();
+                let mut seen_strs: std::collections::HashSet<String> =
+                    std::collections::HashSet::new();
+                let mut seen_chars: std::collections::HashSet<char> =
+                    std::collections::HashSet::new();
+                let mut seen_bools: std::collections::HashSet<bool> =
+                    std::collections::HashSet::new();
                 let mut else_seen = false;
                 let mut else_not_last = false;
 
@@ -1457,7 +1463,8 @@ impl<'a> Checker<'a> {
                             } else if scrut_ty != Type::Error {
                                 self.error(
                                     "NXS030",
-                                    "variant patterns are only valid for enum scrutinees".to_string(),
+                                    "variant patterns are only valid for enum scrutinees"
+                                        .to_string(),
                                     arm.span,
                                 );
                             }
@@ -1636,9 +1643,7 @@ impl<'a> Checker<'a> {
                         } else if is_int || is_char || is_str {
                             self.error(
                                 "NXS033",
-                                format!(
-                                    "match on `{scrut_ty}` must include an `else` arm"
-                                ),
+                                format!("match on `{scrut_ty}` must include an `else` arm"),
                                 statement.span,
                             );
                         } else if is_bool {
@@ -1931,7 +1936,7 @@ impl<'a> Checker<'a> {
                         } else {
                             self.error(
                                 "NXS008",
-                                format!("equality is not implemented for type `{ty}` in NEX 0.1"),
+                                format!("equality is not implemented for type `{ty}`"),
                                 expr.span,
                             );
                             Type::Error
@@ -1950,7 +1955,7 @@ impl<'a> Checker<'a> {
                         } else {
                             self.error(
                                 "NXS008",
-                                format!("ordering is not defined for type `{ty}` in NEX 0.1"),
+                                format!("ordering is not defined for type `{ty}`"),
                                 expr.span,
                             );
                             Type::Error
@@ -2095,7 +2100,7 @@ impl<'a> Checker<'a> {
                 if elements.is_empty() {
                     self.error(
                         "NXS035",
-                        "empty array literals are not supported in NEX 0.2".to_string(),
+                        "empty array literals require a type annotation, e.g. `[i64]`".to_string(),
                         expr.span,
                     );
                     Type::Error
@@ -2165,7 +2170,7 @@ impl<'a> Checker<'a> {
                 if elements.is_empty() {
                     self.error(
                         "NXS037",
-                        "empty tuples are not supported in NEX 0.2".to_string(),
+                        "empty tuples are not supported".to_string(),
                         expr.span,
                     );
                     Type::Error
@@ -2237,9 +2242,7 @@ impl<'a> Checker<'a> {
         }
 
         let root = receiver.split('.').next().unwrap_or(receiver);
-        let Some(receiver_var) = self.lookup(root) else {
-            return None;
-        };
+        let receiver_var = self.lookup(root)?;
 
         if receiver.contains('.') {
             self.error(
@@ -3995,13 +3998,19 @@ impl<'a> Checker<'a> {
                 return Type::Error;
             }
             let arg_ty = self.infer(&args[0]);
-            if arg_ty == Type::I64 || arg_ty == Type::F64 || arg_ty == Type::Bool || arg_ty == Type::String {
+            if arg_ty == Type::I64
+                || arg_ty == Type::F64
+                || arg_ty == Type::Bool
+                || arg_ty == Type::String
+            {
                 return Type::String;
             }
             if arg_ty != Type::Error {
                 self.error(
                     "NXS004",
-                    format!("`to_string` expects `i64`, `f64`, `bool` or `string`, found `{arg_ty}`"),
+                    format!(
+                        "`to_string` expects `i64`, `f64`, `bool` or `string`, found `{arg_ty}`"
+                    ),
                     args[0].span,
                 );
             }
@@ -4038,7 +4047,12 @@ impl<'a> Checker<'a> {
                 let mono_name = format!("{}_{}", callee, concrete_names.join("_"));
                 if !self.analysis.structs.contains_key(&mono_name) {
                     // find generic struct decl
-                    let generic_struct = self.program.structs.iter().find(|s| s.name == callee).cloned();
+                    let generic_struct = self
+                        .program
+                        .structs
+                        .iter()
+                        .find(|s| s.name == callee)
+                        .cloned();
                     if let Some(mut gs) = generic_struct {
                         gs.name = mono_name.clone();
                         // substitute fields
@@ -4058,20 +4072,38 @@ impl<'a> Checker<'a> {
                         }
                         // intern name
                         let name_static = Box::leak(mono_name.clone().into_boxed_str());
-                        self.analysis.structs.insert(mono_name.clone(), StructInfo {
-                            name: mono_name.clone(),
-                            type_params: Vec::new(),
-                            name_static,
-                            fields,
-                            public: info.public,
-                        });
+                        self.analysis.structs.insert(
+                            mono_name.clone(),
+                            StructInfo {
+                                name: mono_name.clone(),
+                                type_params: Vec::new(),
+                                name_static,
+                                fields,
+                                public: info.public,
+                            },
+                        );
                     }
                 }
                 // check args against mono struct
-                let mono_info = self.analysis.structs.get(&mono_name).cloned().unwrap_or(info.clone());
+                let mono_info = self
+                    .analysis
+                    .structs
+                    .get(&mono_name)
+                    .cloned()
+                    .unwrap_or(info.clone());
                 if args.len() != mono_info.fields.len() {
-                    self.error("NXS004", format!("struct `{mono_name}` expects {} field value(s), found {}", mono_info.fields.len(), args.len()), span);
-                    for arg in args { self.infer(arg); }
+                    self.error(
+                        "NXS004",
+                        format!(
+                            "struct `{mono_name}` expects {} field value(s), found {}",
+                            mono_info.fields.len(),
+                            args.len()
+                        ),
+                        span,
+                    );
+                    for arg in args {
+                        self.infer(arg);
+                    }
                     return Type::Error;
                 }
                 for (index, arg) in args.iter().enumerate() {
@@ -4136,7 +4168,8 @@ impl<'a> Checker<'a> {
             let arg_types: Vec<Type> = args.iter().map(|a| self.infer(a)).collect();
             // map type params to concrete types: assume one type param, infer from first param type
             // Simple: type param -> type of first argument if first param uses it.
-            let mut mapping: std::collections::HashMap<String, Type> = std::collections::HashMap::new();
+            let mut mapping: std::collections::HashMap<String, Type> =
+                std::collections::HashMap::new();
             for (param_ty, arg_ty) in sig.params.iter().zip(arg_types.iter()) {
                 if let Type::TypeParam(name) = param_ty {
                     mapping.insert(name.to_string(), *arg_ty);
@@ -4178,24 +4211,38 @@ impl<'a> Checker<'a> {
                     } else {
                         Type::Void
                     };
-                    self.analysis.functions.insert(mono_name.clone(), FnSig {
-                        name: mono_name.clone(),
-                        type_params: Vec::new(),
-                        params: mono_params.clone(),
-                        ret: mono_ret,
-                        public: sig.public,
-                        span: mono_fn.span,
-                    });
+                    self.analysis.functions.insert(
+                        mono_name.clone(),
+                        FnSig {
+                            name: mono_name.clone(),
+                            type_params: Vec::new(),
+                            params: mono_params.clone(),
+                            ret: mono_ret,
+                            public: sig.public,
+                            span: mono_fn.span,
+                        },
+                    );
                     self.analysis.mono_functions.push(mono_fn.clone());
                     self.check_one_function(&mono_fn);
                 }
             }
             // now use mono_name as callee
-            let mono_sig = self.analysis.functions.get(&mono_name).cloned().unwrap_or(sig.clone());
+            let mono_sig = self
+                .analysis
+                .functions
+                .get(&mono_name)
+                .cloned()
+                .unwrap_or(sig.clone());
             // check args against mono_sig
             if args.len() != mono_sig.params.len() {
-                self.error("NXS004", format!("unknown function `{}`", callee), callee_span);
-                for arg in args { self.infer(arg); }
+                self.error(
+                    "NXS004",
+                    format!("unknown function `{}`", callee),
+                    callee_span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
                 return Type::Error;
             }
             for (arg, expected) in args.iter().zip(mono_sig.params.iter()) {
@@ -4250,7 +4297,7 @@ impl<'a> Checker<'a> {
         self.error(
             "NXS008",
             format!(
-                "operands have different types `{left_ty}` and `{right_ty}`; NEX 0.1 does not apply implicit widening"
+                "operands have different types `{left_ty}` and `{right_ty}`; NEX does not apply implicit widening"
             ),
             left.span.merge(right.span),
         );

@@ -1,4 +1,4 @@
-# NEX Type System (0.2)
+# NEX Type System (1.0)
 
 ## Implemented types
 
@@ -9,10 +9,13 @@
 - `f32`, `f64`
 - `string`
 - `void` (function return only)
-- User-defined `struct` with scalar fields (see below)
+- User-defined `struct` with scalar, nested struct, or generic fields
 - User-defined `enum` (lowered to an `i32` tag)
 - Fixed-size arrays `[T; N]` (inferred from non-empty literals)
+- Growable arrays `[T]` (`push`, `len`, indexed read/write)
 - User-defined `tuple` (anonymous struct with positional fields)
+- Traits implemented as static dispatch targets
+- Type aliases (`type Name = Type`)
 
 ## Type inference
 
@@ -26,7 +29,7 @@
 
 ## Coercion
 
-NEX 0.2 intentionally avoids implicit widening. The only implicit conversions are:
+NEX 1.0 intentionally avoids implicit widening. The only implicit conversions are:
 
 - An integer literal may be coerced to an integer type if it fits in that type.
 - A floating point literal may be coerced to `f32` or `f64`.
@@ -127,7 +130,8 @@ let z = true as i64
 
 ## Planned
 
-- Generic type parameters.
-- Struct constants.
-- Tuple, array, optional, and result types.
-- Traits and type constraints.
+- Generic type arguments in annotations (for example `Box<i64>`); generic
+  calls and constructors currently infer their arguments.
+- Generic type constraints and bounds.
+- Optional and result types.
+- Broader type inference across function boundaries.

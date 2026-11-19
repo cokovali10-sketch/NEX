@@ -59,11 +59,13 @@ planned and are not yet implemented.
 
 ## Planned
 
-- Generics and type constraints.
+- Generic type constraints and bounds (plain generic functions and structs are
+  implemented by monomorphization).
 - Async/await and structured concurrency.
 - Macros and compile-time evaluation.
-- Unsafe blocks and low-level pointers.
-- Expanded standard library.
+- Raw pointer types and pointer arithmetic beyond `peek`/`poke` (`unsafe:`
+  blocks are implemented).
+- Expanded standard library (collections, cryptography, process, logging).
 
 ## Lexical rules
 
@@ -72,7 +74,7 @@ planned and are not yet implemented.
 - Tabs in leading indentation are errors.
 - `#` starts a line comment.
 - Strings support `\n`, `\r`, `\t`, `\\`, `\"`, `\xNN`, and `\u{...}`.
-- Embedded NUL characters in strings are not supported in 0.2.
+- Embedded NUL characters in strings are not supported in 1.0.
 
 ## Program structure
 

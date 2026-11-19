@@ -1,12 +1,15 @@
 # Standard Library
 
-NEX ships a small runtime-backed standard library. Every function below is
-implemented in `runtime/core/nex_rt.c`, declared in the LLVM backend, type
-checked by the semantic analyzer, and covered by an end-to-end test.
+NEX ships a small runtime-backed standard library. The functions below are
+implemented in `runtime/core/nex_rt.c`, declared in the LLVM backend, and type
+checked by the semantic analyzer. The integration suite exercises them end to
+end; a few low-level helpers are covered indirectly rather than by a dedicated
+test.
 
-The remaining modules (collections, filesystem, networking, concurrency,
-cryptography, serialization, time, logging, process) are not implemented yet.
-See `ROADMAP.md` for the milestone they belong to.
+Implemented modules: strings and formatting, files, blocking TCP/HTTP helpers,
+JSON, string-keyed maps, threads/mutexes, a thread pool, a router, a string
+builder, time and math. Still missing: general collections, cryptography,
+process control, structured logging, and async I/O. See `ROADMAP.md`.
 
 ## Builtins
 
@@ -25,8 +28,6 @@ These are global functions, not methods, so no imports are required.
 |---|---|---|
 | `len` | `(value: string or array) -> i64` | Byte length of a string; element count of an array. |
 | `concat` | `(left: string, right: string) -> string` | Returns a newly allocated string. |
-| `str_eq` | `(left: string, right: string) -> bool` | Content comparison. |
-| `str_cmp` | `(left: string, right: string) -> i64` | Lexicographic comparison: `-1`, `0`, or `1`. |
 | `str_contains` | `(haystack: string, needle: string) -> bool` | Substring search. |
 | `str_index_of` | `(haystack: string, needle: string) -> i64` | Byte offset of the first match, or `-1`. |
 | `str_substring` | `(value: string, start: i64, end: i64) -> string` | Bytes in `[start, end)`; out-of-range bounds are clamped, not errors. |
@@ -76,8 +77,8 @@ Blocking TCP sockets. Handles are `i64` file descriptors; `-1` means failure.
 | `tcp_close` | `(fd: i64) -> bool` | Closes the handle. |
 
 All calls block. There is no async runtime yet, so a server built from these
-primitives serves one connection at a time and needs `threads` (not implemented)
-for concurrency. `tcp_read` returns whatever a single `recv` produced, so an
+primitives must use `thread_spawn` or `pool_submit` for concurrency (see
+Threads). `tcp_read` returns whatever a single `recv` produced, so an
 HTTP server must loop until it sees the full request.
 
 ### HTTP
@@ -364,7 +365,8 @@ Measured on `examples/bench_strings` (50 000 appends of one byte):
 | `panic` | `(message: string) -> void` | Prints to stderr and exits with a non-zero status. |
 | `alloc` | `(size: i64) -> i64` | Raw `malloc` as an address-sized integer. |
 | `free` | `(address: i64) -> void` | Raw `free`. |
-| `peek_i64` / `poke_i64` | `(address[, value])` | Raw memory access for NEX Systems programs. |
+| `peek` | `(address: i64) -> i64` | Raw `i64` load for NEX Systems programs. |
+| `poke` | `(address: i64, value: i64) -> void` | Raw `i64` store for NEX Systems programs. |
 
 ## Example
 

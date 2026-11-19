@@ -323,7 +323,8 @@ fn cmd_build(args: &[String]) -> ExitCode {
                     "unknown"
                 };
                 let manifest = format!(
-                    "{{\"version\":\"0.2.0\",\"profile\":\"{:?}\",\"entry\":\"{}\",\"target\":\"{}\"}}\n",
+                    "{{\"version\":\"{}\",\"profile\":\"{:?}\",\"entry\":\"{}\",\"target\":\"{}\"}}\n",
+                    env!("CARGO_PKG_VERSION"),
                     profile,
                     project.entry.display(),
                     target
@@ -494,7 +495,10 @@ fn cmd_add(args: &[String]) -> ExitCode {
         }
         if !text.contains(&format!("\"{name}\"")) {
             if let Some(idx) = text.find("[dependencies]") {
-                let insert_pos = text[idx..].find('\n').map(|p| idx + p + 1).unwrap_or(text.len());
+                let insert_pos = text[idx..]
+                    .find('\n')
+                    .map(|p| idx + p + 1)
+                    .unwrap_or(text.len());
                 text.insert_str(insert_pos, &format!("{name} = \"{}\"\n", source.display()));
             }
         }
@@ -845,10 +849,9 @@ fn cmd_test(args: &[String]) -> ExitCode {
     }
 }
 
-fn parse_build_args(
-    args: &[String],
-    _allow_emit: bool,
-) -> Result<(String, Emit, Profile, Option<PathBuf>, Option<String>), String> {
+type BuildArgs = (String, Emit, Profile, Option<PathBuf>, Option<String>);
+
+fn parse_build_args(args: &[String], _allow_emit: bool) -> Result<BuildArgs, String> {
     let mut path = String::from(".");
     let mut emit = Emit::Executable;
     let mut profile = Profile::Debug;

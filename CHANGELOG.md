@@ -1,12 +1,29 @@
 # Changelog
 
-## 1.0.0 (2026-11-18)
+## Unreleased
 
 ### Added
 
+- `for x in array` iteration over fixed and growable arrays.
+- Parallel assignment (`a, b = b, a`).
 - `import "file.nex"` and `from "file.nex" import alias` syntax alongside
   `use alias from "file.nex"`.
 - Bitwise operators for integers: `&`, `|`, `^`, `<<`, `>>`, `~`.
+- Octal integer literals (`0o17`).
+- String indexing (`s[1]`) and slicing (`s[1..3]`, `s[..3]`, `s[3..]`).
+- Inherent methods via `impl Type:`.
+- String interpolation (`f"value {expr}"`).
+- Tuple destructuring in `let`/`var` bindings.
+- Cross-platform target selection (`--target`) and `nex doctor --target`.
+
+### Fixed
+
+- `nex lint` reports unused tuple-destructured bindings.
+- Build metadata reports the real compiler version instead of `0.2.0`.
+
+## 1.0.0 (2026-11-18)
+
+### Added
 
 - String standard library: `str_contains`, `str_index_of`, `str_substring`,
   `str_upper`, `str_lower`, `str_trim`, with runtime implementations, semantic
@@ -24,14 +41,8 @@
 
 - Traits: `trait` declarations, `impl Trait for Type`, `self`, and
   `receiver.method(...)` calls dispatched statically to `Type.method`.
-- Inherent methods via `impl Type:`.
 
 - Type aliases (`type Name = Type`).
-- String interpolation (`f"value {expr}"`).
-- Tuple destructuring in `let`/`var` bindings.
-- Cross-platform target selection (`--target`) and `nex doctor --target`.
-- `for x in array` iteration syntax.
-- Parallel assignment (`a, b = b, a`).
 
 - Extended `match`: literal patterns, guards (`case X if cond:`), and
   inclusive range patterns (`case 1..5:`).

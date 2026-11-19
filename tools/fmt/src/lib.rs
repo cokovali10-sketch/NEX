@@ -298,12 +298,7 @@ impl<'a> Printer<'a> {
 
     fn method_decl(&mut self, item: &FnDecl) {
         let mut text = format!("fn {}(", item.name);
-        let params: Vec<String> = item
-            .params
-            .iter()
-            .skip(1)
-            .map(param_str)
-            .collect();
+        let params: Vec<String> = item.params.iter().skip(1).map(param_str).collect();
         text.push_str("self");
         if !params.is_empty() {
             text.push_str(", ");
@@ -397,7 +392,10 @@ impl<'a> Printer<'a> {
                 } else {
                     name.clone()
                 };
-                self.push(format!("{keyword} {target}{annotation} = {}", expr_str(init)));
+                self.push(format!(
+                    "{keyword} {target}{annotation} = {}",
+                    expr_str(init)
+                ));
             }
             StmtKind::AssignMany { names, values } => {
                 let targets = names.join(", ");

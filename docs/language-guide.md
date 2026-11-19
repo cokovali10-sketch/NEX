@@ -1,6 +1,7 @@
-# Language Guide (0.2)
+# Language Guide (1.0)
 
-See `specs/language.md` and `specs/grammar.md` for the authoritative 0.2 subset.
+See `specs/language.md` and `specs/grammar.md` for the authoritative 1.0 language
+surface.
 
 ## Functions
 

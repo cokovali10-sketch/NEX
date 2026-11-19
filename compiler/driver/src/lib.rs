@@ -80,7 +80,9 @@ pub fn compile_source(
         .unwrap_or_else(|| SourceFile::new(source_name.clone(), String::new()));
 
     let analysis: Analysis = analyze(&program);
-    program.functions.retain(|f| !analysis.generic_functions.contains(&f.name));
+    program
+        .functions
+        .retain(|f| !analysis.generic_functions.contains(&f.name));
     diagnostics.extend(analysis.diagnostics.clone());
 
     let (build_dir, stem) = resolve_output(&options, &source_name);
@@ -125,7 +127,14 @@ pub fn compile_source(
 
     let clang = Clang::discover().map_err(DriverError::Toolchain)?;
     let artifacts = clang
-        .compile(&llvm_ir, &build_dir, &stem, options.profile, options.emit, options.target.as_deref())
+        .compile(
+            &llvm_ir,
+            &build_dir,
+            &stem,
+            options.profile,
+            options.emit,
+            options.target.as_deref(),
+        )
         .map_err(DriverError::Toolchain)?;
     result.artifacts = Some(artifacts);
 
@@ -186,9 +195,7 @@ fn load_program_file(
     path: &std::path::Path,
     visited: &mut std::collections::HashSet<std::path::PathBuf>,
 ) -> Result<(nex_ast::Program, Vec<SourceFile>, Vec<Diagnostic>), DriverError> {
-    let canonical = path
-        .canonicalize()
-        .unwrap_or_else(|_| path.to_path_buf());
+    let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
     if !visited.insert(canonical.clone()) {
         return Err(DriverError::Io(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
@@ -290,7 +297,11 @@ mod tests {
         let dir = std::env::temp_dir().join("nex-driver-import");
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("src")).unwrap();
-        std::fs::write(dir.join("src").join("math.nex"), "pub fn add(a: i64, b: i64) -> i64:\n    return a + b\n").unwrap();
+        std::fs::write(
+            dir.join("src").join("math.nex"),
+            "pub fn add(a: i64, b: i64) -> i64:\n    return a + b\n",
+        )
+        .unwrap();
         std::fs::write(
             dir.join("src").join("main.nex"),
             "use math from \"math.nex\"\n\nfn main():\n    print(math.add(2, 3))\n",

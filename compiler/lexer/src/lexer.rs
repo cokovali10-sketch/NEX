@@ -501,7 +501,7 @@ impl<'a> Lexer<'a> {
             '0' => {
                 self.diagnostics.push(Diagnostic::error(
                     "NXL010",
-                    "embedded NUL characters are not supported in NEX 0.1 strings",
+                    "embedded NUL characters are not supported in NEX strings",
                     Span::new(escape_start, self.pos),
                 ));
             }

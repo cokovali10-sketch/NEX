@@ -1,9 +1,10 @@
-# NEX ABI (0.1)
+# NEX ABI (1.0 Status)
 
 ## Implemented
 
-NEX 0.1 does not define a stable foreign ABI. Generated programs use the
-platform C ABI for runtime calls such as printing.
+NEX 1.0 can import C functions with `extern "C" fn`. It does not define a stable
+ABI for exporting NEX functions, structs, or callbacks. Generated programs use
+the platform C ABI for runtime calls such as printing.
 
 ## Function lowering
 

@@ -1,6 +1,6 @@
 use nex_diagnostics::Span;
 
-/// Lexical tokens of NEX 0.1 plus reserved keywords for planned features.
+/// Lexical tokens of NEX plus reserved keywords for planned features.
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
     Ident(String),

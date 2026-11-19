@@ -124,7 +124,10 @@ fn check_block(block: &Block, warnings: &mut Vec<Warning>) {
     let mut used = HashSet::new();
     collect_block_idents_excluding(block, &mut used);
     for stmt in &block.stmts {
-        if let StmtKind::Let { name, names, ty, .. } = &stmt.kind {
+        if let StmtKind::Let {
+            name, names, ty, ..
+        } = &stmt.kind
+        {
             let bindings: Vec<&String> = if let Some(names) = names {
                 names.iter().collect()
             } else {

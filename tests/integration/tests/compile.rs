@@ -1576,10 +1576,7 @@ fn trait_errors_are_reported() {
         "struct S:\n    x: i64\n\nimpl Missing for S:\n    fn run(self) -> i64:\n        return 1\n\nfn main():\n    print(1)\n",
     );
     assert!(
-        unknown_trait
-            .diagnostics
-            .iter()
-            .any(|d| d.code == "NXS041"),
+        unknown_trait.diagnostics.iter().any(|d| d.code == "NXS041"),
         "{:?}",
         unknown_trait.diagnostics
     );
@@ -1642,10 +1639,14 @@ fn main():
 
 #[test]
 fn pattern_match_requires_else_for_scalars() {
-    let integer = compile("fn main():\n    var x = 1\n    match x:\n        case 1:\n            print(\"one\")\n");
+    let integer = compile(
+        "fn main():\n    var x = 1\n    match x:\n        case 1:\n            print(\"one\")\n",
+    );
     assert!(integer.diagnostics.iter().any(|d| d.code == "NXS033"));
 
-    let boolean = compile("fn main():\n    var x = true\n    match x:\n        case true:\n            print(\"yes\")\n");
+    let boolean = compile(
+        "fn main():\n    var x = true\n    match x:\n        case true:\n            print(\"yes\")\n",
+    );
     assert!(boolean.diagnostics.iter().any(|d| d.code == "NXS033"));
 }
 

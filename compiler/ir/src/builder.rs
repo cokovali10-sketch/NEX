@@ -143,7 +143,7 @@ pub fn build(program: &Program, analysis: &Analysis) -> Result<IrModule, String>
         if analysis.generic_functions.contains(&function.name) {
             continue;
         }
-        if analysis.functions.get(&function.name).is_none() {
+        if !analysis.functions.contains_key(&function.name) {
             continue;
         }
         if analysis.externs.contains(&function.name) {
@@ -342,7 +342,13 @@ fn lower_statement(
                     ty: ir_ty,
                 });
                 if let Some(scope) = scopes.last_mut() {
-                    scope.insert(binding.clone(), Slot { ptr: slot, ty: ir_ty });
+                    scope.insert(
+                        binding.clone(),
+                        Slot {
+                            ptr: slot,
+                            ty: ir_ty,
+                        },
+                    );
                 }
             }
             Ok(())
@@ -395,7 +401,8 @@ fn lower_statement(
                         copy_array(builder, ptr, source, array_type, info.elem, info.len)?;
                     }
                     _ => {
-                        let operand = lower_expr(builder, value, scopes, storage, analysis, Type::Error)?;
+                        let operand =
+                            lower_expr(builder, value, scopes, storage, analysis, Type::Error)?;
                         builder.emit(Inst::Store {
                             ptr,
                             value: operand,
@@ -411,14 +418,16 @@ fn lower_statement(
                     .ptr;
                 match ty {
                     IrType::Struct(struct_name) => {
-                        copy_struct(builder, target, *ptr, *struct_name, analysis)?;
+                        copy_struct(builder, target, *ptr, struct_name, analysis)?;
                     }
                     IrType::Array(array_type) => {
-                        let src_ty = analysis.expr_type(values.first().map(|v| v.span).unwrap_or_default()).unwrap_or(Type::Error);
+                        let src_ty = analysis
+                            .expr_type(values.first().map(|v| v.span).unwrap_or_default())
+                            .unwrap_or(Type::Error);
                         if let Type::Array { display, .. } = src_ty
                             && let Some(info) = analysis.array_info(display)
                         {
-                            copy_array(builder, target, *ptr, *array_type, info.elem, info.len)?;
+                            copy_array(builder, target, *ptr, array_type, info.elem, info.len)?;
                         }
                     }
                     _ => {
@@ -877,11 +886,6 @@ fn lower_struct_place(
                 return Ok(ptr);
             }
 
-            let resolved = analysis
-                .aliases
-                .get(callee)
-                .cloned()
-                .unwrap_or_else(|| callee.clone());
             let callee = if let Some(mono_name) = analysis.mono_struct(expr.span) {
                 mono_name.as_str()
             } else {
@@ -1535,7 +1539,8 @@ fn lower_match(
                 let mut cond = cond;
 
                 if let Some(guard) = &arm.guard {
-                    let guard_val = lower_expr(builder, guard, scopes, storage, analysis, Type::Error)?;
+                    let guard_val =
+                        lower_expr(builder, guard, scopes, storage, analysis, Type::Error)?;
                     let and_dst = builder.new_value();
                     builder.emit(Inst::Bin {
                         dst: and_dst,

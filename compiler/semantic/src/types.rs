@@ -1,6 +1,6 @@
 use std::fmt;
 
-/// Types implemented by the NEX 0.1 vertical slice.
+/// Types implemented by the NEX compiler.
 ///
 /// Planned types such as `bytes`, `array<T>`, `optional<T>` and user-defined
 /// structs are intentionally absent until the corresponding runtime, layout and

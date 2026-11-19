@@ -4,14 +4,24 @@
 
 - `nex new <name>`: create a project.
 - `nex init [path]`: initialize an existing directory.
-- `nex build [path]`: build a project.
+- `nex build [path]`: build a project (`--release`, `--max`, `--debug`,
+  `--target <triple>`, `--emit exe|obj|llvm-ir|check`).
 - `nex run [path] [-- args]`: build and run.
-- `nex check [path]`: type-check.
-- `nex test [path]`: run `.nex` files in `tests/`.
+- `nex check [path]`: type-check without producing an executable.
+- `nex test [path]`: compile and run every `.nex` file in `tests/`.
 - `nex clean [path]`: remove `build/`.
-- `nex doctor [path]`: check toolchain and project.
-- `nex version`: print version.
+- `nex doctor [path] [--target <triple>]`: check the toolchain, target, and a
+  small end-to-end compile.
+- `nex version`: print the compiler version.
 - `nex fmt [--check | --write] <file.nex>...`: format source files.
+- `nex lint [--deny-warnings] <file.nex>...`: report suspicious code.
+- `nex add <path>`: copy a local package into `deps/` and record it in
+  `nex.toml`.
+- `nex benchmark [path] [-n N]`: build with `--release` and time `N` runs.
+- `nex debug [path]`: build with debug symbols and run the executable. This is
+  a convenience wrapper; it does not attach a debugger.
+- `nex profile [path]`: build with `--release`, run once, and print wall-clock
+  time. This is not a sampling profiler.
 
 ### `nex fmt`
 
@@ -46,11 +56,11 @@ nex lint src/main.nex
 nex lint --deny-warnings src/main.nex   # exit 1 when a warning is reported
 ```
 
-Checks in NEX 0.1:
+Checks in NEX 1.0:
 
 | Code | Check |
 |---|---|
-| `NXL001` | a local binding is declared but never used |
+| `NXL001` | a local binding is declared but never used (including tuple-destructured names) |
 | `NXL002` | a private function is never called |
 | `NXL003` | an expression is compared with itself |
 | `NXL004` | an `if` or `while` condition is a constant |
@@ -59,7 +69,6 @@ Checks in NEX 0.1:
 Bindings starting with `_` are exempt from `NXL001`.
 
 ## `nexc`
-
 
 Compile a single file:
 
