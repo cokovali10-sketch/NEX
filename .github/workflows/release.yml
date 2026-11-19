@@ -1,0 +1,101 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: nex-windows-x86_64
+          - os: ubuntu-latest
+            artifact: nex-linux-x86_64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Install Clang (Ubuntu)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y clang
+      - name: Format
+        run: cargo fmt --check
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Tests
+        run: cargo test --workspace
+      - name: Build release binary
+        run: cargo build --release -p nex-cli
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $name = "nex-$tag-windows-x86_64.zip"
+          New-Item -ItemType Directory -Path dist -Force | Out-Null
+          Copy-Item target/release/nex.exe dist/
+          Copy-Item README.md, CHANGELOG.md, LICENSE, install.ps1 dist/
+          Compress-Archive -Path dist/* -DestinationPath $name -Force
+          $hash = (Get-FileHash $name -Algorithm SHA256).Hash.ToLower()
+          "$hash  $name" | Set-Content -Encoding ascii "$name.sha256"
+      - name: Package (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          name="nex-${tag}-linux-x86_64.tar.gz"
+          mkdir -p dist
+          cp target/release/nex dist/
+          cp README.md CHANGELOG.md LICENSE install.sh dist/
+          tar -czf "$name" -C dist .
+          sha256sum "$name" > "$name.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            nex-*.zip
+            nex-*.zip.sha256
+            nex-*.tar.gz
+            nex-*.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          notes="docs/releases/${tag}.md"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$tag" artifacts/* --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            if [ -f "$notes" ]; then
+              gh release create "$tag" artifacts/* --repo "$GITHUB_REPOSITORY" \
+                --title "NEX $tag" --notes-file "$notes"
+            else
+              gh release create "$tag" artifacts/* --repo "$GITHUB_REPOSITORY" \
+                --title "NEX $tag" --generate-notes
+            fi
+          fi

@@ -7,7 +7,7 @@ pub fn run(project_root: Option<&Path>, target: Option<&str>) {
     println!("==========");
     println!("os: {}", std::env::consts::OS);
     println!("arch: {}", std::env::consts::ARCH);
-    println!("compiler: NEX 1.0.0");
+    println!("compiler: NEX {}", env!("CARGO_PKG_VERSION"));
 
     match Clang::discover() {
         Ok(clang) => {

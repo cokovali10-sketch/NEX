@@ -4,14 +4,14 @@ version = 4
 
 [[package]]
 name = "nex-ast"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "nex-diagnostics",
 ]
 
 [[package]]
 name = "nex-backend"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "nex-ast",
  "nex-diagnostics",
@@ -21,7 +21,7 @@ dependencies = [
 
 [[package]]
 name = "nex-cli"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "nex-ast",
  "nex-backend",
@@ -36,11 +36,11 @@ dependencies = [
 
 [[package]]
 name = "nex-diagnostics"
-version = "1.0.0"
+version = "1.0.1"
 
 [[package]]
 name = "nex-driver"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "nex-ast",
  "nex-backend",
@@ -53,7 +53,7 @@ dependencies = [
 
 [[package]]
 name = "nex-fmt"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "nex-ast",
  "nex-diagnostics",
@@ -63,7 +63,7 @@ dependencies = [
 
 [[package]]
 name = "nex-integration-tests"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "nex-backend",
  "nex-diagnostics",
@@ -72,7 +72,7 @@ dependencies = [
 
 [[package]]
 name = "nex-ir"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "nex-ast",
  "nex-diagnostics",
@@ -81,14 +81,14 @@ dependencies = [
 
 [[package]]
 name = "nex-lexer"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "nex-diagnostics",
 ]
 
 [[package]]
 name = "nex-lint"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "nex-ast",
  "nex-diagnostics",
@@ -98,7 +98,7 @@ dependencies = [
 
 [[package]]
 name = "nex-parser"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "nex-ast",
  "nex-diagnostics",
@@ -107,7 +107,7 @@ dependencies = [
 
 [[package]]
 name = "nex-semantic"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "nex-ast",
  "nex-diagnostics",

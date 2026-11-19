@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## 1.0.1 (2026-11-19)
+
+The first NEX release with downloadable binaries. The `v1.0.0` tag was cut
+before CI was green and was never published with release assets; `v1.0.1`
+supersedes it and includes all changes committed after that tag.
 
 ### Added
 
@@ -15,11 +19,18 @@
 - String interpolation (`f"value {expr}"`).
 - Tuple destructuring in `let`/`var` bindings.
 - Cross-platform target selection (`--target`) and `nex doctor --target`.
+- A tag-triggered release workflow that tests, builds, and uploads Windows and
+  Linux binaries with SHA-256 checksums.
 
 ### Fixed
 
 - `nex lint` reports unused tuple-destructured bindings.
 - Build metadata reports the real compiler version instead of `0.2.0`.
+- Formatting and Clippy are clean across the workspace; CI is green on Windows
+  and Ubuntu.
+- `README`, `ROADMAP`, `CHANGELOG`, `docs/`, and `specs/` now describe the
+  implemented feature set instead of the 0.1/0.2 subset.
+- The repository URL in workspace metadata points at the actual GitHub repo.
 
 ## 1.0.0 (2026-11-18)
 

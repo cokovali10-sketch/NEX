@@ -42,7 +42,8 @@ runtime (`runtime/core/nex_rt.c`) — not a hidden language runtime.
 
 ## Status
 
-- Current release: **NEX 1.0 - Stable Core** (compiler, CLI, runtime, tests).
+- Current release: **NEX 1.0.1 - Stable Core** (first published binaries for
+  Windows and Linux; supersedes the asset-less `v1.0.0` tag).
 - Implemented: lexer, parser, AST, semantic analysis, type checking, NEX IR,
   LLVM textual IR backend, native executable generation, CLI, and end-to-end
   tests.
@@ -67,9 +68,21 @@ runtime (`runtime/core/nex_rt.c`) — not a hidden language runtime.
   and tests on Ubuntu. `--target <triple>` selects a Clang target, but only the
   host platform is validated end to end by the test suite.
 
+## Install
+
+Download the latest archive from
+[GitHub Releases](https://github.com/cokovali10-sketch/NEX/releases):
+
+- Windows: `nex-<version>-windows-x86_64.zip`
+- Linux: `nex-<version>-linux-x86_64.tar.gz`
+
+Extract the `nex` binary, add it to `PATH`, and run `nex doctor`. Compiling NEX
+programs requires Clang in `PATH`; the compiler binary itself does not need
+Rust. Every archive ships with a SHA-256 checksum file.
+
 ## Quick start
 
-Build the toolchain:
+Build the toolchain from source:
 
 ```powershell
 cargo build
