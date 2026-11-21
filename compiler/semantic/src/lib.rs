@@ -4280,6 +4280,139 @@ impl<'a> Checker<'a> {
             return Type::String;
         }
 
+        if callee == "sum_of" {
+            if args.len() != 1 {
+                self.error(
+                    "NXS004",
+                    format!("`sum_of` expects 1 argument, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let array_ty = self.infer(&args[0]);
+            let elem_ty = match array_ty {
+                Type::Array { display, .. } | Type::DynArray(display) => self
+                    .analysis
+                    .array_info(display)
+                    .map(|info| info.elem)
+                    .unwrap_or(Type::Error),
+                _ => Type::Error,
+            };
+            if array_ty != Type::Error && elem_ty == Type::Error {
+                self.error(
+                    "NXS004",
+                    format!("`sum_of` expects an array, found `{array_ty}`"),
+                    args[0].span,
+                );
+                return Type::Error;
+            }
+            if elem_ty != Type::Error && !matches!(elem_ty, Type::I64 | Type::F64) {
+                self.error(
+                    "NXS004",
+                    format!("`sum_of` supports `[i64]` and `[f64]`, found element `{elem_ty}`"),
+                    args[0].span,
+                );
+                return Type::Error;
+            }
+            return elem_ty;
+        }
+
+        if callee == "min_of" || callee == "max_of" {
+            if args.len() != 1 {
+                self.error(
+                    "NXS004",
+                    format!("`{callee}` expects 1 argument, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let array_ty = self.infer(&args[0]);
+            let elem_ty = match array_ty {
+                Type::Array { display, .. } | Type::DynArray(display) => self
+                    .analysis
+                    .array_info(display)
+                    .map(|info| info.elem)
+                    .unwrap_or(Type::Error),
+                _ => Type::Error,
+            };
+            if array_ty != Type::Error && elem_ty == Type::Error {
+                self.error(
+                    "NXS004",
+                    format!("`{callee}` expects an array, found `{array_ty}`"),
+                    args[0].span,
+                );
+                return Type::Error;
+            }
+            if elem_ty != Type::Error && !matches!(elem_ty, Type::I64 | Type::F64) {
+                self.error(
+                    "NXS004",
+                    format!("`{callee}` supports `[i64]` and `[f64]`, found element `{elem_ty}`"),
+                    args[0].span,
+                );
+                return Type::Error;
+            }
+            return elem_ty;
+        }
+
+        if callee == "count" {
+            if args.len() != 2 {
+                self.error(
+                    "NXS004",
+                    format!("`count` expects 2 arguments, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::I64;
+            }
+            let array_ty = self.infer(&args[0]);
+            let elem_ty = match array_ty {
+                Type::Array { display, .. } | Type::DynArray(display) => self
+                    .analysis
+                    .array_info(display)
+                    .map(|info| info.elem)
+                    .unwrap_or(Type::Error),
+                _ => Type::Error,
+            };
+            if array_ty != Type::Error && elem_ty == Type::Error {
+                self.error(
+                    "NXS004",
+                    format!("`count` expects an array, found `{array_ty}`"),
+                    args[0].span,
+                );
+            }
+            let value_ty = self.infer(&args[1]);
+            if elem_ty != Type::Error && value_ty != Type::Error && elem_ty != value_ty {
+                self.error(
+                    "NXS004",
+                    format!("`count` expects a value of type `{elem_ty}`, found `{value_ty}`"),
+                    args[1].span,
+                );
+            }
+            if elem_ty != Type::Error
+                && !matches!(
+                    elem_ty,
+                    Type::I64 | Type::F64 | Type::String | Type::Bool | Type::Char
+                )
+            {
+                self.error(
+                    "NXS004",
+                    format!(
+                        "`count` supports `i64`, `f64`, `string`, `bool`, `char`, found `{elem_ty}`"
+                    ),
+                    args[0].span,
+                );
+            }
+            return Type::I64;
+        }
+
         if callee == "push" {
             if args.len() != 2 {
                 self.error(
@@ -4753,7 +4886,7 @@ impl<'a> Checker<'a> {
         } else {
             // monomorphize
             let arg_types: Vec<Type> = args.iter().map(|a| self.infer(a)).collect();
-            // map type params to concrete types: assume one type param, infer from first param type
+            // map type params to concrete types: assum_ofe one type param, infer from first param type
             // Simple: type param -> type of first argument if first param uses it.
             let mut mapping: std::collections::HashMap<String, Type> =
                 std::collections::HashMap::new();

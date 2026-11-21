@@ -141,6 +141,15 @@ const RUNTIME_DECLS: &[&str] = &[
     "declare void @nex_rt_sort_f64(ptr, i64)",
     "declare void @nex_rt_sort_str(ptr, i64)",
     "declare ptr @nex_rt_join_str(ptr, i64, ptr)",
+    "declare i64 @nex_rt_array_sum_i64(ptr, i64)",
+    "declare double @nex_rt_array_sum_f64(ptr, i64)",
+    "declare i64 @nex_rt_array_min_i64(ptr, i64)",
+    "declare i64 @nex_rt_array_max_i64(ptr, i64)",
+    "declare double @nex_rt_array_min_f64(ptr, i64)",
+    "declare double @nex_rt_array_max_f64(ptr, i64)",
+    "declare i64 @nex_rt_array_count_i64(ptr, i64, i64)",
+    "declare i64 @nex_rt_array_count_f64(ptr, i64, double)",
+    "declare i64 @nex_rt_array_count_str(ptr, i64, ptr)",
 ];
 
 pub fn emit_module(module: &IrModule) -> Result<String, String> {
@@ -799,6 +808,15 @@ fn runtime_signature(name: &str) -> (Vec<IrType>, IrType) {
         "nex_rt_log_info" | "nex_rt_log_warn" | "nex_rt_log_error" => (vec![ptr], void),
         "nex_rt_sort_i64" | "nex_rt_sort_f64" | "nex_rt_sort_str" => (vec![ptr, i64], void),
         "nex_rt_join_str" => (vec![ptr, i64, ptr], ptr),
+        "nex_rt_array_sum_i64" => (vec![ptr, i64], i64),
+        "nex_rt_array_sum_f64" => (vec![ptr, i64], f64),
+        "nex_rt_array_min_i64" => (vec![ptr, i64], i64),
+        "nex_rt_array_max_i64" => (vec![ptr, i64], i64),
+        "nex_rt_array_min_f64" => (vec![ptr, i64], f64),
+        "nex_rt_array_max_f64" => (vec![ptr, i64], f64),
+        "nex_rt_array_count_i64" => (vec![ptr, i64, i64], i64),
+        "nex_rt_array_count_f64" => (vec![ptr, i64, f64], i64),
+        "nex_rt_array_count_str" => (vec![ptr, i64, ptr], i64),
         _ => (vec![], void),
     }
 }

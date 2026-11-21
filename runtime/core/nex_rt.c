@@ -2963,3 +2963,131 @@ char *nex_rt_join_str(void *data, long long length, const char *separator) {
     joined[written] = '\0';
     return joined;
 }
+
+/* ------------------------------------------------------------------------- */
+/* Array reductions: sum, min, max.                                          */
+/* ------------------------------------------------------------------------- */
+
+long long nex_rt_array_sum_i64(const void *data, long long length) {
+    long long total = 0;
+    if (data == NULL || length <= 0) {
+        return total;
+    }
+    const long long *items = (const long long *)data;
+    for (long long index = 0; index < length; index++) {
+        total += items[index];
+    }
+    return total;
+}
+
+double nex_rt_array_sum_f64(const void *data, long long length) {
+    double total = 0.0;
+    if (data == NULL || length <= 0) {
+        return total;
+    }
+    const double *items = (const double *)data;
+    for (long long index = 0; index < length; index++) {
+        total += items[index];
+    }
+    return total;
+}
+
+long long nex_rt_array_min_i64(const void *data, long long length) {
+    if (data == NULL || length <= 0) {
+        return 0;
+    }
+    const long long *items = (const long long *)data;
+    long long result = items[0];
+    for (long long index = 1; index < length; index++) {
+        if (items[index] < result) {
+            result = items[index];
+        }
+    }
+    return result;
+}
+
+long long nex_rt_array_max_i64(const void *data, long long length) {
+    if (data == NULL || length <= 0) {
+        return 0;
+    }
+    const long long *items = (const long long *)data;
+    long long result = items[0];
+    for (long long index = 1; index < length; index++) {
+        if (items[index] > result) {
+            result = items[index];
+        }
+    }
+    return result;
+}
+
+double nex_rt_array_min_f64(const void *data, long long length) {
+    if (data == NULL || length <= 0) {
+        return 0.0;
+    }
+    const double *items = (const double *)data;
+    double result = items[0];
+    for (long long index = 1; index < length; index++) {
+        if (items[index] < result) {
+            result = items[index];
+        }
+    }
+    return result;
+}
+
+double nex_rt_array_max_f64(const void *data, long long length) {
+    if (data == NULL || length <= 0) {
+        return 0.0;
+    }
+    const double *items = (const double *)data;
+    double result = items[0];
+    for (long long index = 1; index < length; index++) {
+        if (items[index] > result) {
+            result = items[index];
+        }
+    }
+    return result;
+}
+
+long long nex_rt_array_count_i64(const void *data, long long length, long long value) {
+    long long total = 0;
+    if (data == NULL || length <= 0) {
+        return total;
+    }
+    const long long *items = (const long long *)data;
+    for (long long index = 0; index < length; index++) {
+        if (items[index] == value) {
+            total++;
+        }
+    }
+    return total;
+}
+
+long long nex_rt_array_count_f64(const void *data, long long length, double value) {
+    long long total = 0;
+    if (data == NULL || length <= 0) {
+        return total;
+    }
+    const double *items = (const double *)data;
+    for (long long index = 0; index < length; index++) {
+        if (items[index] == value) {
+            total++;
+        }
+    }
+    return total;
+}
+
+long long nex_rt_array_count_str(const void *data, long long length, const char *value) {
+    long long total = 0;
+    if (data == NULL || length <= 0) {
+        return total;
+    }
+    const char *const *items = (const char *const *)data;
+    const char *needle = value == NULL ? "" : value;
+    for (long long index = 0; index < length; index++) {
+        const char *item = items[index] == NULL ? "" : items[index];
+        if (strcmp(item, needle) == 0) {
+            total++;
+        }
+    }
+    return total;
+}

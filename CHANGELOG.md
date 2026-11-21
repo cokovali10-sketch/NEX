@@ -29,6 +29,8 @@
 - `sort(array)` sorts `[i64]`, `[f64]` and `[string]` arrays (fixed or
   growable) in place, ascending.
 - `join(array, separator)` concatenates arrays of strings.
+- `sum_of`, `min_of`, `max_of` reduce `[i64]`/`[f64]` arrays; `count(array, value)`
+  counts matching elements.
 - `docs/for-ai.md` and `AGENTS.md`: a self-contained reference for AI agents,
   including the `nex check` JSON format and an annotated ambitious example.
 - `examples/kv_store`: a JSON HTTP key-value service (router, JSON DOM,

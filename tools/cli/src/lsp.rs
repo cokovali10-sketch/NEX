@@ -519,6 +519,26 @@ const BUILTINS: &[(&str, &str, &str)] = &[
         "fn join(array, separator: string) -> string",
         "Join an array of strings with a separator.",
     ),
+    (
+        "sum_of",
+        "fn sum_of(array) -> T",
+        "Sum the elements of an i64 or f64 array.",
+    ),
+    (
+        "min_of",
+        "fn min_of(array) -> T",
+        "Smallest element of an i64 or f64 array.",
+    ),
+    (
+        "max_of",
+        "fn max_of(array) -> T",
+        "Largest element of an i64 or f64 array.",
+    ),
+    (
+        "count",
+        "fn count(array, value) -> i64",
+        "Count elements equal to value.",
+    ),
 ];
 
 fn line_starts(text: &str) -> Vec<usize> {

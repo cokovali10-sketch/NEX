@@ -27,6 +27,9 @@ These are global functions, not methods, so no imports are required.
 | `reverse` | `(array) -> void` | Reverse the elements in place. |
 | `sort` | `(array) -> void` | Ascending in-place sort; elements must be `i64`, `f64`, or `string`. |
 | `join` | `(array, separator: string) -> string` | Concatenates a `[string]` (or `[string; N]`) with `separator` between elements. |
+| `sum_of` | `(array) -> i64 or f64` | Sum of an `[i64]` or `[f64]` array; empty array yields `0`. |
+| `min_of` / `max_of` | `(array) -> i64 or f64` | Smallest/largest element of an `[i64]` or `[f64]` array; empty array yields `0`. |
+| `count` | `(array, value) -> i64` | Number of elements equal to `value` (`i64`, `f64`, `string`, `bool`, `char`). |
 
 These work on both `[T]` and `[T; N]`. `len` reports the element count of an
 array. `sort` mutates in place; it uses the C `qsort`, so the order of equal

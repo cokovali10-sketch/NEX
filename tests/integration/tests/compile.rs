@@ -2073,12 +2073,43 @@ fn main():
 }
 
 #[test]
+fn array_reductions_and_count() {
+    let source = r#"
+fn main():
+    var nums: [i64] = [1, 2, 3, 4]
+    println(sum_of(nums))
+    println(min_of(nums))
+    println(max_of(nums))
+    println(count(nums, 2))
+
+    var f: [f64] = [1.5, 2.5, 1.5]
+    println(sum_of(f))
+    println(min_of(f))
+    println(max_of(f))
+    println(count(f, 1.5))
+
+    var words: [string] = ["a", "b", "a"]
+    println(count(words, "a"))
+
+    var empty: [i64] = []
+    println(sum_of(empty))
+"#;
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "10\n1\n4\n1\n5.5\n1.5\n2.5\n2\n2\n0\n");
+}
+
+#[test]
 fn collection_builtin_arguments_are_checked() {
     for source in [
         "fn main():\n    var x = \"hi\"\n    sort(x)\n",
         "fn main():\n    var xs: [bool] = [true, false]\n    sort(xs)\n",
         "fn main():\n    var xs = [1, 2]\n    join(xs, \",\")\n",
         "fn main():\n    var xs = [\"a\"]\n    join(xs, 1)\n",
+        "fn main():\n    var x = 1\n    sum_of(x)\n",
+        "fn main():\n    var xs = [1, 2]\n    min_of(xs, 1)\n",
+        "fn main():\n    var xs = [1, 2]\n    count(xs)\n",
+        "fn main():\n    var xs = [1, 2]\n    count(xs, \"x\")\n",
     ] {
         let result = compile(source);
         assert!(result.has_errors(), "{source}");

@@ -3829,6 +3829,131 @@ fn lower_expr(
                 return Ok(Operand::Value(dst));
             }
 
+            // Reductions and counts over arrays.
+            if callee == "sum_of" || callee == "min_of" || callee == "max_of" {
+                if args.len() != 1 {
+                    return Err(format!("`{callee}` expects 1 argument"));
+                }
+                let array_ty = analysis.expr_type(args[0].span).unwrap_or(Type::Error);
+                let (base_ptr, len_operand, elem_ty, _is_dyn) = match array_ty {
+                    Type::Array { display, .. } => {
+                        let info = analysis
+                            .array_info(display)
+                            .ok_or_else(|| "missing array type information".to_string())?;
+                        let base = lower_array_place(builder, &args[0], scopes, storage, analysis)?;
+                        (
+                            base,
+                            Operand::Const(Const::Int(info.len as i64)),
+                            info.elem,
+                            false,
+                        )
+                    }
+                    Type::DynArray(display) => {
+                        let info = analysis
+                            .array_info(display)
+                            .ok_or_else(|| "missing array type information".to_string())?;
+                        let header_operand =
+                            lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
+                        let header = operand_value_id(builder, header_operand)?;
+                        let data_slot = field_ptr(builder, header, 0, IrType::String);
+                        let data = builder.new_value();
+                        builder.emit(Inst::Load {
+                            dst: data,
+                            ptr: data_slot,
+                            ty: IrType::String,
+                        });
+                        let len_slot = field_ptr(builder, header, 1, IrType::I64);
+                        let len_value = builder.new_value();
+                        builder.emit(Inst::Load {
+                            dst: len_value,
+                            ptr: len_slot,
+                            ty: IrType::I64,
+                        });
+                        (data, Operand::Value(len_value), info.elem, true)
+                    }
+                    _ => return Err(format!("`{callee}` expects an array")),
+                };
+                let (name, ret_ty) = match (callee, elem_ty) {
+                    ("sum_of", Type::I64) => ("nex_rt_array_sum_i64", IrType::I64),
+                    ("sum_of", Type::F64) => ("nex_rt_array_sum_f64", IrType::F64),
+                    ("min_of", Type::I64) => ("nex_rt_array_min_i64", IrType::I64),
+                    ("min_of", Type::F64) => ("nex_rt_array_min_f64", IrType::F64),
+                    ("max_of", Type::I64) => ("nex_rt_array_max_i64", IrType::I64),
+                    ("max_of", Type::F64) => ("nex_rt_array_max_f64", IrType::F64),
+                    _ => {
+                        return Err(format!(
+                            "`{callee}` does not support element type `{elem_ty}`"
+                        ));
+                    }
+                };
+                let dst = builder.new_value();
+                builder.emit(Inst::Call {
+                    dst: Some(dst),
+                    name: name.to_string(),
+                    args: vec![Operand::Value(base_ptr), len_operand],
+                    ret: ret_ty,
+                });
+                return Ok(Operand::Value(dst));
+            }
+
+            if callee == "count" {
+                if args.len() != 2 {
+                    return Err("`count` expects 2 arguments".to_string());
+                }
+                let array_ty = analysis.expr_type(args[0].span).unwrap_or(Type::Error);
+                let (base_ptr, len_operand, elem_ty) = match array_ty {
+                    Type::Array { display, .. } => {
+                        let info = analysis
+                            .array_info(display)
+                            .ok_or_else(|| "missing array type information".to_string())?;
+                        let base = lower_array_place(builder, &args[0], scopes, storage, analysis)?;
+                        (base, Operand::Const(Const::Int(info.len as i64)), info.elem)
+                    }
+                    Type::DynArray(display) => {
+                        let info = analysis
+                            .array_info(display)
+                            .ok_or_else(|| "missing array type information".to_string())?;
+                        let header_operand =
+                            lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
+                        let header = operand_value_id(builder, header_operand)?;
+                        let data_slot = field_ptr(builder, header, 0, IrType::String);
+                        let data = builder.new_value();
+                        builder.emit(Inst::Load {
+                            dst: data,
+                            ptr: data_slot,
+                            ty: IrType::String,
+                        });
+                        let len_slot = field_ptr(builder, header, 1, IrType::I64);
+                        let len_value = builder.new_value();
+                        builder.emit(Inst::Load {
+                            dst: len_value,
+                            ptr: len_slot,
+                            ty: IrType::I64,
+                        });
+                        (data, Operand::Value(len_value), info.elem)
+                    }
+                    _ => return Err("`count` expects an array".to_string()),
+                };
+                let value_operand =
+                    lower_expr(builder, &args[1], scopes, storage, analysis, Type::Error)?;
+                let name = match elem_ty {
+                    Type::I64 => "nex_rt_array_count_i64",
+                    Type::F64 => "nex_rt_array_count_f64",
+                    Type::String => "nex_rt_array_count_str",
+                    other => {
+                        return Err(format!("`count` does not support element type `{other}`"));
+                    }
+                };
+                let dst = builder.new_value();
+                builder.emit(Inst::Call {
+                    dst: Some(dst),
+                    name: name.to_string(),
+                    args: vec![Operand::Value(base_ptr), len_operand, value_operand],
+                    ret: IrType::I64,
+                });
+                return Ok(Operand::Value(dst));
+            }
+
             if callee == "push" {
                 if args.len() != 2 {
                     return Err("`push` expects 2 arguments".to_string());

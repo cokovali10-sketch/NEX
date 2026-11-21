@@ -294,6 +294,7 @@ per-function notes lives in `docs/standard-library.md`; the most used are:
 | `push` / `pop` | `(array, value) -> ...` | grow a growable array / remove last |
 | `contains` / `index_of` / `reverse` | `(array, ...) -> ...` | value membership and reversal |
 | `sort` / `join` | `(array[, string]) -> void/string` | ascending sort of `i64`/`f64`/`string`; string join |
+| `sum_of` / `min_of` / `max_of` / `count` | `(array[, value]) -> ...` | numeric reductions and element count |
 | `concat` / `to_string` | `(string, string) -> string` / `(value) -> string` | string building |
 | `str_substring` / `str_index_of_from` | `(string, i64[, i64]) -> ...` | byte ranges |
 | `str_contains` / `str_upper` / `str_lower` / `str_trim` | `(string) -> ...` | case and whitespace |
