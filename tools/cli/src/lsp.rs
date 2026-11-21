@@ -575,6 +575,26 @@ const BUILTINS: &[(&str, &str, &str)] = &[
         "fn str_split(value, separator) -> [string]",
         "Split a string into a growable array of fields.",
     ),
+    (
+        "file_append",
+        "fn file_append(path, content) -> bool",
+        "Append to a file.",
+    ),
+    (
+        "file_copy",
+        "fn file_copy(from, to) -> bool",
+        "Copy a file.",
+    ),
+    (
+        "file_rename",
+        "fn file_rename(from, to) -> bool",
+        "Rename a file.",
+    ),
+    (
+        "file_delete",
+        "fn file_delete(path) -> bool",
+        "Delete a file.",
+    ),
 ];
 
 fn line_starts(text: &str) -> Vec<usize> {

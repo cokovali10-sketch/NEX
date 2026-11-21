@@ -80,6 +80,10 @@ them yet because there is no ownership model (see `docs/memory-model.md`).
 | `write_file` | `(path: string, content: string) -> bool` | Creates or truncates the file; `false` on failure. |
 | `file_exists` | `(path: string) -> bool` | True when the path can be opened for reading. |
 | `file_size` | `(path: string) -> i64` | Size in bytes, or `-1` when the file cannot be opened. |
+| `file_append` | `(path: string, content: string) -> bool` | Append content; `false` on failure. |
+| `file_copy` | `(from: string, to: string) -> bool` | Copy a file; `false` on failure. |
+| `file_rename` | `(from: string, to: string) -> bool` | Rename/move a file; `false` on failure. |
+| `file_delete` | `(path: string) -> bool` | Delete a file; `false` on failure. |
 
 There is no streaming API yet: `read_file` loads the whole file, so it is not
 suitable for very large inputs. Paths are interpreted by the host operating

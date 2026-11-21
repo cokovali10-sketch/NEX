@@ -3617,6 +3617,55 @@ impl<'a> Checker<'a> {
             return Type::Bool;
         }
 
+        if callee == "file_append" || callee == "file_copy" || callee == "file_rename" {
+            if args.len() != 2 {
+                self.error(
+                    "NXS004",
+                    format!("`{callee}` expects 2 arguments, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let a = self.infer(&args[0]);
+            let b = self.infer(&args[1]);
+            if (a != Type::String || b != Type::String) && (a != Type::Error && b != Type::Error) {
+                self.error(
+                    "NXS004",
+                    format!("`{callee}` expects `(string, string)`"),
+                    span,
+                );
+                return Type::Error;
+            }
+            return Type::Bool;
+        }
+
+        if callee == "file_delete" {
+            if args.len() != 1 {
+                self.error(
+                    "NXS004",
+                    format!("`file_delete` expects 1 argument, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let p = self.infer(&args[0]);
+            if p != Type::String && p != Type::Error {
+                self.error(
+                    "NXS004",
+                    format!("`file_delete` expects `string`, found `{p}`"),
+                    args[0].span,
+                );
+                return Type::Error;
+            }
+            return Type::Bool;
+        }
+
         if callee == "json_parse" {
             if args.len() != 1 {
                 self.error(

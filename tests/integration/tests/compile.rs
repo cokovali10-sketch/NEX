@@ -2143,6 +2143,30 @@ fn main():
 }
 
 #[test]
+fn file_helpers() {
+    let source = r#"
+fn main():
+    write_file("f.txt", "hi")
+    println(file_append("f.txt", "!"))
+    println(read_file("f.txt"))
+    println(file_copy("f.txt", "g.txt"))
+    println(read_file("g.txt"))
+    println(file_rename("g.txt", "h.txt"))
+    println(file_exists("g.txt"))
+    println(file_exists("h.txt"))
+    println(file_delete("f.txt"))
+    println(file_delete("h.txt"))
+    println("ok")
+"#;
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(
+        stdout,
+        "true\nhi!\ntrue\nhi!\ntrue\nfalse\ntrue\ntrue\ntrue\nok\n"
+    );
+}
+
+#[test]
 fn collection_builtin_arguments_are_checked() {
     for source in [
         "fn main():\n    var x = \"hi\"\n    sort(x)\n",

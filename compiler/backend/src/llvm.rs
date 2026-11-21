@@ -159,6 +159,10 @@ const RUNTIME_DECLS: &[&str] = &[
     "declare i64 @nex_rt_arena_capacity(i64)",
     "declare void @nex_rt_arena_free(i64)",
     "declare ptr @nex_rt_str_split(ptr, ptr)",
+    "declare i32 @nex_rt_file_append(ptr, ptr)",
+    "declare i32 @nex_rt_file_delete(ptr)",
+    "declare i32 @nex_rt_file_rename(ptr, ptr)",
+    "declare i32 @nex_rt_file_copy(ptr, ptr)",
 ];
 
 pub fn emit_module(module: &IrModule) -> Result<String, String> {
@@ -823,6 +827,10 @@ fn runtime_signature(name: &str) -> (Vec<IrType>, IrType) {
         "nex_rt_arena_capacity" => (vec![i64], i64),
         "nex_rt_arena_free" => (vec![i64], void),
         "nex_rt_str_split" => (vec![ptr, ptr], ptr),
+        "nex_rt_file_append" => (vec![ptr, ptr], i32),
+        "nex_rt_file_delete" => (vec![ptr], i32),
+        "nex_rt_file_rename" => (vec![ptr, ptr], i32),
+        "nex_rt_file_copy" => (vec![ptr, ptr], i32),
         "nex_rt_join_str" => (vec![ptr, i64, ptr], ptr),
         "nex_rt_array_sum_i64" => (vec![ptr, i64], i64),
         "nex_rt_array_sum_f64" => (vec![ptr, i64], f64),

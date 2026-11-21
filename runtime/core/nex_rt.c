@@ -3278,3 +3278,68 @@ void *nex_rt_str_split(const char *value, const char *separator) {
     }
     return header;
 }
+
+/* ------------------------------------------------------------------------- */
+/* Filesystem helpers.                                                      */
+/* ------------------------------------------------------------------------- */
+
+int nex_rt_file_append(const char *path, const char *content) {
+    if (path == NULL || content == NULL) {
+        return 0;
+    }
+    FILE *file = fopen(path, "ab");
+    if (file == NULL) {
+        return 0;
+    }
+    size_t length = strlen(content);
+    size_t written = fwrite(content, 1, length, file);
+    fclose(file);
+    return written == length;
+}
+
+int nex_rt_file_delete(const char *path) {
+    if (path == NULL) {
+        return 0;
+    }
+    return remove(path) == 0;
+}
+
+int nex_rt_file_rename(const char *from, const char *to) {
+    if (from == NULL || to == NULL) {
+        return 0;
+    }
+    return rename(from, to) == 0;
+}
+
+int nex_rt_file_copy(const char *from, const char *to) {
+    if (from == NULL || to == NULL) {
+        return 0;
+    }
+    FILE *src = fopen(from, "rb");
+    if (src == NULL) {
+        return 0;
+    }
+    FILE *dst = fopen(to, "wb");
+    if (dst == NULL) {
+        fclose(src);
+        return 0;
+    }
+    char buffer[4096];
+    size_t read;
+    int ok = 1;
+    while ((read = fread(buffer, 1, sizeof(buffer), src)) > 0) {
+        if (fwrite(buffer, 1, read, dst) != read) {
+            ok = 0;
+            break;
+        }
+    }
+    if (ferror(src)) {
+        ok = 0;
+    }
+    fclose(src);
+    fclose(dst);
+    if (!ok) {
+        remove(to);
+    }
+    return ok;
+}

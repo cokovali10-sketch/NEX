@@ -4549,6 +4549,53 @@ fn lower_expr(
                 return Ok(Operand::Value(dst));
             }
 
+            if callee == "file_append" || callee == "file_copy" || callee == "file_rename" {
+                let a = lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
+                let b = lower_expr(builder, &args[1], scopes, storage, analysis, Type::Error)?;
+                let name = match callee {
+                    "file_append" => "nex_rt_file_append",
+                    "file_copy" => "nex_rt_file_copy",
+                    "file_rename" => "nex_rt_file_rename",
+                    _ => unreachable!(),
+                };
+                let raw = builder.new_value();
+                builder.emit(Inst::Call {
+                    dst: Some(raw),
+                    name: name.to_string(),
+                    args: vec![a, b],
+                    ret: IrType::I32,
+                });
+                let dst = builder.new_value();
+                builder.emit(Inst::Cast {
+                    dst,
+                    kind: CastKind::Truncate,
+                    from: IrType::I32,
+                    to: IrType::Bool,
+                    operand: Operand::Value(raw),
+                });
+                return Ok(Operand::Value(dst));
+            }
+
+            if callee == "file_delete" {
+                let p = lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
+                let raw = builder.new_value();
+                builder.emit(Inst::Call {
+                    dst: Some(raw),
+                    name: "nex_rt_file_delete".to_string(),
+                    args: vec![p],
+                    ret: IrType::I32,
+                });
+                let dst = builder.new_value();
+                builder.emit(Inst::Cast {
+                    dst,
+                    kind: CastKind::Truncate,
+                    from: IrType::I32,
+                    to: IrType::Bool,
+                    operand: Operand::Value(raw),
+                });
+                return Ok(Operand::Value(dst));
+            }
+
             if callee == "tcp_set_timeout" {
                 let socket = lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
                 let timeout =
