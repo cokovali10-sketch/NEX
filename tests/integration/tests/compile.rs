@@ -2041,6 +2041,59 @@ fn main():
 }
 
 #[test]
+fn sort_and_join_arrays() {
+    let source = r#"
+fn main():
+    var nums: [i64] = [5, 3, 9, 1]
+    sort(nums)
+    for x in nums:
+        print(x)
+    print("|")
+
+    var fixed: [f64; 3] = [2.5, 1.5, 3.5]
+    sort(fixed)
+    print(fixed[0])
+    print("|")
+
+    var words: [string] = ["pear", "apple", "fig"]
+    sort(words)
+    print(join(words, ","))
+    print("|")
+    print(join(words, ""))
+    print("|")
+
+    var empty: [string] = []
+    print("[")
+    print(join(empty, ","))
+    print("]")
+"#;
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "1359|1.5|apple,fig,pear|applefigpear|[]");
+}
+
+#[test]
+fn collection_builtin_arguments_are_checked() {
+    for source in [
+        "fn main():\n    var x = \"hi\"\n    sort(x)\n",
+        "fn main():\n    var xs: [bool] = [true, false]\n    sort(xs)\n",
+        "fn main():\n    var xs = [1, 2]\n    join(xs, \",\")\n",
+        "fn main():\n    var xs = [\"a\"]\n    join(xs, 1)\n",
+    ] {
+        let result = compile(source);
+        assert!(result.has_errors(), "{source}");
+        assert!(
+            result
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.code == "NXS004"),
+            "{source}: {:?}",
+            result.diagnostics
+        );
+    }
+}
+
+#[test]
 fn builtin_option_and_result_types() {
     let source = r#"
 fn find(xs: [i64], target: i64) -> Option<i64>:

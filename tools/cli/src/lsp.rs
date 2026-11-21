@@ -509,6 +509,16 @@ const BUILTINS: &[(&str, &str, &str)] = &[
         "fn log_error(message: string)",
         "Write a timestamped ERROR line to stderr.",
     ),
+    (
+        "sort",
+        "fn sort(array)",
+        "Sort an array of i64, f64 or string in place, ascending.",
+    ),
+    (
+        "join",
+        "fn join(array, separator: string) -> string",
+        "Join an array of strings with a separator.",
+    ),
 ];
 
 fn line_starts(text: &str) -> Vec<usize> {

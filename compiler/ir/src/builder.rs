@@ -3726,6 +3726,109 @@ fn lower_expr(
                 return Ok(Operand::Const(Const::Bool(false)));
             }
 
+            if callee == "sort" {
+                if args.len() != 1 {
+                    return Err("`sort` expects 1 argument".to_string());
+                }
+                let array_ty = analysis.expr_type(args[0].span).unwrap_or(Type::Error);
+                let (data, len, elem_ty) = match array_ty {
+                    Type::Array { display, .. } => {
+                        let info = analysis
+                            .array_info(display)
+                            .ok_or_else(|| "missing array type information".to_string())?;
+                        let base = lower_array_place(builder, &args[0], scopes, storage, analysis)?;
+                        (base, Operand::Const(Const::Int(info.len as i64)), info.elem)
+                    }
+                    Type::DynArray(display) => {
+                        let info = analysis
+                            .array_info(display)
+                            .ok_or_else(|| "missing array type information".to_string())?;
+                        let header_operand =
+                            lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
+                        let header = operand_value_id(builder, header_operand)?;
+                        let data_slot = field_ptr(builder, header, 0, IrType::String);
+                        let data = builder.new_value();
+                        builder.emit(Inst::Load {
+                            dst: data,
+                            ptr: data_slot,
+                            ty: IrType::String,
+                        });
+                        let len_slot = field_ptr(builder, header, 1, IrType::I64);
+                        let len_value = builder.new_value();
+                        builder.emit(Inst::Load {
+                            dst: len_value,
+                            ptr: len_slot,
+                            ty: IrType::I64,
+                        });
+                        (data, Operand::Value(len_value), info.elem)
+                    }
+                    _ => return Err("`sort` expects an array".to_string()),
+                };
+                let name = match elem_ty {
+                    Type::I64 => "nex_rt_sort_i64",
+                    Type::F64 => "nex_rt_sort_f64",
+                    Type::String => "nex_rt_sort_str",
+                    other => return Err(format!("`sort` does not support element type `{other}`")),
+                };
+                builder.emit(Inst::Call {
+                    dst: None,
+                    name: name.to_string(),
+                    args: vec![Operand::Value(data), len],
+                    ret: IrType::Void,
+                });
+                return Ok(Operand::Const(Const::Bool(true)));
+            }
+
+            if callee == "join" {
+                if args.len() != 2 {
+                    return Err("`join` expects 2 arguments".to_string());
+                }
+                let array_ty = analysis.expr_type(args[0].span).unwrap_or(Type::Error);
+                let (data, len) = match array_ty {
+                    Type::Array { display, .. } => {
+                        let info = analysis
+                            .array_info(display)
+                            .ok_or_else(|| "missing array type information".to_string())?;
+                        let base = lower_array_place(builder, &args[0], scopes, storage, analysis)?;
+                        (base, Operand::Const(Const::Int(info.len as i64)))
+                    }
+                    Type::DynArray(display) => {
+                        let _ = analysis
+                            .array_info(display)
+                            .ok_or_else(|| "missing array type information".to_string())?;
+                        let header_operand =
+                            lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
+                        let header = operand_value_id(builder, header_operand)?;
+                        let data_slot = field_ptr(builder, header, 0, IrType::String);
+                        let data = builder.new_value();
+                        builder.emit(Inst::Load {
+                            dst: data,
+                            ptr: data_slot,
+                            ty: IrType::String,
+                        });
+                        let len_slot = field_ptr(builder, header, 1, IrType::I64);
+                        let len_value = builder.new_value();
+                        builder.emit(Inst::Load {
+                            dst: len_value,
+                            ptr: len_slot,
+                            ty: IrType::I64,
+                        });
+                        (data, Operand::Value(len_value))
+                    }
+                    _ => return Err("`join` expects an array".to_string()),
+                };
+                let separator =
+                    lower_expr(builder, &args[1], scopes, storage, analysis, Type::Error)?;
+                let dst = builder.new_value();
+                builder.emit(Inst::Call {
+                    dst: Some(dst),
+                    name: "nex_rt_join_str".to_string(),
+                    args: vec![Operand::Value(data), len, separator],
+                    ret: IrType::String,
+                });
+                return Ok(Operand::Value(dst));
+            }
+
             if callee == "push" {
                 if args.len() != 2 {
                     return Err("`push` expects 2 arguments".to_string());

@@ -137,6 +137,10 @@ const RUNTIME_DECLS: &[&str] = &[
     "declare void @nex_rt_log_info(ptr)",
     "declare void @nex_rt_log_warn(ptr)",
     "declare void @nex_rt_log_error(ptr)",
+    "declare void @nex_rt_sort_i64(ptr, i64)",
+    "declare void @nex_rt_sort_f64(ptr, i64)",
+    "declare void @nex_rt_sort_str(ptr, i64)",
+    "declare ptr @nex_rt_join_str(ptr, i64, ptr)",
 ];
 
 pub fn emit_module(module: &IrModule) -> Result<String, String> {
@@ -793,6 +797,8 @@ fn runtime_signature(name: &str) -> (Vec<IrType>, IrType) {
         "nex_rt_env_get" => (vec![ptr], ptr),
         "nex_rt_exit" => (vec![i64], void),
         "nex_rt_log_info" | "nex_rt_log_warn" | "nex_rt_log_error" => (vec![ptr], void),
+        "nex_rt_sort_i64" | "nex_rt_sort_f64" | "nex_rt_sort_str" => (vec![ptr, i64], void),
+        "nex_rt_join_str" => (vec![ptr, i64, ptr], ptr),
         _ => (vec![], void),
     }
 }

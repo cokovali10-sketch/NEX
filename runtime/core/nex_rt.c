@@ -2887,3 +2887,79 @@ void nex_rt_log_warn(const char *message) {
 void nex_rt_log_error(const char *message) {
     nex_rt_log_line("ERROR", message);
 }
+
+/* ------------------------------------------------------------------------- */
+/* Array collections: in-place ascending sort and string join.               */
+/* ------------------------------------------------------------------------- */
+
+static int nex_rt_cmp_i64(const void *left, const void *right) {
+    long long a = *(const long long *)left;
+    long long b = *(const long long *)right;
+    return (a > b) - (a < b);
+}
+
+static int nex_rt_cmp_f64(const void *left, const void *right) {
+    double a = *(const double *)left;
+    double b = *(const double *)right;
+    return (a > b) - (a < b);
+}
+
+static int nex_rt_cmp_str(const void *left, const void *right) {
+    const char *a = *(const char *const *)left;
+    const char *b = *(const char *const *)right;
+    return strcmp(a == NULL ? "" : a, b == NULL ? "" : b);
+}
+
+void nex_rt_sort_i64(void *data, long long length) {
+    if (data != NULL && length > 1) {
+        qsort(data, (size_t)length, sizeof(long long), nex_rt_cmp_i64);
+    }
+}
+
+void nex_rt_sort_f64(void *data, long long length) {
+    if (data != NULL && length > 1) {
+        qsort(data, (size_t)length, sizeof(double), nex_rt_cmp_f64);
+    }
+}
+
+void nex_rt_sort_str(void *data, long long length) {
+    if (data != NULL && length > 1) {
+        qsort(data, (size_t)length, sizeof(const char *), nex_rt_cmp_str);
+    }
+}
+
+char *nex_rt_join_str(void *data, long long length, const char *separator) {
+    const char *separator_text = separator == NULL ? "" : separator;
+    if (data == NULL || length <= 0) {
+        return nex_rt_copy_string("");
+    }
+    const char **items = (const char **)data;
+    size_t separator_length = strlen(separator_text);
+    size_t total = 0;
+    for (long long index = 0; index < length; index++) {
+        const char *item = items[index];
+        total += strlen(item == NULL ? "" : item);
+    }
+    if (separator_length > 0) {
+        total += separator_length * (size_t)(length - 1);
+    }
+    char *joined = (char *)malloc(total + 1);
+    if (joined == NULL) {
+        return NULL;
+    }
+    size_t written = 0;
+    for (long long index = 0; index < length; index++) {
+        const char *item = items[index];
+        if (item != NULL) {
+            size_t item_length = strlen(item);
+            memcpy(joined + written, item, item_length);
+            written += item_length;
+        }
+        if (index + 1 < length && separator_length > 0) {
+            memcpy(joined + written, separator_text, separator_length);
+            written += separator_length;
+        }
+    }
+    joined[written] = '\0';
+    return joined;
+}

@@ -25,9 +25,12 @@ These are global functions, not methods, so no imports are required.
 | `contains` | `(array, value) -> bool` | `true` when `value` is present. |
 | `index_of` | `(array, value) -> i64` | Index of the first match, or `-1`. |
 | `reverse` | `(array) -> void` | Reverse the elements in place. |
+| `sort` | `(array) -> void` | Ascending in-place sort; elements must be `i64`, `f64`, or `string`. |
+| `join` | `(array, separator: string) -> string` | Concatenates a `[string]` (or `[string; N]`) with `separator` between elements. |
 
 These work on both `[T]` and `[T; N]`. `len` reports the element count of an
-array.
+array. `sort` mutates in place; it uses the C `qsort`, so the order of equal
+elements is unspecified. An empty array joins to `""`.
 
 ### Printing
 

@@ -4194,6 +4194,92 @@ impl<'a> Checker<'a> {
             return Type::Void;
         }
 
+        if callee == "sort" {
+            if args.len() != 1 {
+                self.error(
+                    "NXS004",
+                    format!("`sort` expects 1 argument, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Void;
+            }
+            let array_ty = self.infer(&args[0]);
+            let elem_ty = match array_ty {
+                Type::Array { display, .. } | Type::DynArray(display) => self
+                    .analysis
+                    .array_info(display)
+                    .map(|info| info.elem)
+                    .unwrap_or(Type::Error),
+                _ => Type::Error,
+            };
+            if array_ty != Type::Error && elem_ty == Type::Error {
+                self.error(
+                    "NXS004",
+                    format!("`sort` expects an array, found `{array_ty}`"),
+                    args[0].span,
+                );
+            } else if elem_ty != Type::Error
+                && !matches!(elem_ty, Type::I64 | Type::F64 | Type::String)
+            {
+                self.error(
+                    "NXS004",
+                    format!(
+                        "`sort` supports arrays of `i64`, `f64` or `string`, found `{elem_ty}`"
+                    ),
+                    args[0].span,
+                );
+            }
+            return Type::Void;
+        }
+
+        if callee == "join" {
+            if args.len() != 2 {
+                self.error(
+                    "NXS004",
+                    format!("`join` expects 2 arguments, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let array_ty = self.infer(&args[0]);
+            let elem_ty = match array_ty {
+                Type::Array { display, .. } | Type::DynArray(display) => self
+                    .analysis
+                    .array_info(display)
+                    .map(|info| info.elem)
+                    .unwrap_or(Type::Error),
+                _ => Type::Error,
+            };
+            if array_ty != Type::Error && elem_ty == Type::Error {
+                self.error(
+                    "NXS004",
+                    format!("`join` expects an array, found `{array_ty}`"),
+                    args[0].span,
+                );
+            } else if elem_ty != Type::Error && elem_ty != Type::String {
+                self.error(
+                    "NXS004",
+                    format!("`join` expects a `[string]` array, found element `{elem_ty}`"),
+                    args[0].span,
+                );
+            }
+            let separator_ty = self.infer(&args[1]);
+            if separator_ty != Type::String && separator_ty != Type::Error {
+                self.error(
+                    "NXS004",
+                    format!("`join` expects a `string` separator, found `{separator_ty}`"),
+                    args[1].span,
+                );
+            }
+            return Type::String;
+        }
+
         if callee == "push" {
             if args.len() != 2 {
                 self.error(
