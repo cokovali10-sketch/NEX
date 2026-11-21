@@ -63,8 +63,9 @@ runtime (`runtime/core/nex_rt.c`) — not a hidden language runtime.
   functions, process environment/arguments, `exit`, and logging (see
   `docs/standard-library.md`).
 - Not implemented yet: ownership, borrowing and lifetime checking; async/await;
-  the rest of the standard library (general collections, crypto, spawning child
-  processes); a package registry; Python and Rust adapters; NEX Studio. `nex lsp` is a built-in
+  the rest of the standard library (general-purpose data structures beyond
+  arrays, crypto, spawning child processes); a package registry; Python and
+  Rust adapters; NEX Studio. `nex lsp` is a built-in
   language server (hover, go-to-definition, completion, document symbols,
   formatting, live diagnostics). `nex debug` and
   `nex profile` build a debug/release executable and run it; they are not a

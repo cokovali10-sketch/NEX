@@ -47,7 +47,7 @@
 
 ## NEX 0.5 - Standard Library
 
-- [ ] Collections, math, algorithms (design fixed: see `specs/dynamic-arrays.md`).
+- [x] Collections, math, algorithms (design fixed: see `specs/dynamic-arrays.md`).
 - [x] String functions: len, concat, str_contains, str_index_of,
       str_substring, str_upper, str_lower, str_trim, to_string.
 - [x] Filesystem and blocking networking (TCP/HTTP helpers).
