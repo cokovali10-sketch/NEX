@@ -1025,6 +1025,7 @@ fn diagnostics_for(uri: &str, text: &str) -> (Vec<Diagnostic>, SourceFile) {
         output: None,
         build_dir: None,
         target: None,
+        sanitize: false,
     };
     match nex_driver::compile_source(source_name.clone(), text.to_string(), options) {
         Ok(result) => (result.diagnostics, result.source),

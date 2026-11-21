@@ -5,8 +5,8 @@
 - `nex new <name>`: create a project.
 - `nex init [path]`: initialize an existing directory.
 - `nex build [path]`: build a project (`--release`, `--max`, `--debug`,
-  `--target <triple>`, `--emit exe|obj|llvm-ir|check`).
-- `nex run [path] [-- args]`: build and run.
+  `--target <triple>`, `--sanitize`, `--emit exe|obj|llvm-ir|check`).
+- `nex run [path] [-- args]`: build and run. Accepts `--sanitize`.
 - `nex check [path]`: type-check without producing an executable. `nex check
   --json [file.nex|project]` prints diagnostics as JSON for tooling and AI
   agents; `nex check` without `--json` prints the human-readable diagnostic

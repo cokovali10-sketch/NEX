@@ -17,6 +17,7 @@ pub struct CompileOptions {
     pub output: Option<PathBuf>,
     pub build_dir: Option<PathBuf>,
     pub target: Option<String>,
+    pub sanitize: bool,
 }
 
 impl Default for CompileOptions {
@@ -27,6 +28,7 @@ impl Default for CompileOptions {
             output: None,
             build_dir: None,
             target: None,
+            sanitize: false,
         }
     }
 }
@@ -134,6 +136,7 @@ pub fn compile_source(
             options.profile,
             options.emit,
             options.target.as_deref(),
+            options.sanitize,
         )
         .map_err(DriverError::Toolchain)?;
     result.artifacts = Some(artifacts);

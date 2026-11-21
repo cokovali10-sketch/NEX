@@ -43,7 +43,7 @@
 - [x] Allocators and arenas.
 - [x] Bounds checking for array indexing.
 - [x] Unsafe blocks for grouping low-level operations.
-- [ ] Sanitizer integration.
+- [x] Sanitizer integration.
 
 ## NEX 0.5 - Standard Library
 

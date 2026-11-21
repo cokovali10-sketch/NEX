@@ -103,6 +103,7 @@ fn main() -> ExitCode {
         output,
         build_dir: None,
         target,
+        sanitize: false,
     };
 
     match compile_file(&input, options) {

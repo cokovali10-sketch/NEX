@@ -33,6 +33,8 @@
   counts matching elements; `product` multiplies.
 - Arena allocators: `arena_new`, `arena_alloc`, `arena_reset`, `arena_used`,
   `arena_capacity`, `arena_free` (bump allocator, doubles capacity).
+- Sanitizer support: `nex build`/`nex run ... --sanitize` adds
+  `-fsanitize=address,undefined` to clang for both the program and runtime.
 - `docs/for-ai.md` and `AGENTS.md`: a self-contained reference for AI agents,
   including the `nex check` JSON format and an annotated ambitious example.
 - `examples/kv_store`: a JSON HTTP key-value service (router, JSON DOM,

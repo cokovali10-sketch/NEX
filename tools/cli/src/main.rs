@@ -271,7 +271,7 @@ fn cmd_init(args: &[String]) -> ExitCode {
 }
 
 fn cmd_build(args: &[String]) -> ExitCode {
-    let (path, emit, profile, output, target) = match parse_build_args(args, false) {
+    let (path, emit, profile, output, target, sanitize) = match parse_build_args(args, false) {
         Ok(value) => value,
         Err(error) => {
             eprintln!("nex: {error}");
@@ -293,6 +293,7 @@ fn cmd_build(args: &[String]) -> ExitCode {
         output,
         build_dir: Some(project.root.join("build")),
         target,
+        sanitize,
     };
 
     match compile_file(&project.entry, options) {
@@ -389,6 +390,7 @@ fn cmd_check(args: &[String]) -> ExitCode {
         output: None,
         build_dir: None,
         target: None,
+        sanitize: false,
     };
 
     // `nex check` works two ways: inside a project it checks the entry
@@ -509,13 +511,14 @@ fn cmd_run(args: &[String]) -> ExitCode {
         (args, &[][..])
     };
 
-    let (path, _emit, profile, _output, target) = match parse_build_args(build_args, false) {
-        Ok(value) => value,
-        Err(error) => {
-            eprintln!("nex: {error}");
-            return ExitCode::from(2);
-        }
-    };
+    let (path, _emit, profile, _output, target, sanitize) =
+        match parse_build_args(build_args, false) {
+            Ok(value) => value,
+            Err(error) => {
+                eprintln!("nex: {error}");
+                return ExitCode::from(2);
+            }
+        };
 
     let project = match discover(Path::new(&path)) {
         Ok(project) => project,
@@ -531,6 +534,7 @@ fn cmd_run(args: &[String]) -> ExitCode {
         output: None,
         build_dir: Some(project.root.join("build")),
         target,
+        sanitize,
     };
 
     let executable = match compile_file(&project.entry, options) {
@@ -676,6 +680,7 @@ fn cmd_benchmark(args: &[String]) -> ExitCode {
         output: None,
         build_dir: Some(project.root.join("build")),
         target: None,
+        sanitize: false,
     };
 
     let executable = match compile_file(&project.entry, options) {
@@ -743,6 +748,7 @@ fn cmd_debug(args: &[String]) -> ExitCode {
         output: None,
         build_dir: Some(project.root.join("build")),
         target: None,
+        sanitize: false,
     };
     let executable = match compile_file(&project.entry, options) {
         Ok(result) => {
@@ -795,6 +801,7 @@ fn cmd_profile(args: &[String]) -> ExitCode {
         output: None,
         build_dir: Some(project.root.join("build")),
         target: None,
+        sanitize: false,
     };
     let executable = match compile_file(&project.entry, options) {
         Ok(result) => {
@@ -917,6 +924,7 @@ fn cmd_test(args: &[String]) -> ExitCode {
                 output: None,
                 build_dir: Some(build_dir),
                 target: None,
+                sanitize: false,
             },
         );
 
@@ -968,7 +976,7 @@ fn cmd_test(args: &[String]) -> ExitCode {
     }
 }
 
-type BuildArgs = (String, Emit, Profile, Option<PathBuf>, Option<String>);
+type BuildArgs = (String, Emit, Profile, Option<PathBuf>, Option<String>, bool);
 
 fn parse_build_args(args: &[String], _allow_emit: bool) -> Result<BuildArgs, String> {
     let mut path = String::from(".");
@@ -976,6 +984,7 @@ fn parse_build_args(args: &[String], _allow_emit: bool) -> Result<BuildArgs, Str
     let mut profile = Profile::Debug;
     let mut output = None;
     let mut target = None;
+    let mut sanitize = false;
     let mut index = 0;
 
     while index < args.len() {
@@ -1019,6 +1028,10 @@ fn parse_build_args(args: &[String], _allow_emit: bool) -> Result<BuildArgs, Str
                 target = Some(value.clone());
                 index += 2;
             }
+            "--sanitize" => {
+                sanitize = true;
+                index += 1;
+            }
             value if value.starts_with('-') => {
                 return Err(format!("unknown option `{value}`"));
             }
@@ -1029,7 +1042,7 @@ fn parse_build_args(args: &[String], _allow_emit: bool) -> Result<BuildArgs, Str
         }
     }
 
-    Ok((path, emit, profile, output, target))
+    Ok((path, emit, profile, output, target, sanitize))
 }
 
 fn valid_project_name(name: &str) -> bool {

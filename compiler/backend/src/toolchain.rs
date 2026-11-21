@@ -160,6 +160,7 @@ impl Clang {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn compile(
         &self,
         ir_text: &str,
@@ -168,6 +169,7 @@ impl Clang {
         profile: Profile,
         emit: Emit,
         target: Option<&str>,
+        sanitize: bool,
     ) -> Result<BuildArtifacts, ToolchainError> {
         fs::create_dir_all(build_dir).map_err(ToolchainError::Io)?;
         let llvm_ir = build_dir.join(format!("{stem}.ll"));
@@ -183,8 +185,8 @@ impl Clang {
             Emit::Object => {
                 let object = build_dir.join(object_name(stem));
                 let runtime_object = build_dir.join("nex_rt.o");
-                self.compile_ir_to_object(&llvm_ir, &object, profile, target)?;
-                self.compile_runtime_to_object(&runtime_object, profile, target)?;
+                self.compile_ir_to_object(&llvm_ir, &object, profile, target, sanitize)?;
+                self.compile_runtime_to_object(&runtime_object, profile, target, sanitize)?;
                 Ok(BuildArtifacts {
                     llvm_ir,
                     object: Some(object),
@@ -194,7 +196,7 @@ impl Clang {
             }
             Emit::Executable => {
                 let executable = build_dir.join(executable_name(stem));
-                self.link_executable(&llvm_ir, &executable, profile, target)?;
+                self.link_executable(&llvm_ir, &executable, profile, target, sanitize)?;
                 Ok(BuildArtifacts {
                     llvm_ir,
                     object: None,
@@ -211,6 +213,7 @@ impl Clang {
         output: &Path,
         profile: Profile,
         target: Option<&str>,
+        sanitize: bool,
     ) -> Result<(), ToolchainError> {
         let mut args = vec![
             profile.clang_optimization().to_string(),
@@ -226,6 +229,9 @@ impl Clang {
         if profile == Profile::Debug {
             args.push("-g".to_string());
         }
+        if sanitize {
+            args.push("-fsanitize=address,undefined".to_string());
+        }
         self.run_with_args(&args)
     }
 
@@ -234,6 +240,7 @@ impl Clang {
         output: &Path,
         profile: Profile,
         target: Option<&str>,
+        sanitize: bool,
     ) -> Result<(), ToolchainError> {
         let runtime_path =
             build_dir_runtime_source(output.parent().unwrap_or_else(|| Path::new(".")), RUNTIME_C)?;
@@ -251,6 +258,9 @@ impl Clang {
         if profile == Profile::Debug {
             args.push("-g".to_string());
         }
+        if sanitize {
+            args.push("-fsanitize=address,undefined".to_string());
+        }
         self.run_with_args(&args)
     }
 
@@ -260,6 +270,7 @@ impl Clang {
         output: &Path,
         profile: Profile,
         target: Option<&str>,
+        sanitize: bool,
     ) -> Result<(), ToolchainError> {
         let runtime_path =
             build_dir_runtime_source(output.parent().unwrap_or_else(|| Path::new(".")), RUNTIME_C)?;
@@ -284,6 +295,9 @@ impl Clang {
         } else {
             // The runtime uses sqrt/pow from libm; link it explicitly on Unix.
             args.push("-lm".to_string());
+        }
+        if sanitize {
+            args.push("-fsanitize=address,undefined".to_string());
         }
         self.run_with_args(&args)
     }

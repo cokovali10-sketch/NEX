@@ -43,6 +43,7 @@ pub fn run(project_root: Option<&Path>, target: Option<&str>) {
             output: None,
             build_dir: Some(build_dir),
             target: None,
+            sanitize: false,
         },
     );
 
