@@ -4320,6 +4320,46 @@ impl<'a> Checker<'a> {
             return elem_ty;
         }
 
+        if callee == "product" {
+            if args.len() != 1 {
+                self.error(
+                    "NXS004",
+                    format!("`product` expects 1 argument, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let array_ty = self.infer(&args[0]);
+            let elem_ty = match array_ty {
+                Type::Array { display, .. } | Type::DynArray(display) => self
+                    .analysis
+                    .array_info(display)
+                    .map(|info| info.elem)
+                    .unwrap_or(Type::Error),
+                _ => Type::Error,
+            };
+            if array_ty != Type::Error && elem_ty == Type::Error {
+                self.error(
+                    "NXS004",
+                    format!("`product` expects an array, found `{array_ty}`"),
+                    args[0].span,
+                );
+                return Type::Error;
+            }
+            if elem_ty != Type::Error && !matches!(elem_ty, Type::I64 | Type::F64) {
+                self.error(
+                    "NXS004",
+                    format!("`product` supports `[i64]` and `[f64]`, found element `{elem_ty}`"),
+                    args[0].span,
+                );
+                return Type::Error;
+            }
+            return elem_ty;
+        }
+
         if callee == "min_of" || callee == "max_of" {
             if args.len() != 1 {
                 self.error(

@@ -3091,3 +3091,31 @@ long long nex_rt_array_count_str(const void *data, long long length, const char 
     }
     return total;
 }
+
+/* ------------------------------------------------------------------------- */
+/* Array product.                                                            */
+/* ------------------------------------------------------------------------- */
+
+long long nex_rt_array_product_i64(const void *data, long long length) {
+    long long result = 1;
+    if (data == NULL || length <= 0) {
+        return result;
+    }
+    const long long *items = (const long long *)data;
+    for (long long index = 0; index < length; index++) {
+        result *= items[index];
+    }
+    return result;
+}
+
+double nex_rt_array_product_f64(const void *data, long long length) {
+    double result = 1.0;
+    if (data == NULL || length <= 0) {
+        return result;
+    }
+    const double *items = (const double *)data;
+    for (long long index = 0; index < length; index++) {
+        result *= items[index];
+    }
+    return result;
+}

@@ -150,6 +150,8 @@ const RUNTIME_DECLS: &[&str] = &[
     "declare i64 @nex_rt_array_count_i64(ptr, i64, i64)",
     "declare i64 @nex_rt_array_count_f64(ptr, i64, double)",
     "declare i64 @nex_rt_array_count_str(ptr, i64, ptr)",
+    "declare i64 @nex_rt_array_product_i64(ptr, i64)",
+    "declare double @nex_rt_array_product_f64(ptr, i64)",
 ];
 
 pub fn emit_module(module: &IrModule) -> Result<String, String> {
@@ -817,6 +819,8 @@ fn runtime_signature(name: &str) -> (Vec<IrType>, IrType) {
         "nex_rt_array_count_i64" => (vec![ptr, i64, i64], i64),
         "nex_rt_array_count_f64" => (vec![ptr, i64, f64], i64),
         "nex_rt_array_count_str" => (vec![ptr, i64, ptr], i64),
+        "nex_rt_array_product_i64" => (vec![ptr, i64], i64),
+        "nex_rt_array_product_f64" => (vec![ptr, i64], f64),
         _ => (vec![], void),
     }
 }

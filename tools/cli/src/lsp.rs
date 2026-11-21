@@ -539,6 +539,11 @@ const BUILTINS: &[(&str, &str, &str)] = &[
         "fn count(array, value) -> i64",
         "Count elements equal to value.",
     ),
+    (
+        "product",
+        "fn product(array) -> T",
+        "Product of an i64 or f64 array.",
+    ),
 ];
 
 fn line_starts(text: &str) -> Vec<usize> {

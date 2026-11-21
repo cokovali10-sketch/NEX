@@ -2080,6 +2080,7 @@ fn main():
     println(sum_of(nums))
     println(min_of(nums))
     println(max_of(nums))
+    println(product(nums))
     println(count(nums, 2))
 
     var f: [f64] = [1.5, 2.5, 1.5]
@@ -2096,7 +2097,7 @@ fn main():
 "#;
     let (stdout, stderr, code) = run_source(source);
     assert_eq!(code, 0, "stderr: {stderr}");
-    assert_eq!(stdout, "10\n1\n4\n1\n5.5\n1.5\n2.5\n2\n2\n0\n");
+    assert_eq!(stdout, "10\n1\n4\n24\n1\n5.5\n1.5\n2.5\n2\n2\n0\n");
 }
 
 #[test]

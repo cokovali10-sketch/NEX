@@ -3830,7 +3830,8 @@ fn lower_expr(
             }
 
             // Reductions and counts over arrays.
-            if callee == "sum_of" || callee == "min_of" || callee == "max_of" {
+            if callee == "sum_of" || callee == "min_of" || callee == "max_of" || callee == "product"
+            {
                 if args.len() != 1 {
                     return Err(format!("`{callee}` expects 1 argument"));
                 }
@@ -3880,6 +3881,8 @@ fn lower_expr(
                     ("min_of", Type::F64) => ("nex_rt_array_min_f64", IrType::F64),
                     ("max_of", Type::I64) => ("nex_rt_array_max_i64", IrType::I64),
                     ("max_of", Type::F64) => ("nex_rt_array_max_f64", IrType::F64),
+                    ("product", Type::I64) => ("nex_rt_array_product_i64", IrType::I64),
+                    ("product", Type::F64) => ("nex_rt_array_product_f64", IrType::F64),
                     _ => {
                         return Err(format!(
                             "`{callee}` does not support element type `{elem_ty}`"
