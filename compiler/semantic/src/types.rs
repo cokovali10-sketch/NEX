@@ -119,6 +119,15 @@ impl Type {
         self.is_integer() || self.is_float()
     }
 
+    /// Types that own heap memory and therefore have move (not copy) semantics.
+    ///
+    /// Scalars, fixed arrays, tuples, and structs keep value (copy) semantics.
+    /// `string` and growable arrays `[T]` own a heap allocation, so binding them
+    /// to another variable moves ownership and the source becomes unusable.
+    pub const fn is_move_only(self) -> bool {
+        matches!(self, Self::String | Self::DynArray(_))
+    }
+
     pub const fn is_printable(self) -> bool {
         matches!(
             self,

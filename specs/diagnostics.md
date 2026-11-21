@@ -17,7 +17,8 @@ error[NXS006]: type mismatch: expected `i64`, found `string`
 
 - `NXL001`-`NXL012`: lexer.
 - `NXP001`-`NXP011`: parser.
-- `NXS001`-`NXS038`: semantic analysis.
+- `NXS001`-`NXS047`: semantic analysis.
+- `NXS050`: use of a moved value (ownership stage 1).
 - `NXC001`-`NXC002`: compiler and code generation.
 
 ## Rules

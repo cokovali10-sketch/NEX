@@ -4,6 +4,15 @@
 
 ### Added
 
+- Move semantics (ownership stage 1) for the heap-owning types `string` and
+  growable arrays `[T]`: binding such a value to another variable moves it, and
+  using the moved-from variable afterwards is a `NXS050` error. Scalars,
+  structs, fixed arrays, and tuples keep value (copy) semantics. The check is a
+  conservative straight-line analysis (moves do not escape a nested block), so
+  it never reports a false positive; cross-branch use-after-move is a later
+  stage. Reassigning a moved binding makes it usable again. See
+  `specs/memory-model.md`.
+
 - Fixed and growable arrays of struct and tuple values, including indexing,
   element assignment, and `for x in array`.
 - `assert(condition, "message")` for assertion failures with a custom message.

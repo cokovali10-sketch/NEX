@@ -2415,3 +2415,72 @@ fn main():
     assert_eq!(code, 0, "stderr: {stderr}");
     assert_eq!(stdout, "5\n8\n");
 }
+
+#[test]
+fn move_string_then_use_is_reported() {
+    let result = compile("fn main():\n    var a = \"x\"\n    var b = a\n    println(a)\n");
+    assert!(result.has_errors());
+    assert!(
+        result.diagnostics.iter().any(|d| d.code == "NXS050"),
+        "{:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn move_growable_array_then_use_is_reported() {
+    let result = compile(
+        "fn main():\n    var a: [i64] = []\n    push(a, 1)\n    var b = a\n    push(a, 2)\n",
+    );
+    assert!(result.has_errors());
+    assert!(
+        result.diagnostics.iter().any(|d| d.code == "NXS050"),
+        "{:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn move_index_assign_on_moved_array_is_reported() {
+    let result =
+        compile("fn main():\n    var a: [i64] = []\n    push(a, 1)\n    var b = a\n    a[0] = 9\n");
+    assert!(result.has_errors());
+    assert!(
+        result.diagnostics.iter().any(|d| d.code == "NXS050"),
+        "{:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn moved_value_is_usable_through_the_new_binding() {
+    let (stdout, stderr, code) =
+        run_source("fn main():\n    var a = \"hi\"\n    var b = a\n    println(b)\n");
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "hi\n");
+}
+
+#[test]
+fn reading_a_string_without_moving_is_fine() {
+    let (stdout, stderr, code) =
+        run_source("fn main():\n    var a = \"hi\"\n    println(a)\n    println(a)\n");
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "hi\nhi\n");
+}
+
+#[test]
+fn fixed_arrays_keep_copy_semantics() {
+    let (stdout, stderr, code) = run_source(
+        "fn main():\n    var a = [1, 2, 3]\n    var b = a\n    a[0] = 9\n    println(b[0])\n    println(a[0])\n",
+    );
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "1\n9\n");
+}
+
+#[test]
+fn reassignment_revives_a_moved_variable() {
+    let result = compile(
+        "fn main():\n    var a: [i64] = []\n    push(a, 1)\n    var b = a\n    a = b\n    push(a, 2)\n",
+    );
+    assert!(!result.has_errors(), "{:?}", result.diagnostics);
+}

@@ -1,3 +1,4 @@
+mod moves;
 mod types;
 
 pub use types::Type;
@@ -273,6 +274,10 @@ impl<'a> Checker<'a> {
         checker.check_uses();
         checker.check_main();
         checker.check_functions();
+        checker
+            .analysis
+            .diagnostics
+            .extend(moves::check_moves(program, &checker.analysis));
         checker.analysis
     }
 

@@ -17,6 +17,12 @@ planned.
 - Immutable `let` bindings and explicit mutable `var` bindings.
 - Value semantics for scalars, structs, fixed arrays, and tuples: assignment
   and parameter passing copy the value.
+- Move semantics (stage 1) for the heap-owning types `string` and growable
+  arrays `[T]`: binding such a value to another variable moves ownership, and
+  any later use of the moved-from variable is a `NXS050` error. The move
+  checker is a conservative straight-line analysis: moves inside a nested
+  block do not escape it, so there are no false positives, but a
+  use-after-move across a branch is not caught yet.
 - Stack allocation through LLVM `alloca`.
 - Heap allocation through the C runtime (`malloc`/`realloc`) for strings,
   growable arrays (`[T]`), maps, JSON trees, the string builder, and the
@@ -34,11 +40,13 @@ planned.
 
 ## Planned model
 
-- Ownership for heap-allocated values.
-- Borrowing and lifetime analysis.
-- RAII for resources.
-- Arena allocation.
-- Custom allocators in a NEX Systems profile.
+- Borrowing (`&T` / `&mut T`) and lifetime analysis, building on the stage-1
+  move checker.
+- Automatic `Drop` / RAII for heap values (deterministic destruction), which
+  turns the current copy-based codegen for moved values into true pointer
+  moves.
+- Custom allocators (`@arena`, `@pool`, optional `@gc`) in a NEX Systems
+  profile. Arena bump allocators already exist as builtins.
 - A safe slice type with explicit lifetime relationships.
 
 ## Rules for future implementation
