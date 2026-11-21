@@ -15,9 +15,9 @@
 //! globals are never treated as move sources in this stage, which keeps the
 //! analysis free of false positives while the borrow checker (stage 2) is built.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
-use nex_ast::{Block, Expr, ExprKind, FnDecl, MatchArm, Program, Stmt, StmtKind};
+use nex_ast::{Block, Expr, ExprKind, FnDecl, Program, Stmt, StmtKind};
 
 use crate::{Analysis, Type};
 
@@ -142,17 +142,42 @@ impl<'a> MoveChecker<'a> {
                 branches,
                 else_branch,
             } => {
+                // A move inside a branch must not unconditionally mark an outer
+                // binding moved: the branch may not run. Only a *definite* move
+                // (present on every path, including the else) makes the binding
+                // moved after the `if`. This also avoids false positives when
+                // there is no else.
+                let saved = self.scopes.clone();
+                let mut branch_moves: Vec<HashSet<String>> = Vec::new();
                 for (condition, body) in branches {
+                    self.scopes = saved.clone();
                     self.check_expr_reads(condition);
                     self.check_block(body);
+                    branch_moves.push(self.moved_set());
                 }
                 if let Some(body) = else_branch {
+                    self.scopes = saved.clone();
                     self.check_block(body);
+                    branch_moves.push(self.moved_set());
+                } else {
+                    branch_moves.push(HashSet::new());
+                }
+                self.scopes = saved;
+                let mut iter = branch_moves.into_iter();
+                let mut definite = iter.next().unwrap_or_default();
+                for set in iter {
+                    definite.retain(|name| set.contains(name));
+                }
+                for name in definite {
+                    self.mark_moved(&name);
                 }
             }
             StmtKind::While { cond, body } => {
                 self.check_expr_reads(cond);
+                // A loop body may run zero times: discard moves to outer bindings.
+                let saved = self.scopes.clone();
                 self.check_block(body);
+                self.scopes = saved;
             }
             StmtKind::For {
                 var,
@@ -162,9 +187,10 @@ impl<'a> MoveChecker<'a> {
             } => {
                 self.check_expr_reads(start);
                 self.check_expr_reads(end);
+                // The loop may run zero times and `var` is a fresh per-iteration
+                // binding; isolate the body and discard any moves to outer bindings.
+                let saved = self.scopes.clone();
                 self.scopes.push(HashMap::new());
-                // The loop variable is a fresh per-iteration binding; never a
-                // move source in this stage.
                 self.scopes.last_mut().unwrap().insert(
                     var.clone(),
                     VarState {
@@ -175,15 +201,23 @@ impl<'a> MoveChecker<'a> {
                 for statement in &body.stmts {
                     self.check_statement(statement);
                 }
-                self.scopes.pop();
+                self.scopes = saved;
             }
             StmtKind::Return(Some(value)) => self.check_expr_reads(value),
             StmtKind::Return(None) => {}
             StmtKind::Match { scrutinee, arms } => {
                 self.check_expr_reads(scrutinee);
+                // At most one arm runs, and maybe none: analyse each arm from the
+                // same pre-match state and discard moves to outer bindings.
+                let saved = self.scopes.clone();
                 for arm in arms {
-                    self.check_arm(arm);
+                    self.scopes = saved.clone();
+                    if let Some(guard) = &arm.guard {
+                        self.check_expr_reads(guard);
+                    }
+                    self.check_block(&arm.body);
                 }
+                self.scopes = saved;
             }
             StmtKind::Unsafe(block) | StmtKind::Defer(block) => self.check_block(block),
             StmtKind::Expr(expr) => self.check_expr_reads(expr),
@@ -191,11 +225,17 @@ impl<'a> MoveChecker<'a> {
         }
     }
 
-    fn check_arm(&mut self, arm: &MatchArm) {
-        if let Some(guard) = &arm.guard {
-            self.check_expr_reads(guard);
+    /// Names of every visible binding currently marked moved.
+    fn moved_set(&self) -> HashSet<String> {
+        let mut set = HashSet::new();
+        for scope in &self.scopes {
+            for (name, state) in scope {
+                if state.moved {
+                    set.insert(name.clone());
+                }
+            }
         }
-        self.check_block(&arm.body);
+        set
     }
 
     /// Marks a variable moved when the right-hand side is a bare identifier of a

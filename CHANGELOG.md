@@ -4,6 +4,10 @@
 
 ### Added
 
+- Control-flow-aware move analysis: a binding is treated as moved after an
+  `if` only when it is moved on every branch (including `else`), and moves
+  inside a loop body or a single branch never leak out. This catches definite
+  cross-branch use-after-move while keeping the checker free of false positives.
 - `clone(value)` builtin: an explicit deep copy for the move-only types
   `string` and `[T]` (and an identity for copy types). `clone` borrows its
   argument, so the source stays usable; it is the opt-in way to get value

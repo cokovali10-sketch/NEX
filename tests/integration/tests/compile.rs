@@ -2524,3 +2524,32 @@ fn clone_of_a_moved_value_is_reported() {
         result.diagnostics
     );
 }
+
+#[test]
+fn definite_move_across_if_else_is_reported() {
+    let result = compile(
+        "fn main():\n    var a: [i64] = []\n    push(a, 1)\n    if true:\n        var b = a\n    else:\n        var c = a\n    push(a, 2)\n",
+    );
+    assert!(result.has_errors());
+    assert!(
+        result.diagnostics.iter().any(|d| d.code == "NXS050"),
+        "{:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn move_in_one_if_branch_is_not_a_false_positive() {
+    let result = compile(
+        "fn main():\n    var a: [i64] = []\n    push(a, 1)\n    if true:\n        var b = a\n    push(a, 2)\n",
+    );
+    assert!(!result.has_errors(), "{:?}", result.diagnostics);
+}
+
+#[test]
+fn move_in_loop_body_is_not_a_false_positive() {
+    let result = compile(
+        "fn main():\n    var a: [i64] = []\n    push(a, 1)\n    var i = 0\n    while i < 1:\n        var b = a\n        i = i + 1\n    push(a, 2)\n",
+    );
+    assert!(!result.has_errors(), "{:?}", result.diagnostics);
+}

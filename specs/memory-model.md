@@ -22,9 +22,11 @@ planned.
   any later use of the moved-from variable is a `NXS050` error. `clone(value)`
   is the opt-in explicit deep copy that borrows its argument and leaves the
   source usable. The move
-  checker is a conservative straight-line analysis: moves inside a nested
-  block do not escape it, so there are no false positives, but a
-  use-after-move across a branch is not caught yet.
+  checker is a control-flow-aware analysis: a binding is considered moved after
+  an `if` only when it is moved on every path (including the `else`), so there
+  are no false positives, and moves inside a loop or a single branch (which may
+  not run) do not leak out. Cross-path use-after-move that is not a definite
+  move is left for the borrow-checker stage.
 - Stack allocation through LLVM `alloca`.
 - Heap allocation through the C runtime (`malloc`/`realloc`) for strings,
   growable arrays (`[T]`), maps, JSON trees, the string builder, and the
