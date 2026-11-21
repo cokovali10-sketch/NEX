@@ -4445,6 +4445,117 @@ impl<'a> Checker<'a> {
             return Type::Error;
         }
 
+        if callee == "env" {
+            if args.len() != 1 {
+                self.error(
+                    "NXS004",
+                    format!("`env` expects 1 argument, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let name_ty = self.infer(&args[0]);
+            if name_ty != Type::String && name_ty != Type::Error {
+                self.error(
+                    "NXS004",
+                    format!("`env` expects a `string` name, found `{name_ty}`"),
+                    args[0].span,
+                );
+                return Type::Error;
+            }
+            return Type::String;
+        }
+
+        if callee == "args_count" {
+            if !args.is_empty() {
+                self.error(
+                    "NXS004",
+                    format!("`args_count` expects no arguments, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            return Type::I64;
+        }
+
+        if callee == "arg_at" {
+            if args.len() != 1 {
+                self.error(
+                    "NXS004",
+                    format!("`arg_at` expects 1 argument, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let index_ty = self.infer(&args[0]);
+            if index_ty != Type::I64 && index_ty != Type::Error {
+                self.error(
+                    "NXS004",
+                    format!("`arg_at` expects an `i64` index, found `{index_ty}`"),
+                    args[0].span,
+                );
+                return Type::Error;
+            }
+            return Type::String;
+        }
+
+        if callee == "exit" {
+            if args.len() != 1 {
+                self.error(
+                    "NXS004",
+                    format!("`exit` expects 1 argument, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let code_ty = self.infer(&args[0]);
+            if code_ty != Type::I64 && code_ty != Type::Error {
+                self.error(
+                    "NXS004",
+                    format!("`exit` expects an `i64` status code, found `{code_ty}`"),
+                    args[0].span,
+                );
+                return Type::Error;
+            }
+            return Type::Void;
+        }
+
+        if callee == "log_info" || callee == "log_warn" || callee == "log_error" {
+            if args.len() != 1 {
+                self.error(
+                    "NXS004",
+                    format!("`{callee}` expects 1 argument, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let message_ty = self.infer(&args[0]);
+            if message_ty != Type::String && message_ty != Type::Error {
+                self.error(
+                    "NXS004",
+                    format!("`{callee}` expects a `string` message, found `{message_ty}`"),
+                    args[0].span,
+                );
+                return Type::Error;
+            }
+            return Type::Void;
+        }
+
         if let Some(info) = self.analysis.structs.get(callee).cloned() {
             if callee.contains('.') && !info.public {
                 self.error(

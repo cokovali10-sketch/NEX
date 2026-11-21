@@ -52,7 +52,7 @@
       str_substring, str_upper, str_lower, str_trim, to_string.
 - [x] Filesystem and blocking networking (TCP/HTTP helpers).
 - [x] Time and concurrency APIs (threads, mutexes, thread pool).
-- [ ] Logging and process APIs.
+- [x] Logging and process APIs.
 
 ## NEX 0.6 - Interoperability
 

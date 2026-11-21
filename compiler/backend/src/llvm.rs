@@ -129,6 +129,14 @@ const RUNTIME_DECLS: &[&str] = &[
     "declare double @nex_rt_sqrt(double)",
     "declare double @nex_rt_pow(double, double)",
     "declare void @nex_rt_panic(ptr) noreturn",
+    "declare void @nex_rt_init_args(i32, ptr)",
+    "declare i64 @nex_rt_args_count()",
+    "declare ptr @nex_rt_arg_at(i64)",
+    "declare ptr @nex_rt_env_get(ptr)",
+    "declare void @nex_rt_exit(i64)",
+    "declare void @nex_rt_log_info(ptr)",
+    "declare void @nex_rt_log_warn(ptr)",
+    "declare void @nex_rt_log_error(ptr)",
 ];
 
 pub fn emit_module(module: &IrModule) -> Result<String, String> {
@@ -275,7 +283,8 @@ impl<'a> Emitter<'a> {
     }
 
     fn emit_main_wrapper(&self, main_ret: IrType, body: &mut String) -> Result<(), String> {
-        body.push_str("define i32 @main() {\nentry:\n");
+        body.push_str("define i32 @main(i32 %nex.argc, ptr %nex.argv) {\nentry:\n");
+        body.push_str("  call void @nex_rt_init_args(i32 %nex.argc, ptr %nex.argv)\n");
         if main_ret == IrType::I32 {
             body.push_str("  %nex.main.result = call i32 @nex.fn.main()\n");
             body.push_str("  ret i32 %nex.main.result\n");
@@ -778,6 +787,12 @@ fn runtime_signature(name: &str) -> (Vec<IrType>, IrType) {
         "nex_rt_sqrt" => (vec![f64], f64),
         "nex_rt_pow" => (vec![f64, f64], f64),
         "nex_rt_panic" => (vec![ptr], void),
+        "nex_rt_init_args" => (vec![i32, ptr], void),
+        "nex_rt_args_count" => (vec![], i64),
+        "nex_rt_arg_at" => (vec![i64], ptr),
+        "nex_rt_env_get" => (vec![ptr], ptr),
+        "nex_rt_exit" => (vec![i64], void),
+        "nex_rt_log_info" | "nex_rt_log_warn" | "nex_rt_log_error" => (vec![ptr], void),
         _ => (vec![], void),
     }
 }

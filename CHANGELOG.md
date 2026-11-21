@@ -21,6 +21,11 @@
   needed); `?` works on them out of the box.
 - Generic function calls passing type parameters inside generic struct
   annotations (`fn wrap<T>(x: T) -> Option<T>`).
+- Process and environment APIs: `env`, `args_count`, `arg_at`, `exit`.
+  The generated `main` captures `argc`/`argv`; `nex run project -- args`
+  forwards arguments to the program.
+- Logging APIs `log_info`, `log_warn`, `log_error`: one UTC-timestamped line
+  per call on stderr, serialized so worker threads cannot interleave lines.
 - `docs/for-ai.md` and `AGENTS.md`: a self-contained reference for AI agents,
   including the `nex check` JSON format and an annotated ambitious example.
 - `examples/kv_store`: a JSON HTTP key-value service (router, JSON DOM,

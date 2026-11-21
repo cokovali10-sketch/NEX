@@ -19,6 +19,10 @@ fn compile(source: &str) -> nex_driver::CompileResult {
 }
 
 fn run_source(source: &str) -> (String, String, i32) {
+    run_source_with(source, |_| {})
+}
+
+fn run_source_with(source: &str, configure: impl FnOnce(&mut Command)) -> (String, String, i32) {
     let result = compile(source);
     assert!(!result.has_errors(), "{:?}", result.diagnostics);
     let executable = result
@@ -26,9 +30,9 @@ fn run_source(source: &str) -> (String, String, i32) {
         .as_ref()
         .and_then(|artifacts| artifacts.executable.clone())
         .expect("executable should be produced");
-    let output = Command::new(&executable)
-        .output()
-        .expect("failed to run executable");
+    let mut command = Command::new(&executable);
+    configure(&mut command);
+    let output = command.output().expect("failed to run executable");
     // The runtime prints "\n"; Windows text mode turns that into "\r\n".
     let normalize = |value: &[u8]| {
         String::from_utf8_lossy(value)
@@ -938,13 +942,9 @@ fn emits_llvm_ir() {
     )
     .expect("toolchain should be available");
     assert!(!result.has_errors());
-    assert!(
-        result
-            .llvm_ir
-            .as_ref()
-            .unwrap()
-            .contains("define i32 @main()")
-    );
+    let ir = result.llvm_ir.as_ref().unwrap();
+    assert!(ir.contains("define i32 @main(i32 %nex.argc, ptr %nex.argv)"));
+    assert!(ir.contains("call void @nex_rt_init_args(i32 %nex.argc, ptr %nex.argv)"));
 }
 
 #[test]
@@ -2106,6 +2106,79 @@ fn main():
     let (stdout, stderr, code) = run_source(source);
     assert_eq!(code, 0, "stderr: {stderr}");
     assert_eq!(stdout, "10\nb\n");
+}
+
+#[test]
+fn process_args_env_and_exit() {
+    let source = r#"
+fn main():
+    println(args_count())
+    var i = 0
+    while i < args_count():
+        println(arg_at(i))
+        i = i + 1
+    println(env("NEX_INTEGRATION_ENV"))
+    println(arg_at(42))
+    exit(7)
+"#;
+    let (stdout, stderr, code) = run_source_with(source, |command| {
+        command
+            .args(["alpha", "beta"])
+            .env("NEX_INTEGRATION_ENV", "value");
+    });
+    assert_eq!(code, 7, "stderr: {stderr}");
+    assert_eq!(stdout, "2\nalpha\nbeta\nvalue\n\n");
+}
+
+#[test]
+fn logging_writes_timestamped_lines_to_stderr() {
+    let source = r#"
+fn main():
+    log_info("hello")
+    log_warn("careful")
+    log_error("broken")
+    println("done")
+"#;
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "done\n");
+    let lines: Vec<&str> = stderr.lines().collect();
+    assert_eq!(lines.len(), 3, "{stderr}");
+    assert!(lines[0].starts_with('['), "{stderr}");
+    assert!(
+        lines[0].contains("INFO") && lines[0].ends_with("hello"),
+        "{stderr}"
+    );
+    assert!(
+        lines[1].contains("WARN") && lines[1].ends_with("careful"),
+        "{stderr}"
+    );
+    assert!(
+        lines[2].contains("ERROR") && lines[2].ends_with("broken"),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn process_builtin_arguments_are_checked() {
+    for source in [
+        "fn main():\n    let x = env(1)\n",
+        "fn main():\n    let x = arg_at(\"zero\")\n",
+        "fn main():\n    exit(\"code\")\n",
+        "fn main():\n    log_info(42)\n",
+        "fn main():\n    args_count(1)\n",
+    ] {
+        let result = compile(source);
+        assert!(result.has_errors(), "{source}");
+        assert!(
+            result
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.code == "NXS004"),
+            "{source}: {:?}",
+            result.diagnostics
+        );
+    }
 }
 
 #[test]

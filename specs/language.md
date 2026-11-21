@@ -66,7 +66,8 @@ planned and are not yet implemented.
 - Macros and compile-time evaluation.
 - Raw pointer types and pointer arithmetic beyond `peek`/`poke` (`unsafe:`
   blocks are implemented).
-- Expanded standard library (collections, cryptography, process, logging).
+- Expanded standard library (collections, cryptography, spawning child
+  processes).
 
 ## Lexical rules
 

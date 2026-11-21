@@ -4384,6 +4384,70 @@ fn lower_expr(
                 return Ok(Operand::Value(dst));
             }
 
+            if callee == "env"
+                || callee == "log_info"
+                || callee == "log_warn"
+                || callee == "log_error"
+            {
+                let argument =
+                    lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
+                let (name, ret) = match callee {
+                    "env" => ("nex_rt_env_get", IrType::String),
+                    "log_info" => ("nex_rt_log_info", IrType::Void),
+                    "log_warn" => ("nex_rt_log_warn", IrType::Void),
+                    _ => ("nex_rt_log_error", IrType::Void),
+                };
+                let dst = if ret == IrType::Void {
+                    None
+                } else {
+                    Some(builder.new_value())
+                };
+                builder.emit(Inst::Call {
+                    dst,
+                    name: name.to_string(),
+                    args: vec![argument],
+                    ret,
+                });
+                return Ok(match dst {
+                    Some(value) => Operand::Value(value),
+                    None => Operand::Const(Const::Bool(true)),
+                });
+            }
+
+            if callee == "arg_at" {
+                let index = lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
+                let dst = builder.new_value();
+                builder.emit(Inst::Call {
+                    dst: Some(dst),
+                    name: "nex_rt_arg_at".to_string(),
+                    args: vec![index],
+                    ret: IrType::String,
+                });
+                return Ok(Operand::Value(dst));
+            }
+
+            if callee == "args_count" {
+                let dst = builder.new_value();
+                builder.emit(Inst::Call {
+                    dst: Some(dst),
+                    name: "nex_rt_args_count".to_string(),
+                    args: Vec::new(),
+                    ret: IrType::I64,
+                });
+                return Ok(Operand::Value(dst));
+            }
+
+            if callee == "exit" {
+                let code = lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
+                builder.emit(Inst::Call {
+                    dst: None,
+                    name: "nex_rt_exit".to_string(),
+                    args: vec![code],
+                    ret: IrType::Void,
+                });
+                return Ok(Operand::Const(Const::Bool(true)));
+            }
+
             let signature = analysis
                 .function(callee)
                 .ok_or_else(|| format!("unknown function `{callee}` during code generation"))?;

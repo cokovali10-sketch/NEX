@@ -474,6 +474,41 @@ const BUILTINS: &[(&str, &str, &str)] = &[
         "fn http_response(status, body) -> string",
         "Build an HTTP response.",
     ),
+    (
+        "env",
+        "fn env(name: string) -> string",
+        "Return an environment variable, or an empty string when it is unset.",
+    ),
+    (
+        "args_count",
+        "fn args_count() -> i64",
+        "Return the number of user command-line arguments.",
+    ),
+    (
+        "arg_at",
+        "fn arg_at(index: i64) -> string",
+        "Return one user command-line argument, or an empty string out of range.",
+    ),
+    (
+        "exit",
+        "fn exit(code: i64)",
+        "Terminate the process with the given status code.",
+    ),
+    (
+        "log_info",
+        "fn log_info(message: string)",
+        "Write a timestamped INFO line to stderr.",
+    ),
+    (
+        "log_warn",
+        "fn log_warn(message: string)",
+        "Write a timestamped WARN line to stderr.",
+    ),
+    (
+        "log_error",
+        "fn log_error(message: string)",
+        "Write a timestamped ERROR line to stderr.",
+    ),
 ];
 
 fn line_starts(text: &str) -> Vec<usize> {
@@ -1273,6 +1308,18 @@ mod tests {
         let response = handle_hover(&doc, &params).unwrap();
         assert!(!response.is_null());
         assert!(response.to_string().contains("print"));
+    }
+
+    #[test]
+    fn hover_process_builtins_returns_signature() {
+        let doc = document("fn main():\n    let who = env(\"USER\")\n");
+        let params = json!({
+            "textDocument": { "uri": doc.uri },
+            "position": { "line": 1, "character": 15 },
+        });
+        let response = handle_hover(&doc, &params).unwrap();
+        assert!(!response.is_null());
+        assert!(response.to_string().contains("env"), "{response}");
     }
 
     #[test]

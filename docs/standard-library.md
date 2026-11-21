@@ -8,8 +8,9 @@ test.
 
 Implemented modules: strings and formatting, files, blocking TCP/HTTP helpers,
 JSON, string-keyed maps, threads/mutexes, a thread pool, a router, a string
-builder, time and math. Still missing: general collections, cryptography,
-process control, structured logging, and async I/O. See `ROADMAP.md`.
+builder, time, math, process environment/arguments, exit, and logging. Still
+missing: general collections, cryptography, spawning child processes, and
+async I/O. See `ROADMAP.md`.
 
 ## Builtins
 
@@ -369,6 +370,44 @@ Measured on `examples/bench_strings` (50 000 appends of one byte):
 | `round` | `(value: f64) -> f64` | Round half away from zero. |
 | `trunc` | `(value: f64) -> f64` | Drop the fractional part. |
 | `pow` | `(base: f64, exponent: f64) -> f64` | `libm` |
+
+### Process, environment and logging
+
+| Function | Signature | Notes |
+|---|---|---|
+| `env` | `(name: string) -> string` | Reads an environment variable; returns `""` when it is unset. |
+| `args_count` | `() -> i64` | Number of user arguments (the executable path is not counted). |
+| `arg_at` | `(index: i64) -> string` | One user argument; `""` when the index is out of range. |
+| `exit` | `(code: i64) -> void` | Flushes stdout/stderr and terminates the process with `code`. |
+| `log_info` | `(message: string) -> void` | Writes `[timestamp] INFO  message` to stderr. |
+| `log_warn` | `(message: string) -> void` | Writes `[timestamp] WARN  message` to stderr. |
+| `log_error` | `(message: string) -> void` | Writes `[timestamp] ERROR message` to stderr. |
+
+Arguments are the ones after `--`:
+
+```bash
+nex run path/to/project -- input.txt --verbose
+```
+
+```nex
+fn main():
+    log_info(concat("args: ", to_string(args_count())))
+    if args_count() < 1:
+        log_error("usage: tool <file>")
+        exit(2)
+    var path = arg_at(0)
+    var text = read_file(path)
+    if len(text) == 0 and not file_exists(path):
+        log_error(concat("cannot read ", path))
+        exit(1)
+    println(text)
+```
+
+Log lines are serialized by a spin lock, so worker threads cannot interleave
+partial lines. The timestamp is UTC
+(`YYYY-MM-DDTHH:MM:SSZ`). Logging never goes to stdout; keep stdout for program
+output and machine-readable data. On Windows `argv` is decoded by the C runtime
+using the active code page, so non-ASCII arguments depend on that setting.
 
 ### Diagnostics and memory
 

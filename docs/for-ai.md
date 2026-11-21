@@ -307,6 +307,10 @@ per-function notes lives in `docs/standard-library.md`; the most used are:
 | `json_escape` / `json_quote` | `(string) -> string` | emit JSON string values |
 | `builder_new` / `builder_append` / `builder_string` / `builder_clear` | `(...) -> i64/string` | O(1) amortized string building |
 | `unix_time` / `now_ms` / `sleep_ms` / `http_date` | `() -> i64/string` | wall and monotonic time |
+| `env` | `(string) -> string` | environment variable; `""` when unset |
+| `args_count` / `arg_at` | `() -> i64` / `(i64) -> string` | user CLI args (no `argv[0]`); `""` out of range |
+| `exit` | `(i64) -> void` | flush stdout/stderr, terminate with the status code |
+| `log_info` / `log_warn` / `log_error` | `(string) -> void` | one timestamped line per call on stderr |
 | `abs` / `min` / `max` / `sqrt` / `pow` / `floor` / `ceil` / `round` / `trunc` | `(...) -> ...` | math |
 | `parse_i64` | `(string) -> i64` | `0` on bad input |
 | `assert(condition)` / `panic(message)` | `-> void` | abort paths |

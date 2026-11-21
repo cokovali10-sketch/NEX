@@ -5,6 +5,14 @@
 #include <math.h>
 #include <ctype.h>
 #include <time.h>
+#include <stdatomic.h>
+
+/* Process-wide state captured from the generated `main`. */
+static int nex_rt_argc = 0;
+static char **nex_rt_argv = NULL;
+
+/* Serializes whole log lines so worker threads cannot interleave them. */
+static atomic_flag nex_rt_log_lock = ATOMIC_FLAG_INIT;
 
 static void nex_rt_write_utf8(unsigned int codepoint) {
     unsigned char buffer[4];
@@ -2798,4 +2806,84 @@ double nex_rt_round_f64(double value) {
 
 double nex_rt_trunc_f64(double value) {
     return trunc(value);
+}
+
+/* ------------------------------------------------------------------------- */
+/* Process, environment, command-line arguments and logging.                 */
+/* ------------------------------------------------------------------------- */
+
+void nex_rt_init_args(int argc, char **argv) {
+    nex_rt_argc = argc;
+    nex_rt_argv = argv;
+}
+
+long long nex_rt_args_count(void) {
+    /* argv[0] is the executable path; user arguments start at 1. */
+    return nex_rt_argc > 0 ? (long long)(nex_rt_argc - 1) : 0;
+}
+
+static char *nex_rt_copy_string(const char *value) {
+    if (value == NULL) {
+        value = "";
+    }
+    size_t length = strlen(value);
+    char *copy = (char *)malloc(length + 1);
+    if (copy == NULL) {
+        return NULL;
+    }
+    memcpy(copy, value, length + 1);
+    return copy;
+}
+
+char *nex_rt_arg_at(long long index) {
+    if (index < 0 || index >= nex_rt_args_count() || nex_rt_argv == NULL) {
+        return nex_rt_copy_string("");
+    }
+    return nex_rt_copy_string(nex_rt_argv[index + 1]);
+}
+
+char *nex_rt_env_get(const char *name) {
+    if (name == NULL) {
+        return nex_rt_copy_string("");
+    }
+    return nex_rt_copy_string(getenv(name));
+}
+
+void nex_rt_exit(long long code) {
+    fflush(stdout);
+    fflush(stderr);
+    exit((int)code);
+}
+
+static void nex_rt_log_line(const char *level, const char *message) {
+    char timestamp[32];
+    time_t now = time(NULL);
+    struct tm parts;
+#if defined(_WIN32)
+    gmtime_s(&parts, &now);
+#else
+    gmtime_r(&now, &parts);
+#endif
+    if (strftime(timestamp, sizeof(timestamp), "%Y-%m-%dT%H:%M:%SZ", &parts) == 0) {
+        memcpy(timestamp, "0000-00-00T00:00:00Z", 21);
+    }
+
+    while (atomic_flag_test_and_set_explicit(&nex_rt_log_lock, memory_order_acquire)) {
+        /* spin */
+    }
+    fprintf(stderr, "[%s] %-5s %s\n", timestamp, level, message == NULL ? "" : message);
+    fflush(stderr);
+    atomic_flag_clear_explicit(&nex_rt_log_lock, memory_order_release);
+}
+
+void nex_rt_log_info(const char *message) {
+    nex_rt_log_line("INFO", message);
+}
+
+void nex_rt_log_warn(const char *message) {
+    nex_rt_log_line("WARN", message);
+}
+
+void nex_rt_log_error(const char *message) {
+    nex_rt_log_line("ERROR", message);
 }
