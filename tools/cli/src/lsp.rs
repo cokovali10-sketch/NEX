@@ -544,6 +544,32 @@ const BUILTINS: &[(&str, &str, &str)] = &[
         "fn product(array) -> T",
         "Product of an i64 or f64 array.",
     ),
+    (
+        "arena_new",
+        "fn arena_new(capacity: i64) -> i64",
+        "Create a bump allocator.",
+    ),
+    (
+        "arena_alloc",
+        "fn arena_alloc(arena: i64, size: i64) -> i64",
+        "Bump-allocate bytes.",
+    ),
+    (
+        "arena_reset",
+        "fn arena_reset(arena: i64)",
+        "Reset an arena.",
+    ),
+    (
+        "arena_used",
+        "fn arena_used(arena: i64) -> i64",
+        "Bytes used in an arena.",
+    ),
+    (
+        "arena_capacity",
+        "fn arena_capacity(arena: i64) -> i64",
+        "Arena capacity.",
+    ),
+    ("arena_free", "fn arena_free(arena: i64)", "Free an arena."),
 ];
 
 fn line_starts(text: &str) -> Vec<usize> {

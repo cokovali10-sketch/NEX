@@ -3119,3 +3119,86 @@ double nex_rt_array_product_f64(const void *data, long long length) {
     }
     return result;
 }
+
+/* ------------------------------------------------------------------------- */
+/* Arena allocators: bump allocator with reset. Handles are heap pointers.   */
+/* ------------------------------------------------------------------------- */
+
+typedef struct {
+    void *base;
+    long long capacity;
+    long long used;
+} nex_arena;
+
+long long nex_rt_arena_new(long long capacity) {
+    if (capacity <= 0) {
+        capacity = 4096;
+    }
+    nex_arena *arena = (nex_arena *)malloc(sizeof(nex_arena));
+    if (arena == NULL) {
+        return 0;
+    }
+    arena->base = malloc((size_t)capacity);
+    if (arena->base == NULL) {
+        free(arena);
+        return 0;
+    }
+    arena->capacity = capacity;
+    arena->used = 0;
+    return (long long)arena;
+}
+
+long long nex_rt_arena_alloc(long long handle, long long size) {
+    if (handle == 0 || size <= 0) {
+        return 0;
+    }
+    nex_arena *arena = (nex_arena *)handle;
+    /* Align to 8 bytes. */
+    long long aligned = (arena->used + 7) & ~7LL;
+    if (aligned + size > arena->capacity) {
+        long long new_cap = arena->capacity * 2;
+        while (new_cap < aligned + size) {
+            new_cap *= 2;
+        }
+        void *grown = realloc(arena->base, (size_t)new_cap);
+        if (grown == NULL) {
+            return 0;
+        }
+        arena->base = grown;
+        arena->capacity = new_cap;
+    }
+    void *ptr = (char *)arena->base + aligned;
+    arena->used = aligned + size;
+    return (long long)ptr;
+}
+
+void nex_rt_arena_reset(long long handle) {
+    if (handle == 0) {
+        return;
+    }
+    nex_arena *arena = (nex_arena *)handle;
+    arena->used = 0;
+}
+
+long long nex_rt_arena_used(long long handle) {
+    if (handle == 0) {
+        return 0;
+    }
+    return ((nex_arena *)handle)->used;
+}
+
+long long nex_rt_arena_capacity(long long handle) {
+    if (handle == 0) {
+        return 0;
+    }
+    return ((nex_arena *)handle)->capacity;
+}
+
+void nex_rt_arena_free(long long handle) {
+    if (handle == 0) {
+        return;
+    }
+    nex_arena *arena = (nex_arena *)handle;
+    free(arena->base);
+    free(arena);
+}

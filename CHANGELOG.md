@@ -31,6 +31,8 @@
 - `join(array, separator)` concatenates arrays of strings.
 - `sum_of`, `min_of`, `max_of` reduce `[i64]`/`[f64]` arrays; `count(array, value)`
   counts matching elements; `product` multiplies.
+- Arena allocators: `arena_new`, `arena_alloc`, `arena_reset`, `arena_used`,
+  `arena_capacity`, `arena_free` (bump allocator, doubles capacity).
 - `docs/for-ai.md` and `AGENTS.md`: a self-contained reference for AI agents,
   including the `nex check` JSON format and an annotated ambitious example.
 - `examples/kv_store`: a JSON HTTP key-value service (router, JSON DOM,

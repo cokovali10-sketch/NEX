@@ -2101,6 +2101,25 @@ fn main():
 }
 
 #[test]
+fn arena_allocators() {
+    let source = r#"
+fn main():
+    var a = arena_new(64)
+    var p = arena_alloc(a, 8)
+    poke(p, 42)
+    println(peek(p))
+    println(arena_used(a) >= 8)
+    arena_reset(a)
+    println(arena_used(a) == 0)
+    arena_free(a)
+    println("ok")
+"#;
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "42\ntrue\ntrue\nok\n");
+}
+
+#[test]
 fn collection_builtin_arguments_are_checked() {
     for source in [
         "fn main():\n    var x = \"hi\"\n    sort(x)\n",

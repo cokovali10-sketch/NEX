@@ -2891,6 +2891,107 @@ impl<'a> Checker<'a> {
             return Type::Void;
         }
 
+        if callee == "arena_new" {
+            if args.len() != 1 {
+                self.error(
+                    "NXS004",
+                    format!("`arena_new` expects 1 argument, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let arg_ty = self.infer(&args[0]);
+            if arg_ty != Type::I64 && arg_ty != Type::Error {
+                self.error(
+                    "NXS004",
+                    format!("`arena_new` expects `i64`, found `{arg_ty}`"),
+                    args[0].span,
+                );
+                return Type::Error;
+            }
+            return Type::I64;
+        }
+
+        if callee == "arena_alloc" {
+            if args.len() != 2 {
+                self.error(
+                    "NXS004",
+                    format!("`arena_alloc` expects 2 arguments, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let a = self.infer(&args[0]);
+            let s = self.infer(&args[1]);
+            if a != Type::I64 && a != Type::Error {
+                self.error(
+                    "NXS004",
+                    format!("`arena_alloc` expects `i64` handle, found `{a}`"),
+                    args[0].span,
+                );
+            }
+            if s != Type::I64 && s != Type::Error {
+                self.error(
+                    "NXS004",
+                    format!("`arena_alloc` expects `i64` size, found `{s}`"),
+                    args[1].span,
+                );
+            }
+            return Type::I64;
+        }
+
+        if callee == "arena_reset" || callee == "arena_free" {
+            if args.len() != 1 {
+                self.error(
+                    "NXS004",
+                    format!("`{callee}` expects 1 argument, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Void;
+            }
+            let a = self.infer(&args[0]);
+            if a != Type::I64 && a != Type::Error {
+                self.error(
+                    "NXS004",
+                    format!("`{callee}` expects `i64` handle, found `{a}`"),
+                    args[0].span,
+                );
+            }
+            return Type::Void;
+        }
+
+        if callee == "arena_used" || callee == "arena_capacity" {
+            if args.len() != 1 {
+                self.error(
+                    "NXS004",
+                    format!("`{callee}` expects 1 argument, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::I64;
+            }
+            let a = self.infer(&args[0]);
+            if a != Type::I64 && a != Type::Error {
+                self.error(
+                    "NXS004",
+                    format!("`{callee}` expects `i64` handle, found `{a}`"),
+                    args[0].span,
+                );
+            }
+            return Type::I64;
+        }
+
         if callee == "peek" {
             if args.len() != 1 {
                 self.error(

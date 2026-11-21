@@ -416,6 +416,22 @@ partial lines. The timestamp is UTC
 output and machine-readable data. On Windows `argv` is decoded by the C runtime
 using the active code page, so non-ASCII arguments depend on that setting.
 
+### Allocators and arenas
+
+| Function | Signature | Notes |
+|---|---|---|
+| `alloc` | `(size: i64) -> i64` | Raw `malloc`; returns 0 on failure. |
+| `free` | `(ptr: i64) -> void` | Raw `free`. |
+| `arena_new` | `(capacity: i64) -> i64` | Bump allocator; capacity <= 0 defaults to 4096. |
+| `arena_alloc` | `(arena: i64, size: i64) -> i64` | Bump-allocate `size` bytes (8-byte aligned); grows by doubling. |
+| `arena_reset` | `(arena: i64) -> void` | Reset the bump pointer to zero (reuse memory). |
+| `arena_used` | `(arena: i64) -> i64` | Bytes currently used. |
+| `arena_capacity` | `(arena: i64) -> i64` | Allocated capacity in bytes. |
+| `arena_free` | `(arena: i64) -> void` | Release the arena. |
+
+Arenas are the recommended way to manage scratch memory in tight loops:
+repeated `alloc`/`free` is replaced by one `arena_reset` per iteration.
+
 ### Diagnostics and memory
 
 | Function | Signature | Notes |

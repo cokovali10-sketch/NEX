@@ -4176,6 +4176,65 @@ fn lower_expr(
                 return Ok(Operand::Const(Const::Bool(false)));
             }
 
+            if callee == "arena_new" {
+                let arg_value =
+                    lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
+                let dst = builder.new_value();
+                builder.emit(Inst::Call {
+                    dst: Some(dst),
+                    name: "nex_rt_arena_new".to_string(),
+                    args: vec![arg_value],
+                    ret: IrType::I64,
+                });
+                return Ok(Operand::Value(dst));
+            }
+
+            if callee == "arena_alloc" {
+                let a = lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
+                let s = lower_expr(builder, &args[1], scopes, storage, analysis, Type::Error)?;
+                let dst = builder.new_value();
+                builder.emit(Inst::Call {
+                    dst: Some(dst),
+                    name: "nex_rt_arena_alloc".to_string(),
+                    args: vec![a, s],
+                    ret: IrType::I64,
+                });
+                return Ok(Operand::Value(dst));
+            }
+
+            if callee == "arena_reset" || callee == "arena_free" {
+                let a = lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
+                let name = if callee == "arena_reset" {
+                    "nex_rt_arena_reset"
+                } else {
+                    "nex_rt_arena_free"
+                };
+                builder.emit(Inst::Call {
+                    dst: None,
+                    name: name.to_string(),
+                    args: vec![a],
+                    ret: IrType::Void,
+                });
+                return Ok(Operand::Const(Const::Bool(false)));
+            }
+
+            if callee == "arena_used" || callee == "arena_capacity" {
+                let a = lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
+                let name = if callee == "arena_used" {
+                    "nex_rt_arena_used"
+                } else {
+                    "nex_rt_arena_capacity"
+                };
+                let dst = builder.new_value();
+                builder.emit(Inst::Call {
+                    dst: Some(dst),
+                    name: name.to_string(),
+                    args: vec![a],
+                    ret: IrType::I64,
+                });
+                return Ok(Operand::Value(dst));
+            }
+
             if callee == "peek" {
                 let arg_value =
                     lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;

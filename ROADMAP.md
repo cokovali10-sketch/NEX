@@ -40,7 +40,7 @@
 
 - [ ] Ownership and borrowing model.
 - [ ] Lifetime analysis.
-- [ ] Allocators and arenas.
+- [x] Allocators and arenas.
 - [x] Bounds checking for array indexing.
 - [x] Unsafe blocks for grouping low-level operations.
 - [ ] Sanitizer integration.
