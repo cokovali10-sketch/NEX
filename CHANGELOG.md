@@ -4,6 +4,11 @@
 
 ### Added
 
+- `clone(value)` builtin: an explicit deep copy for the move-only types
+  `string` and `[T]` (and an identity for copy types). `clone` borrows its
+  argument, so the source stays usable; it is the opt-in way to get value
+  semantics when a move is not what you want. Strings are duplicated
+  (`nex_rt_str_clone`) and growable arrays deep-copied (`nex_rt_array_clone`).
 - Move semantics (ownership stage 1) for the heap-owning types `string` and
   growable arrays `[T]`: binding such a value to another variable moves it, and
   using the moved-from variable afterwards is a `NXS050` error. Scalars,

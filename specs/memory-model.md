@@ -19,7 +19,9 @@ planned.
   and parameter passing copy the value.
 - Move semantics (stage 1) for the heap-owning types `string` and growable
   arrays `[T]`: binding such a value to another variable moves ownership, and
-  any later use of the moved-from variable is a `NXS050` error. The move
+  any later use of the moved-from variable is a `NXS050` error. `clone(value)`
+  is the opt-in explicit deep copy that borrows its argument and leaves the
+  source usable. The move
   checker is a conservative straight-line analysis: moves inside a nested
   block do not escape it, so there are no false positives, but a
   use-after-move across a branch is not caught yet.

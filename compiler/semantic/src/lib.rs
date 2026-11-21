@@ -2677,6 +2677,26 @@ impl<'a> Checker<'a> {
             return Type::Error;
         }
 
+        if callee == "clone" {
+            if args.len() != 1 {
+                self.error(
+                    "NXS004",
+                    format!("`clone` expects 1 argument, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let ty = self.infer(&args[0]);
+            if ty == Type::Void {
+                self.error("NXS004", "`clone` cannot copy a void value", args[0].span);
+                return Type::Error;
+            }
+            return ty;
+        }
+
         if callee == "abs" {
             if args.len() != 1 {
                 self.error(

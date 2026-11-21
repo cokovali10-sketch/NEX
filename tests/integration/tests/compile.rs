@@ -2484,3 +2484,43 @@ fn reassignment_revives_a_moved_variable() {
     );
     assert!(!result.has_errors(), "{:?}", result.diagnostics);
 }
+
+#[test]
+fn clone_string_keeps_source_usable() {
+    let (stdout, stderr, code) = run_source(
+        "fn main():\n    var a = \"hi\"\n    var b = clone(a)\n    println(a)\n    println(b)\n",
+    );
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "hi\nhi\n");
+}
+
+#[test]
+fn clone_growable_array_is_a_deep_copy() {
+    let (stdout, stderr, code) = run_source(
+        "fn main():\n    var a: [i64] = []\n    push(a, 1)\n    push(a, 2)\n    var b = clone(a)\n    b[0] = 99\n    println(a[0])\n    println(b[0])\n",
+    );
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "1\n99\n");
+}
+
+#[test]
+fn clone_does_not_move_the_source() {
+    let (stdout, stderr, code) = run_source(
+        "fn main():\n    var a: [i64] = []\n    push(a, 7)\n    var b = clone(a)\n    push(a, 8)\n    println(len(a))\n    println(a[0])\n",
+    );
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "2\n7\n");
+}
+
+#[test]
+fn clone_of_a_moved_value_is_reported() {
+    let result = compile(
+        "fn main():\n    var a: [i64] = []\n    push(a, 1)\n    var b = a\n    var c = clone(a)\n",
+    );
+    assert!(result.has_errors());
+    assert!(
+        result.diagnostics.iter().any(|d| d.code == "NXS050"),
+        "{:?}",
+        result.diagnostics
+    );
+}

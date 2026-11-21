@@ -3373,3 +3373,33 @@ void *nex_rt_array_slice(const void *data, long long len, long long elem_size, l
     }
     return header;
 }
+
+/* ------------------------------------------------------------------------- */
+/* Explicit deep copy (clone). `string` and `[T]` are move-only; `clone`      */
+/* produces an independent copy so value semantics stay available on demand.  */
+/* ------------------------------------------------------------------------- */
+
+char *nex_rt_str_clone(const char *value) {
+    if (value == NULL) {
+        return NULL;
+    }
+    size_t length = strlen(value);
+    char *result = (char *)malloc(length + 1);
+    if (result == NULL) {
+        return NULL;
+    }
+    memcpy(result, value, length + 1);
+    return result;
+}
+
+void *nex_rt_array_clone(void *header, long long elem_size) {
+    if (header == NULL) {
+        return nex_rt_array_new();
+    }
+    long long *words = (long long *)header;
+    long long len = words[1];
+    if (len <= 0) {
+        return nex_rt_array_new();
+    }
+    return nex_rt_array_slice(header, len, elem_size, 0, len);
+}

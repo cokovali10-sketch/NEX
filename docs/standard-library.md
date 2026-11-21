@@ -16,6 +16,23 @@ async I/O. See `ROADMAP.md`.
 
 These are global functions, not methods, so no imports are required.
 
+### Cloning and ownership
+
+`string` and growable arrays `[T]` are move-only: binding one to another
+variable (`let b = a`) moves it and the source can no longer be used
+(`NXS050`). Use `clone` when you want an independent copy instead:
+
+| Function | Signature | Notes |
+|---|---|---|
+| `clone` | `(value) -> T` | Deep copy of a `string` or `[T]`; identity for copy types (`i64`, structs, fixed arrays, ...). Borrows the argument, so the source stays usable. |
+
+```nex
+var a: [i64] = []
+push(a, 1)
+var b = clone(a)   # b is an independent copy; a is still usable
+b[0] = 99          # a[0] stays 1
+```
+
 ### Arrays
 
 | Function | Signature | Notes |

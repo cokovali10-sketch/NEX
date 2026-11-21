@@ -2645,6 +2645,51 @@ fn lower_expr(
                 return Ok(Operand::Value(dst));
             }
 
+            if callee == "clone" {
+                let arg_ty = analysis.expr_type(args[0].span).unwrap_or(Type::Error);
+                match arg_ty {
+                    Type::String => {
+                        let value =
+                            lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
+                        let dst = builder.new_value();
+                        builder.emit(Inst::Call {
+                            dst: Some(dst),
+                            name: "nex_rt_str_clone".to_string(),
+                            args: vec![value],
+                            ret: IrType::String,
+                        });
+                        return Ok(Operand::Value(dst));
+                    }
+                    Type::DynArray(display) => {
+                        let info = analysis.array_info(display).cloned();
+                        let value =
+                            lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
+                        let elem_size = info
+                            .map(|info| ir_elem_size(IrType::from_type(info.elem)))
+                            .unwrap_or(8);
+                        let dst = builder.new_value();
+                        builder.emit(Inst::Call {
+                            dst: Some(dst),
+                            name: "nex_rt_array_clone".to_string(),
+                            args: vec![value, Operand::Const(Const::Int(elem_size))],
+                            ret: IrType::String,
+                        });
+                        return Ok(Operand::Value(dst));
+                    }
+                    _ => {
+                        // Copy types already copy on binding; `clone` is the identity.
+                        return lower_expr(
+                            builder,
+                            &args[0],
+                            scopes,
+                            storage,
+                            analysis,
+                            Type::Error,
+                        );
+                    }
+                }
+            }
+
             if callee == "str_split_count" || callee == "str_split_at" || callee == "json_stringify"
             {
                 let mut call_args = Vec::new();
