@@ -3202,3 +3202,79 @@ void nex_rt_arena_free(long long handle) {
     free(arena->base);
     free(arena);
 }
+
+/* ------------------------------------------------------------------------- */
+/* String splitting into a growable array of strings.                        */
+/* ------------------------------------------------------------------------- */
+
+void *nex_rt_str_split(const char *value, const char *separator) {
+    const char *text = value == NULL ? "" : value;
+    const char *sep = (separator == NULL || separator[0] == '\0') ? NULL : separator;
+    size_t sep_len = sep == NULL ? 0 : strlen(sep);
+
+    /* Count fields. */
+    long long count = 1;
+    if (sep != NULL) {
+        const char *p = text;
+        while (1) {
+            const char *found = strstr(p, sep);
+            if (found == NULL) {
+                break;
+            }
+            count++;
+            p = found + sep_len;
+        }
+    }
+
+    void *header = nex_rt_array_new();
+    if (header == NULL) {
+        return NULL;
+    }
+    nex_rt_array_ensure(header, count, (long long)sizeof(char *));
+    long long *words = (long long *)header;
+    void **data = (void **)header;
+    words[1] = count;
+    if (words[2] < count) {
+        words[2] = count;
+    }
+
+    char **items = (char **)data[0];
+    if (items == NULL && count > 0) {
+        /* ensure data buffer */
+        data[0] = malloc((size_t)count * sizeof(char *));
+        items = (char **)data[0];
+    }
+
+    if (sep == NULL) {
+        items[0] = nex_rt_copy_string(text);
+        for (long long i = 1; i < count; i++) {
+            items[i] = nex_rt_copy_string("");
+        }
+        return header;
+    }
+
+    const char *p = text;
+    for (long long i = 0; i < count; i++) {
+        const char *found = strstr(p, sep);
+        size_t field_len;
+        if (found == NULL) {
+            field_len = strlen(p);
+        } else {
+            field_len = (size_t)(found - p);
+        }
+        char *field = (char *)malloc(field_len + 1);
+        if (field != NULL) {
+            memcpy(field, p, field_len);
+            field[field_len] = '\0';
+        } else {
+            field = nex_rt_copy_string("");
+        }
+        items[i] = field;
+        if (found != NULL) {
+            p = found + sep_len;
+        } else {
+            p = text + strlen(text);
+        }
+    }
+    return header;
+}

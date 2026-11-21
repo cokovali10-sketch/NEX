@@ -2123,6 +2123,26 @@ fn main():
 }
 
 #[test]
+fn str_split_builtin() {
+    let source = r#"
+fn main():
+    var parts = str_split("a,b,c", ",")
+    println(len(parts))
+    var i = 0
+    while i < len(parts):
+        println(parts[i])
+        i = i + 1
+    var empty = str_split("", ",")
+    println(len(empty))
+    var trailing = str_split("a,b,", ",")
+    println(len(trailing))
+"#;
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "3\na\nb\nc\n1\n3\n");
+}
+
+#[test]
 fn collection_builtin_arguments_are_checked() {
     for source in [
         "fn main():\n    var x = \"hi\"\n    sort(x)\n",

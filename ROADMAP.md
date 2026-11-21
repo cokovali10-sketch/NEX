@@ -57,7 +57,7 @@
 ## NEX 0.6 - Interoperability
 
 - [x] C ABI import (`extern "C" fn`).
-- [ ] Foreign function declarations.
+- [x] Foreign function declarations.
 - [ ] Adapter SDK.
 - [ ] Python and Rust adapters.
 

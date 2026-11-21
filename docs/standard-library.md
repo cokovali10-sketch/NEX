@@ -66,6 +66,7 @@ elements is unspecified. An empty array joins to `""`.
 | `parse_i64` | `(value: string) -> i64` | Decimal parse; returns `0` when the text is not a number. |
 | `str_split_count` | `(value: string, separator: string) -> i64` | Number of fields a split would produce. |
 | `str_split_at` | `(value: string, separator: string, index: i64) -> string` | The nth field, or an empty string. |
+| `str_split` | `(value: string, separator: string) -> [string]` | Split into a growable array of fields. |
 | `str_reverse` | `(value: string) -> string` | Byte-wise reverse. |
 
 String builtins that return a string allocate with `malloc`; NEX does not free

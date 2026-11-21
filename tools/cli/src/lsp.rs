@@ -570,6 +570,11 @@ const BUILTINS: &[(&str, &str, &str)] = &[
         "Arena capacity.",
     ),
     ("arena_free", "fn arena_free(arena: i64)", "Free an arena."),
+    (
+        "str_split",
+        "fn str_split(value, separator) -> [string]",
+        "Split a string into a growable array of fields.",
+    ),
 ];
 
 fn line_starts(text: &str) -> Vec<usize> {

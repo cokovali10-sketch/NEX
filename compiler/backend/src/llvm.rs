@@ -158,6 +158,7 @@ const RUNTIME_DECLS: &[&str] = &[
     "declare i64 @nex_rt_arena_used(i64)",
     "declare i64 @nex_rt_arena_capacity(i64)",
     "declare void @nex_rt_arena_free(i64)",
+    "declare ptr @nex_rt_str_split(ptr, ptr)",
 ];
 
 pub fn emit_module(module: &IrModule) -> Result<String, String> {
@@ -821,6 +822,7 @@ fn runtime_signature(name: &str) -> (Vec<IrType>, IrType) {
         "nex_rt_arena_used" => (vec![i64], i64),
         "nex_rt_arena_capacity" => (vec![i64], i64),
         "nex_rt_arena_free" => (vec![i64], void),
+        "nex_rt_str_split" => (vec![ptr, ptr], ptr),
         "nex_rt_join_str" => (vec![ptr, i64, ptr], ptr),
         "nex_rt_array_sum_i64" => (vec![ptr, i64], i64),
         "nex_rt_array_sum_f64" => (vec![ptr, i64], f64),

@@ -2992,6 +2992,50 @@ impl<'a> Checker<'a> {
             return Type::I64;
         }
 
+        if callee == "str_split" {
+            if args.len() != 2 {
+                self.error(
+                    "NXS004",
+                    format!("`str_split` expects 2 arguments, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let text_ty = self.infer(&args[0]);
+            let sep_ty = self.infer(&args[1]);
+            if text_ty != Type::String && text_ty != Type::Error {
+                self.error(
+                    "NXS004",
+                    format!("`str_split` expects `string`, found `{text_ty}`"),
+                    args[0].span,
+                );
+            }
+            if sep_ty != Type::String && sep_ty != Type::Error {
+                self.error(
+                    "NXS004",
+                    format!("`str_split` expects `string`, found `{sep_ty}`"),
+                    args[1].span,
+                );
+            }
+            // register [string] dyn array
+            let display = intern_dyn_array_type(Type::String);
+            if !self.analysis.arrays.contains_key(display) {
+                self.analysis.arrays.insert(
+                    display.to_string(),
+                    ArrayInfo {
+                        display,
+                        llvm: DYN_ARRAY_LLVM,
+                        elem: Type::String,
+                        len: 0,
+                    },
+                );
+            }
+            return Type::DynArray(display);
+        }
+
         if callee == "peek" {
             if args.len() != 1 {
                 self.error(
