@@ -1956,23 +1956,22 @@ impl<'a> Parser<'a> {
                 let _ = start;
                 if is_slice {
                     let base = expr;
-                    let base_span = base.span;
                     let start_expr = first.unwrap_or(Expr {
                         kind: ExprKind::Int(0),
-                        span: base_span,
+                        span,
                     });
                     let end_expr = end.unwrap_or(Expr {
                         kind: ExprKind::Call {
                             callee: "len".to_string(),
-                            callee_span: base_span,
+                            callee_span: span,
                             args: vec![base.clone()],
                         },
-                        span: base_span,
+                        span,
                     });
                     expr = Expr {
                         kind: ExprKind::Call {
-                            callee: "str_substring".to_string(),
-                            callee_span: base_span,
+                            callee: "slice".to_string(),
+                            callee_span: span,
                             args: vec![base, start_expr, end_expr],
                         },
                         span,

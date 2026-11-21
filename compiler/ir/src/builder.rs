@@ -4317,6 +4317,102 @@ fn lower_expr(
                 return Ok(Operand::Value(dst));
             }
 
+            if callee == "slice" {
+                let base_ty = analysis.expr_type(args[0].span).unwrap_or(Type::Error);
+                match base_ty {
+                    Type::String => {
+                        let value =
+                            lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
+                        let start =
+                            lower_expr(builder, &args[1], scopes, storage, analysis, Type::Error)?;
+                        let end =
+                            lower_expr(builder, &args[2], scopes, storage, analysis, Type::Error)?;
+                        let dst = builder.new_value();
+                        builder.emit(Inst::Call {
+                            dst: Some(dst),
+                            name: "nex_rt_str_substring".to_string(),
+                            args: vec![value, start, end],
+                            ret: IrType::String,
+                        });
+                        return Ok(Operand::Value(dst));
+                    }
+                    Type::Array { display, .. } => {
+                        let info = analysis
+                            .array_info(display)
+                            .cloned()
+                            .ok_or_else(|| "missing array info".to_string())?;
+                        let base = lower_array_place(builder, &args[0], scopes, storage, analysis)?;
+                        let start =
+                            lower_expr(builder, &args[1], scopes, storage, analysis, Type::Error)?;
+                        let end =
+                            lower_expr(builder, &args[2], scopes, storage, analysis, Type::Error)?;
+                        let start_id = start;
+                        let end_id = end;
+                        let len_operand = Operand::Const(Const::Int(info.len as i64));
+                        let elem_size = ir_elem_size(IrType::from_type(info.elem));
+                        let dst = builder.new_value();
+                        builder.emit(Inst::Call {
+                            dst: Some(dst),
+                            name: "nex_rt_array_slice".to_string(),
+                            args: vec![
+                                Operand::Value(base),
+                                len_operand,
+                                Operand::Const(Const::Int(elem_size)),
+                                start_id,
+                                end_id,
+                            ],
+                            ret: IrType::String,
+                        });
+                        return Ok(Operand::Value(dst));
+                    }
+                    Type::DynArray(display) => {
+                        let info = analysis
+                            .array_info(display)
+                            .cloned()
+                            .ok_or_else(|| "missing array info".to_string())?;
+                        let header_operand =
+                            lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
+                        let header = operand_value_id(builder, header_operand)?;
+                        let data_slot = field_ptr(builder, header, 0, IrType::String);
+                        let data = builder.new_value();
+                        builder.emit(Inst::Load {
+                            dst: data,
+                            ptr: data_slot,
+                            ty: IrType::String,
+                        });
+                        let len_slot = field_ptr(builder, header, 1, IrType::I64);
+                        let len_value = builder.new_value();
+                        builder.emit(Inst::Load {
+                            dst: len_value,
+                            ptr: len_slot,
+                            ty: IrType::I64,
+                        });
+                        let start =
+                            lower_expr(builder, &args[1], scopes, storage, analysis, Type::Error)?;
+                        let end =
+                            lower_expr(builder, &args[2], scopes, storage, analysis, Type::Error)?;
+                        let start_id = start;
+                        let end_id = end;
+                        let elem_size = ir_elem_size(IrType::from_type(info.elem));
+                        let dst = builder.new_value();
+                        builder.emit(Inst::Call {
+                            dst: Some(dst),
+                            name: "nex_rt_array_slice".to_string(),
+                            args: vec![
+                                Operand::Value(data),
+                                Operand::Value(len_value),
+                                Operand::Const(Const::Int(elem_size)),
+                                start_id,
+                                end_id,
+                            ],
+                            ret: IrType::String,
+                        });
+                        return Ok(Operand::Value(dst));
+                    }
+                    _ => return Err("`slice` expects a string or array".to_string()),
+                }
+            }
+
             if callee == "str_substring" {
                 let value = lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
                 let start = lower_expr(builder, &args[1], scopes, storage, analysis, Type::Error)?;

@@ -3036,6 +3036,75 @@ impl<'a> Checker<'a> {
             return Type::DynArray(display);
         }
 
+        if callee == "slice" {
+            if args.len() != 3 {
+                self.error(
+                    "NXS004",
+                    format!("`slice` expects 3 arguments, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Error;
+            }
+            let base_ty = self.infer(&args[0]);
+            let start_ty = self.infer(&args[1]);
+            let end_ty = self.infer(&args[2]);
+            if start_ty != Type::I64 && start_ty != Type::Error {
+                self.error(
+                    "NXS004",
+                    format!("`slice` expects `i64` start, found `{start_ty}`"),
+                    args[1].span,
+                );
+            }
+            if end_ty != Type::I64 && end_ty != Type::Error {
+                self.error(
+                    "NXS004",
+                    format!("`slice` expects `i64` end, found `{end_ty}`"),
+                    args[2].span,
+                );
+            }
+            match base_ty {
+                Type::String => return Type::String,
+                Type::Array { display, .. } | Type::DynArray(display) => {
+                    let info = self.analysis.array_info(display).cloned();
+                    let elem_ty = info.map(|i| i.elem).unwrap_or(Type::Error);
+                    if elem_ty == Type::Error {
+                        return Type::Error;
+                    }
+                    let out_display = if matches!(base_ty, Type::DynArray(_)) {
+                        intern_dyn_array_type(elem_ty)
+                    } else {
+                        // fixed array -> growable slice
+                        intern_dyn_array_type(elem_ty)
+                    };
+                    if !self.analysis.arrays.contains_key(out_display) {
+                        self.analysis.arrays.insert(
+                            out_display.to_string(),
+                            ArrayInfo {
+                                display: out_display,
+                                llvm: DYN_ARRAY_LLVM,
+                                elem: elem_ty,
+                                len: 0,
+                            },
+                        );
+                    }
+                    return Type::DynArray(out_display);
+                }
+                _ => {
+                    if base_ty != Type::Error {
+                        self.error(
+                            "NXS004",
+                            format!("`slice` expects a string or array, found `{base_ty}`"),
+                            args[0].span,
+                        );
+                    }
+                    return Type::Error;
+                }
+            }
+        }
+
         if callee == "peek" {
             if args.len() != 1 {
                 self.error(

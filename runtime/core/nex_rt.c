@@ -3343,3 +3343,33 @@ int nex_rt_file_copy(const char *from, const char *to) {
     }
     return ok;
 }
+
+/* ------------------------------------------------------------------------- */
+/* Array slicing: returns a new growable array (copy of a sub-range).       */
+/* ------------------------------------------------------------------------- */
+
+void *nex_rt_array_slice(const void *data, long long len, long long elem_size, long long start, long long end) {
+    if (data == NULL || len <= 0) {
+        return nex_rt_array_new();
+    }
+    if (start < 0) start = 0;
+    if (end > len) end = len;
+    if (start > end) { start = end; }
+    long long count = end - start;
+    if (count < 0) count = 0;
+    if (elem_size <= 0) elem_size = 1;
+
+    void *header = nex_rt_array_new();
+    if (header == NULL) {
+        return NULL;
+    }
+    nex_rt_array_ensure(header, count, elem_size);
+    long long *words = (long long *)header;
+    void **data_ptr = (void **)header;
+    words[1] = count;
+    if (words[2] < count) words[2] = count;
+    if (count > 0 && data_ptr[0] != NULL) {
+        memcpy(data_ptr[0], (const char *)data + start * elem_size, (size_t)(count * elem_size));
+    }
+    return header;
+}
