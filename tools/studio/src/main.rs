@@ -12,6 +12,38 @@ use std::process::Command;
 
 const INDEX_HTML: &str = include_str!("../static/index.html");
 
+/// Default scratch buffer shown in the editor on first load.
+const DEFAULT_MAIN: &str = r#"struct Item:
+    name: string
+    price: i64
+
+fn main():
+    var cart: [Item] = []
+    push(cart, Item("apple", 10))
+    push(cart, Item("bread", 25))
+    push(cart, Item("milk", 18))
+
+    var total = 0
+    for it in cart:
+        println(it.name + ": " + to_string(it.price))
+        total = total + it.price
+
+    println("---")
+    println("items: " + to_string(len(cart)))
+    println("total: " + to_string(total))
+"#;
+
+/// Project files exposed to the editor's file explorer: (path, contents).
+const PROJECT_FILES: &[(&str, &str)] = &[
+    ("main.nex", DEFAULT_MAIN),
+    ("libs/mathx.nex", include_str!("../../../libs/mathx.nex")),
+    ("libs/strx.nex", include_str!("../../../libs/strx.nex")),
+    (
+        "libs/examples/demo.nex",
+        include_str!("../../../libs/examples/demo.nex"),
+    ),
+];
+
 fn main() {
     let addr = "127.0.0.1:7788";
     let listener = match TcpListener::bind(addr) {
@@ -123,6 +155,15 @@ fn handle_connection(mut stream: TcpStream, nexc: Option<PathBuf>) -> std::io::R
             );
             stream.write_all(response.as_bytes())?;
         }
+        ("GET", "/api/files") => {
+            let payload = files_json();
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                payload.len(),
+                payload
+            );
+            stream.write_all(response.as_bytes())?;
+        }
         ("POST", "/run") => {
             let code = String::from_utf8_lossy(&body).to_string();
             let result = run_code(&code, nexc.as_deref());
@@ -221,6 +262,23 @@ fn run_code(code: &str, nexc: Option<&std::path::Path>) -> RunResult {
             exit: 1,
         },
     }
+}
+
+/// Serializes the exposed project files into a JSON object `{path: contents}`.
+fn files_json() -> String {
+    let mut out = String::from("{");
+    for (index, (path, contents)) in PROJECT_FILES.iter().enumerate() {
+        if index > 0 {
+            out.push(',');
+        }
+        out.push('"');
+        out.push_str(&escape(path));
+        out.push_str("\":\"");
+        out.push_str(&escape(contents));
+        out.push('"');
+    }
+    out.push('}');
+    out
 }
 
 /// Builds a minimal JSON object string from a `RunResult` (no dependencies).

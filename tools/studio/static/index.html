@@ -6,257 +6,507 @@
 <title>NEX Studio</title>
 <style>
   :root {
-    --bg: #0d1117;
-    --panel: #161b22;
-    --panel-2: #1c2330;
-    --border: #2a3240;
-    --fg: #e6edf3;
-    --muted: #8b949e;
-    --accent: #4493f8;
-    --accent-2: #58a6ff;
-    --green: #3fb950;
-    --red: #f85149;
-    --yellow: #d29922;
-    --radius: 10px;
-    --mono: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+    --bg: #1e1e1e;
+    --bg-2: #252526;
+    --bg-3: #2d2d30;
+    --panel: #181818;
+    --border: #3c3c3c;
+    --border-soft: #2b2b2b;
+    --fg: #d4d4d4;
+    --fg-dim: #9d9d9d;
+    --muted: #6e7681;
+    --accent: #0e639c;
+    --accent-2: #1177bb;
+    --focus: #007fd4;
+    --green: #89d185;
+    --red: #f48771;
+    --yellow: #dcdcaa;
+    --blue: #569cd6;
+    --purple: #c586c0;
+    --orange: #ce9178;
+    --cyan: #4ec9b0;
+    --radius: 6px;
+    --mono: "Cascadia Code", "JetBrains Mono", Consolas, "Courier New", monospace;
     --sans: -apple-system, "Segoe UI", Roboto, system-ui, sans-serif;
   }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
   body {
-    background: radial-gradient(1200px 600px at 80% -10%, #1b2638 0%, var(--bg) 60%);
+    background: var(--bg);
     color: var(--fg);
     font-family: var(--sans);
+    font-size: 13px;
     display: flex;
     flex-direction: column;
     height: 100vh;
+    overflow: hidden;
   }
-  header {
+
+  /* Title bar */
+  .titlebar {
     display: flex;
     align-items: center;
-    gap: 14px;
-    padding: 14px 20px;
-    border-bottom: 1px solid var(--border);
-    background: rgba(22, 27, 34, 0.8);
-    backdrop-filter: blur(6px);
-  }
-  .logo {
-    width: 34px; height: 34px; border-radius: 9px;
-    background: linear-gradient(135deg, var(--accent), #8957e5);
-    display: grid; place-items: center;
-    font-weight: 800; color: white; font-size: 18px;
-    box-shadow: 0 4px 14px rgba(68,147,248,.35);
-  }
-  h1 { font-size: 17px; margin: 0; letter-spacing: .3px; }
-  .tag { color: var(--muted); font-size: 12px; margin-left: 6px; }
-  .spacer { flex: 1; }
-  button {
-    font-family: var(--sans);
-    font-weight: 600;
-    border: 1px solid var(--border);
-    background: var(--panel-2);
-    color: var(--fg);
-    padding: 9px 16px;
-    border-radius: 9px;
-    cursor: pointer;
-    transition: .15s;
-    font-size: 13px;
-  }
-  button:hover { border-color: var(--accent); }
-  button.primary {
-    background: linear-gradient(135deg, var(--accent), #6e7bf2);
-    border: none; color: white;
-    box-shadow: 0 4px 14px rgba(68,147,248,.4);
-  }
-  button.primary:hover { filter: brightness(1.08); }
-  main {
-    flex: 1;
-    display: grid;
-    grid-template-columns: 1.15fr 1fr;
-    gap: 14px;
-    padding: 14px;
-    min-height: 0;
-  }
-  .pane {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-  }
-  .pane-head {
-    display: flex; align-items: center; gap: 8px;
-    padding: 9px 14px;
-    border-bottom: 1px solid var(--border);
-    font-size: 12px; color: var(--muted);
-    text-transform: uppercase; letter-spacing: .6px;
-  }
-  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
-  .editor-wrap { flex: 1; position: relative; display: flex; min-height: 0; }
-  .gutter {
-    padding: 12px 10px;
-    text-align: right;
-    color: #495265;
-    background: var(--panel-2);
-    font-family: var(--mono);
-    font-size: 13px;
-    line-height: 1.55;
+    height: 40px;
+    background: var(--accent);
+    color: #fff;
+    padding: 0 12px;
+    gap: 8px;
     user-select: none;
-    overflow: hidden;
-    white-space: pre;
-    min-width: 44px;
   }
-  textarea {
-    flex: 1;
-    resize: none;
-    border: none;
-    outline: none;
-    background: transparent;
-    color: var(--fg);
-    font-family: var(--mono);
-    font-size: 13px;
-    line-height: 1.55;
-    padding: 12px 14px;
-    tab-size: 4;
-    white-space: pre;
-    overflow: auto;
+  .titlebar .logo {
+    width: 22px; height: 22px; border-radius: 5px;
+    background: rgba(255,255,255,.2);
+    display: grid; place-items: center;
+    font-weight: 800; font-size: 14px;
   }
+  .titlebar .menu { display: flex; gap: 4px; }
+  .titlebar .menu span {
+    padding: 4px 10px; border-radius: 4px; cursor: default; font-size: 13px;
+  }
+  .titlebar .menu span:hover { background: rgba(255,255,255,.15); }
+  .titlebar .spacer { flex: 1; }
+  .run-btn {
+    background: #16825d; color: #fff; border: none;
+    padding: 5px 14px; border-radius: 5px; font-weight: 600; cursor: pointer;
+    display: flex; align-items: center; gap: 6px; font-size: 12.5px;
+    transition: .12s;
+  }
+  .run-btn:hover { background: #1a9e72; }
+
+  /* Main layout */
+  .workbench { flex: 1; display: flex; min-height: 0; }
+
+  /* Activity bar */
+  .activity {
+    width: 48px; background: var(--bg-3);
+    display: flex; flex-direction: column; align-items: center;
+    padding-top: 6px; gap: 2px;
+    border-right: 1px solid var(--border-soft);
+  }
+  .activity .item {
+    width: 48px; height: 48px; display: grid; place-items: center;
+    color: var(--fg-dim); cursor: pointer; position: relative;
+  }
+  .activity .item:hover { color: #fff; }
+  .activity .item.active { color: #fff; }
+  .activity .item.active::before {
+    content: ""; position: absolute; left: 0; top: 8px; bottom: 8px; width: 2px;
+    background: var(--focus);
+  }
+  .activity svg { width: 24px; height: 24px; }
+
+  /* Sidebar */
+  .sidebar {
+    width: 240px; background: var(--bg-2);
+    border-right: 1px solid var(--border-soft);
+    display: flex; flex-direction: column; min-height: 0;
+  }
+  .sidebar.hidden { display: none; }
+  .side-head {
+    padding: 8px 16px; font-size: 11px; font-weight: 600;
+    letter-spacing: .8px; color: var(--fg-dim); text-transform: uppercase;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .tree { overflow: auto; padding: 2px 0; }
+  .tree .row {
+    display: flex; align-items: center; gap: 6px;
+    padding: 4px 12px 4px 20px; cursor: pointer; white-space: nowrap;
+    font-size: 13px; color: var(--fg);
+  }
+  .tree .row:hover { background: var(--bg-3); }
+  .tree .row.active { background: #37373d; }
+  .tree .row .ico { width: 15px; text-align: center; color: var(--cyan); font-size: 11px; }
+  .tree .row.dir { color: var(--fg); font-weight: 600; }
+  .tree .indent { padding-left: 34px; }
+  .tree .indent2 { padding-left: 48px; }
+  .badge {
+    margin-left: auto; font-size: 10px; background: #37373d;
+    color: var(--fg-dim); padding: 1px 6px; border-radius: 8px;
+  }
+
+  /* Editor area */
+  .editor-area { flex: 1; display: flex; flex-direction: column; min-width: 0; background: var(--bg); }
+  .tabs {
+    display: flex; background: var(--bg-3); border-bottom: 1px solid var(--border-soft);
+    overflow-x: auto; min-height: 35px;
+  }
+  .tab {
+    display: flex; align-items: center; gap: 7px;
+    padding: 0 14px; font-size: 13px; color: var(--fg-dim);
+    border-right: 1px solid var(--border-soft); cursor: pointer; white-space: nowrap;
+    position: relative;
+  }
+  .tab.active { background: var(--bg); color: var(--fg); }
+  .tab.active::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: var(--accent-2); }
+  .tab .close { color: var(--fg-dim); font-size: 15px; line-height: 1; }
+  .tab .close:hover { color: #fff; }
+  .tab .fico { color: var(--cyan); font-size: 11px; }
+
+  .editor-wrap { flex: 1; position: relative; display: flex; min-height: 0; overflow: hidden; }
+  .line-nums {
+    padding: 12px 8px 12px 14px; text-align: right;
+    color: #858585; background: var(--bg);
+    font-family: var(--mono); font-size: 14px; line-height: 1.5;
+    user-select: none; white-space: pre; min-width: 52px; overflow: hidden;
+  }
+  .code-stack { flex: 1; position: relative; min-width: 0; }
+  .code-stack pre, .code-stack textarea {
+    position: absolute; inset: 0;
+    font-family: var(--mono); font-size: 14px; line-height: 1.5;
+    padding: 12px 16px; tab-size: 4;
+    white-space: pre; overflow: auto; border: none;
+    letter-spacing: normal;
+  }
+  .code-stack pre {
+    pointer-events: none; color: var(--fg); background: transparent;
+  }
+  .code-stack textarea {
+    background: transparent; color: transparent; caret-color: #fff;
+    resize: none; outline: none;
+    -webkit-text-fill-color: transparent;
+  }
+  .code-stack textarea::selection { background: rgba(38,79,120,.8); }
+
+  /* token colors */
+  .t-kw { color: var(--purple); }
+  .t-type { color: var(--cyan); }
+  .t-str { color: var(--orange); }
+  .t-num { color: var(--green); }
+  .t-com { color: #6a9955; font-style: italic; }
+  .t-fn { color: var(--yellow); }
+  .t-builtin { color: var(--blue); }
+  .t-op { color: var(--fg); }
+  .t-self { color: var(--blue); }
+
+  /* Panel (console) */
+  .panel {
+    height: 240px; background: var(--panel);
+    border-top: 1px solid var(--border-soft);
+    display: flex; flex-direction: column; min-height: 0;
+  }
+  .panel.hidden { display: none; }
+  .panel-head {
+    display: flex; align-items: center; gap: 18px;
+    padding: 0 16px; height: 35px; border-bottom: 1px solid var(--border-soft);
+    font-size: 11px; letter-spacing: .6px; text-transform: uppercase; color: var(--fg-dim);
+  }
+  .panel-head .tab-btn { padding: 8px 2px; cursor: pointer; border-bottom: 1px solid transparent; }
+  .panel-head .tab-btn.active { color: #fff; border-bottom-color: var(--focus); }
+  .panel-head .spacer { flex: 1; }
+  .panel-head .icon-btn { cursor: pointer; color: var(--fg-dim); font-size: 14px; }
+  .panel-head .icon-btn:hover { color: #fff; }
   #output {
-    flex: 1;
-    margin: 0;
-    padding: 14px;
-    font-family: var(--mono);
-    font-size: 13px;
-    line-height: 1.55;
-    white-space: pre-wrap;
-    overflow: auto;
-    color: var(--fg);
+    flex: 1; overflow: auto; padding: 10px 16px;
+    font-family: var(--mono); font-size: 13px; line-height: 1.5;
+    white-space: pre-wrap; color: var(--fg);
   }
-  .status {
-    padding: 7px 14px;
-    border-top: 1px solid var(--border);
-    font-size: 12px;
-    color: var(--muted);
-    display: flex; gap: 16px; align-items: center;
+  #output .ln { display: block; }
+  #output .err-line { color: var(--red); }
+
+  /* Status bar */
+  .statusbar {
+    height: 22px; background: var(--accent); color: #fff;
+    display: flex; align-items: center; gap: 0; font-size: 12px;
+    user-select: none;
   }
-  .status .ok { color: var(--green); }
-  .status .err { color: var(--red); }
-  .status .run { color: var(--yellow); }
-  kbd {
-    background: var(--panel-2);
-    border: 1px solid var(--border);
-    border-radius: 5px;
-    padding: 1px 6px;
-    font-size: 11px;
-  }
-  @media (max-width: 900px) {
-    main { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
-  }
+  .statusbar .cell { padding: 0 10px; height: 100%; display: flex; align-items: center; }
+  .statusbar .cell.remote { background: #16825d; }
+  .statusbar .cell:hover { background: rgba(255,255,255,.12); }
+  .statusbar .spacer { flex: 1; }
+  .statusbar .ok { color: #b5cea8; }
+  .statusbar .err { color: #ffd7d0; }
+  .statusbar .run { color: #ffe9a8; }
 </style>
 </head>
 <body>
-  <header>
+  <div class="titlebar">
     <div class="logo">N</div>
-    <div>
-      <h1>NEX Studio <span class="tag">native playground</span></h1>
+    <div class="menu">
+      <span>Файл</span><span>Правка</span><span>Вид</span><span>Запуск</span>
     </div>
     <div class="spacer"></div>
-    <button id="example">Пример</button>
-    <button id="clear">Очистить</button>
-    <button id="run" class="primary">▶ Запустить</button>
-  </header>
+    <button class="run-btn" id="run">▶ Запустить <span style="opacity:.7;font-size:11px">Ctrl+↵</span></button>
+  </div>
 
-  <main>
-    <section class="pane">
-      <div class="pane-head"><span class="dot"></span> main.nex</div>
+  <div class="workbench">
+    <div class="activity">
+      <div class="item active" title="Проводник">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+      </div>
+      <div class="item" title="Поиск">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      </div>
+      <div class="item" title="Запуск">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M6 4l14 8-14 8z"/></svg>
+      </div>
+    </div>
+
+    <div class="sidebar" id="sidebar">
+      <div class="side-head">Проводник</div>
+      <div class="tree" id="tree">
+        <div class="row dir">▾ NEX-PROJECT</div>
+      </div>
+    </div>
+
+    <div class="editor-area">
+      <div class="tabs" id="tabs"></div>
       <div class="editor-wrap">
-        <div class="gutter" id="gutter">1</div>
-        <textarea id="code" spellcheck="false"></textarea>
+        <div class="line-nums" id="lineNums">1</div>
+        <div class="code-stack">
+          <pre id="highlight"></pre>
+          <textarea id="code" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
+        </div>
       </div>
-      <div class="status">
-        <span>NEX</span><span>UTF-8</span><span>4 spaces</span>
-        <span class="spacer"></span>
-        <span><kbd>Ctrl</kbd> + <kbd>Enter</kbd> — запустить</span>
-      </div>
-    </section>
 
-    <section class="pane">
-      <div class="pane-head"><span class="dot" style="background:var(--accent)"></span> Консоль</div>
-      <pre id="output">Готов к работе. Нажми «Запустить».</pre>
-      <div class="status" id="status"><span>ожидание</span></div>
-    </section>
-  </main>
+      <div class="panel" id="panel">
+        <div class="panel-head">
+          <div class="tab-btn active" data-panel="console">Консоль</div>
+          <div class="tab-btn" data-panel="problems">Проблемы <span class="badge" id="probCount" style="display:none">0</span></div>
+          <div class="spacer"></div>
+          <div class="icon-btn" id="clearBtn" title="Очистить">🗑</div>
+        </div>
+        <pre id="output">Готов к работе. Нажми «Запустить».</pre>
+      </div>
+    </div>
+  </div>
+
+  <div class="statusbar">
+    <div class="cell remote">⑂ main</div>
+    <div class="cell">NEX</div>
+    <div class="cell">UTF-8</div>
+    <div class="cell">Ln <span id="ln">1</span>, Col <span id="col">1</span></div>
+    <div class="cell">Spaces: 4</div>
+    <div class="spacer"></div>
+    <div class="cell" id="status"><span>готов</span></div>
+  </div>
 
 <script>
+const KEYWORDS = new Set(['fn','let','var','if','elif','else','while','for','in','match','return','struct','impl','pub','use','from','true','false','and','or','not','mut','unsafe','defer','break','continue','pass','as','import','loop']);
+const TYPES = new Set(['i8','i16','i32','i64','u8','u16','u32','u64','f32','f64','bool','char','string','void']);
+const BUILTINS = new Set(['println','print','push','pop','len','concat','to_string','to_int','to_float','str_upper','str_lower','str_contains','str_split','str_index_of','str_substring','clone','drop','sort','reverse','contains','index_of','sum_of','min_of','max_of','product','count','join','abs','arena_new','builder_new','builder_append']);
+
 const codeEl = document.getElementById('code');
+const preEl = document.getElementById('highlight');
+const lineNumsEl = document.getElementById('lineNums');
 const outEl = document.getElementById('output');
-const gutterEl = document.getElementById('gutter');
 const statusEl = document.getElementById('status');
+const tabsEl = document.getElementById('tabs');
+const treeEl = document.getElementById('tree');
+const probCountEl = document.getElementById('probCount');
 
-const EXAMPLE = `struct Item:
-    name: string
-    price: i64
+let files = {};          // path -> content
+let openTabs = [];       // array of paths
+let activePath = null;
 
-fn main():
-    var cart: [Item] = []
-    push(cart, Item("apple", 10))
-    push(cart, Item("bread", 25))
-    push(cart, Item("milk", 18))
-
-    var total = 0
-    for it in cart:
-        println(it.name + ": " + to_string(it.price))
-        total = total + it.price
-
-    println("---")
-    println("items: " + to_string(len(cart)))
-    println("total: " + to_string(total))
-`;
-
-function updateGutter() {
-  const lines = codeEl.value.split('\\n').length;
-  let s = '';
-  for (let i = 1; i <= lines; i++) s += i + '\\n';
-  gutterEl.textContent = s;
-  gutterEl.scrollTop = codeEl.scrollTop;
+function esc(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
-codeEl.addEventListener('input', updateGutter);
-codeEl.addEventListener('scroll', () => { gutterEl.scrollTop = codeEl.scrollTop; });
+
+// Tokenize a single line into HTML spans.
+function highlightLine(line) {
+  let out = '';
+  let i = 0;
+  while (i < line.length) {
+    const ch = line[i];
+    // comment
+    if (ch === '#') { out += '<span class="t-com">' + esc(line.slice(i)) + '</span>'; break; }
+    // string
+    if (ch === '"') {
+      let j = i + 1, str = '"';
+      while (j < line.length) {
+        if (line[j] === '\\') { str += line[j] + (line[j+1]||''); j += 2; continue; }
+        str += line[j];
+        if (line[j] === '"') { j++; break; }
+        j++;
+      }
+      out += '<span class="t-str">' + esc(str) + '</span>'; i = j; continue;
+    }
+    // char
+    if (ch === "'") {
+      let j = i + 1, s = "'";
+      while (j < line.length) { s += line[j]; if (line[j] === "'") { j++; break; } j++; }
+      out += '<span class="t-str">' + esc(s) + '</span>'; i = j; continue;
+    }
+    // number
+    if (/[0-9]/.test(ch) && (i === 0 || !/[A-Za-z_]/.test(line[i-1]))) {
+      let j = i;
+      while (j < line.length && /[0-9._]/.test(line[j])) j++;
+      out += '<span class="t-num">' + esc(line.slice(i, j)) + '</span>'; i = j; continue;
+    }
+    // identifier
+    if (/[A-Za-z_]/.test(ch)) {
+      let j = i;
+      while (j < line.length && /[A-Za-z0-9_]/.test(line[j])) j++;
+      const word = line.slice(i, j);
+      // lookahead for '(' → function call
+      let k = j; while (k < line.length && line[k] === ' ') k++;
+      const isCall = line[k] === '(';
+      let cls = '';
+      if (KEYWORDS.has(word)) cls = 't-kw';
+      else if (TYPES.has(word)) cls = 't-type';
+      else if (BUILTINS.has(word)) cls = 't-builtin';
+      else if (isCall) cls = 't-fn';
+      else if (word === 'self') cls = 't-self';
+      out += cls ? '<span class="' + cls + '">' + esc(word) + '</span>' : esc(word);
+      i = j; continue;
+    }
+    // operators / punctuation
+    if ('+-*/%=<>!&|^~?:'.includes(ch)) { out += '<span class="t-op">' + esc(ch) + '</span>'; i++; continue; }
+    out += esc(ch); i++;
+  }
+  return out;
+}
+
+function render() {
+  const text = codeEl.value;
+  // highlight (escape trailing newline so heights match)
+  const lines = text.split('\n');
+  preEl.innerHTML = lines.map(highlightLine).join('\n') + '\n';
+  // line numbers
+  let nums = '';
+  for (let i = 1; i <= lines.length; i++) nums += i + '\n';
+  lineNumsEl.textContent = nums;
+  updateCursor();
+  syncScroll();
+}
+
+function syncScroll() {
+  preEl.scrollTop = codeEl.scrollTop;
+  preEl.scrollLeft = codeEl.scrollLeft;
+  lineNumsEl.scrollTop = codeEl.scrollTop;
+}
+
+function updateCursor() {
+  const upto = codeEl.value.slice(0, codeEl.selectionStart);
+  const lines = upto.split('\n');
+  document.getElementById('ln').textContent = lines.length;
+  document.getElementById('col').textContent = lines[lines.length - 1].length + 1;
+}
+
+codeEl.addEventListener('input', render);
+codeEl.addEventListener('scroll', syncScroll);
+codeEl.addEventListener('click', updateCursor);
+codeEl.addEventListener('keyup', updateCursor);
 codeEl.addEventListener('keydown', (e) => {
   if (e.key === 'Tab') {
     e.preventDefault();
     const s = codeEl.selectionStart, en = codeEl.selectionEnd;
     codeEl.value = codeEl.value.slice(0, s) + '    ' + codeEl.value.slice(en);
     codeEl.selectionStart = codeEl.selectionEnd = s + 4;
-    updateGutter();
+    render();
   }
   if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); run(); }
+  if (e.key === '}') {
+    // simple auto-indent
+  }
 });
 
+function setStatus(html) { statusEl.innerHTML = html; }
+
 async function run() {
-  statusEl.innerHTML = '<span class="run">● компиляция и запуск…</span>';
+  setStatus('<span class="run">● компиляция и запуск…</span>');
   outEl.textContent = 'Запуск…';
+  document.getElementById('panel').classList.remove('hidden');
   try {
     const res = await fetch('/run', { method: 'POST', body: codeEl.value });
     const data = await res.json();
-    outEl.textContent = (data.stdout || '') + (data.stderr ? ('\\n' + data.stderr) : '');
+    const out = (data.stdout || '') + (data.stderr || '');
+    outEl.innerHTML = out.split('\n').map(l => '<span class="ln">' + (l ? esc(l) : ' ') + '</span>').join('');
     const ok = data.exit === 0;
-    statusEl.innerHTML = ok
-      ? '<span class="ok">● готово (exit 0)</span>'
-      : ('<span class="err">● ошибка (exit ' + data.exit + ')</span>');
+    setStatus(ok ? '<span class="ok">● готово (exit 0)</span>' : '<span class="err">● ошибка (exit ' + data.exit + ')</span>');
+    const problems = (data.stderr || '').split('\n').filter(l => /error\[|error:/.test(l));
+    if (problems.length) {
+      probCountEl.style.display = '';
+      probCountEl.textContent = problems.length;
+    } else {
+      probCountEl.style.display = 'none';
+    }
   } catch (e) {
     outEl.textContent = 'Ошибка соединения с сервером: ' + e;
-    statusEl.innerHTML = '<span class="err">● сбой</span>';
+    setStatus('<span class="err">● сбой</span>');
   }
 }
 
-document.getElementById('run').onclick = run;
-document.getElementById('example').onclick = () => { codeEl.value = EXAMPLE; updateGutter(); };
-document.getElementById('clear').onclick = () => { codeEl.value = ''; updateGutter(); };
+function buildTree() {
+  treeEl.innerHTML = '<div class="row dir">▾ NEX-PROJECT</div>';
+  for (const path of Object.keys(files)) {
+    const row = document.createElement('div');
+    const depth = path.split('/').length - 1;
+    row.className = 'row' + (depth === 1 ? ' indent' : depth >= 2 ? ' indent2' : '') + (path === activePath ? ' active' : '');
+    const name = path.split('/').pop();
+    row.innerHTML = '<span class="ico">◆</span><span>' + esc(name) + '</span>';
+    row.title = path;
+    row.onclick = () => openFile(path);
+    treeEl.appendChild(row);
+  }
+}
 
-codeEl.value = EXAMPLE;
-updateGutter();
+function openFile(path) {
+  activePath = path;
+  if (!openTabs.includes(path)) openTabs.push(path);
+  if (!(path in files)) files[path] = '// ' + path + '\n';
+  codeEl.value = files[path];
+  render();
+  renderTabs();
+  buildTree();
+}
+
+function renderTabs() {
+  tabsEl.innerHTML = '';
+  for (const path of openTabs) {
+    const tab = document.createElement('div');
+    tab.className = 'tab' + (path === activePath ? ' active' : '');
+    const name = path.split('/').pop();
+    tab.innerHTML = '<span class="fico">◆</span><span>' + esc(name) + '</span><span class="close" title="Закрыть">✕</span>';
+    tab.onclick = (e) => {
+      if (e.target.classList.contains('close')) {
+        closeTab(path);
+      } else {
+        openFile(path);
+      }
+    };
+    tabsEl.appendChild(tab);
+  }
+}
+
+function closeTab(path) {
+  openTabs = openTabs.filter(t => t !== path);
+  if (activePath === path) {
+    if (openTabs.length) openFile(openTabs[openTabs.length - 1]);
+    else { activePath = null; codeEl.value = ''; render(); renderTabs(); }
+  } else {
+    renderTabs();
+  }
+  buildTree();
+}
+
+function persistActive() {
+  if (activePath) files[activePath] = codeEl.value;
+}
+
+// save on edit
+codeEl.addEventListener('input', persistActive);
+
+document.getElementById('run').onclick = run;
+document.getElementById('clearBtn').onclick = () => { outEl.textContent = ''; probCountEl.style.display='none'; };
+document.querySelectorAll('.panel-head .tab-btn').forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll('.panel-head .tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  };
+});
+
+// boot: fetch files and open main.nex
+async function boot() {
+  try {
+    const res = await fetch('/api/files');
+    files = await res.json();
+  } catch (e) {
+    files = { 'main.nex': '// failed to load files: ' + e };
+  }
+  openFile('main.nex');
+}
+boot();
 </script>
 </body>
 </html>
