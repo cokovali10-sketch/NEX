@@ -13,6 +13,7 @@ members = [
     "tools/fmt",
     "tools/lint",
     "tools/studio",
+    "tools/studio_native",
     "tests/integration",
 ]
 

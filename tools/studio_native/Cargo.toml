@@ -1,0 +1,15 @@
+[package]
+name = "nex-studio-native"
+version = "1.0.1"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "NEX Studio (native) - a desktop editor for NEX built in Rust with the Win32 API (no external crates)"
+
+[[bin]]
+name = "nex-studio-native"
+path = "src/main.rs"
+
+[dependencies]
