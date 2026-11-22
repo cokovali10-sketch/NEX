@@ -10,7 +10,10 @@
   (out-parameters read and write through the pointer). A statement-scoped
   borrow checker rejects aliasing conflicts (`NXS053`: two `&mut` of the same
   place, or `&` while mutably borrowed, in one statement), `&mut` of an
-  immutable `let` binding (`NXS054`), and use of a moved value while borrowed.
+  immutable `let` binding (`NXS054`), use of a moved value while borrowed, and
+  returning a reference to a local (`NXS055`: `return &x` would dangle).
+- References to `string` work end-to-end: `&string` reads and `&mut string`
+  writes (`*r = v`) through the pointer.
 - Reading and writing aggregates through a reference: `(*r).field` and
   `(*r)[i]` for reads, and `(*r).field = v` / `*r = other` for writes, where
   `r: &Struct` / `&mut Struct` or `r: &[T; N]`. A whole-struct write through

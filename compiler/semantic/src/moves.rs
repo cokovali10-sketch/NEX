@@ -225,7 +225,10 @@ impl<'a> MoveChecker<'a> {
                 }
                 self.scopes = saved;
             }
-            StmtKind::Return(Some(value)) => self.check_expr_reads(value),
+            StmtKind::Return(Some(value)) => {
+                self.check_expr_reads(value);
+                self.check_return_borrow(value);
+            }
             StmtKind::Return(None) => {}
             StmtKind::Match { scrutinee, arms } => {
                 self.check_expr_reads(scrutinee);
@@ -327,6 +330,22 @@ impl<'a> MoveChecker<'a> {
             if let Some(state) = scope.get_mut(name) {
                 state.moved = true;
                 return;
+            }
+        }
+    }
+
+    /// Rejects `return &local` / `return &mut local`: the returned reference
+    /// would point into the callee's frame and dangle after return.
+    fn check_return_borrow(&mut self, expr: &Expr) {
+        if let ExprKind::Borrow { place, .. } = &expr.kind {
+            if let ExprKind::Ident(name) = &place.kind {
+                if self.lookup(name).is_some() {
+                    self.diagnostics.push(nex_diagnostics::Diagnostic::error(
+                        "NXS055",
+                        format!("cannot return a reference to local `{name}`; it would dangle"),
+                        expr.span,
+                    ));
+                }
             }
         }
     }

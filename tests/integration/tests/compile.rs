@@ -1021,6 +1021,26 @@ fn whole_struct_write_through_mutable_reference() {
 }
 
 #[test]
+fn string_reference_read_and_write() {
+    let (stdout, stderr, code) = run_source(
+        "fn show(r: &string):\n    println(*r)\n\nfn replace(r: &mut string, v: string):\n    *r = v\n\nfn main():\n    var s = \"old\"\n    show(&s)\n    replace(&mut s, \"new\")\n    println(s)\n",
+    );
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "old\nnew\n");
+}
+
+#[test]
+fn returning_reference_to_local_is_rejected() {
+    let result = compile("fn bad() -> &i64:\n    var x = 1\n    return &x\n");
+    assert!(result.has_errors());
+    assert!(
+        result.diagnostics.iter().any(|d| d.code == "NXS055"),
+        "{:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
 fn array_bounds_are_checked() {
     let result = compile("fn main():\n    let a: [i64; 3] = [1, 2, 3]\n    print(a[5])\n");
     assert!(!result.has_errors(), "{:?}", result.diagnostics);
