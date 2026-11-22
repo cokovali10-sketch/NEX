@@ -2505,6 +2505,20 @@ fn lower_expr(
                 return lower_or(builder, left, right, scopes, storage, analysis);
             }
 
+            // `string + string` is concatenation (sugar for `concat`).
+            if *op == nex_ast::BinOp::Add && analysis.expr_type(left.span) == Some(Type::String) {
+                let lhs = lower_expr(builder, left, scopes, storage, analysis, Type::String)?;
+                let rhs = lower_expr(builder, right, scopes, storage, analysis, Type::String)?;
+                let dst = builder.new_value();
+                builder.emit(Inst::Call {
+                    dst: Some(dst),
+                    name: "nex_rt_str_concat".to_string(),
+                    args: vec![lhs, rhs],
+                    ret: IrType::String,
+                });
+                return Ok(Operand::Value(dst));
+            }
+
             let bin_op = BinOp::from_ast(*op)
                 .ok_or_else(|| "logical operators must be lowered separately".to_string())?;
             let ty = analysis.expr_type(left.span).unwrap_or(Type::Error);

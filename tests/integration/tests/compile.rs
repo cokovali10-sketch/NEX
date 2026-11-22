@@ -1081,6 +1081,24 @@ fn use_after_drop_is_reported() {
 }
 
 #[test]
+fn plus_operator_concatenates_strings() {
+    let (stdout, stderr, code) = run_source(
+        "fn main():\n    var name = \"NEX\"\n    var greeting = \"hello, \" + name + \"!\"\n    println(greeting)\n",
+    );
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "hello, NEX!\n");
+}
+
+#[test]
+fn plus_equals_concatenates_strings() {
+    let (stdout, stderr, code) = run_source(
+        "fn main():\n    var s = \"a\"\n    s += \"b\"\n    s += \"c\"\n    println(s)\n",
+    );
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "abc\n");
+}
+
+#[test]
 fn array_bounds_are_checked() {
     let result = compile("fn main():\n    let a: [i64; 3] = [1, 2, 3]\n    print(a[5])\n");
     assert!(!result.has_errors(), "{:?}", result.diagnostics);

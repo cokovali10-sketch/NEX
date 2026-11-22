@@ -2277,6 +2277,9 @@ impl<'a> Checker<'a> {
                         };
                         if ty.is_numeric() {
                             ty
+                        } else if *op == BinOp::Add && ty == Type::String {
+                            // `+` concatenates strings (sugar for `concat`).
+                            Type::String
                         } else {
                             self.error(
                                 "NXS008",

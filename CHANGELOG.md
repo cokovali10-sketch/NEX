@@ -4,6 +4,11 @@
 
 ### Added
 
+- `+` concatenates strings: `"a" + b + "c"` is now sugar for `concat`, and
+  `s += "x"` appends. This replaces the previous requirement to call `concat`
+  explicitly (a real usability gap). Lowered to `nex_rt_str_concat`; verified
+  by running a real program (`"items: " + to_string(len(cart))` etc.).
+
 - `drop(value)` builtin: explicitly frees a growable array `[T]` (its backing
   data and header via `nex_rt_array_free`). `drop(x)` consumes `x` like a move,
   so a later use is a `NXS050` error. Verified crash-free across a 100k-iteration
