@@ -210,6 +210,15 @@ fn offset_statement(statement: &mut Stmt, delta: usize) {
             offset_expr(reference, delta);
             offset_expr(value, delta);
         }
+        StmtKind::AssignIndexDeref {
+            reference,
+            index,
+            value,
+        } => {
+            offset_expr(reference, delta);
+            offset_expr(index, delta);
+            offset_expr(value, delta);
+        }
         StmtKind::If {
             branches,
             else_branch,
@@ -374,6 +383,12 @@ pub enum StmtKind {
     AssignFieldDeref {
         reference: Box<Expr>,
         path: Vec<String>,
+        value: Expr,
+    },
+    /// Element assignment through a reference: `(*r)[i] = value`.
+    AssignIndexDeref {
+        reference: Box<Expr>,
+        index: Expr,
         value: Expr,
     },
     If {

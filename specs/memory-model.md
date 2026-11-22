@@ -76,8 +76,12 @@ planned.
   emitted.
 - Writes work too: `(*r).field = v` GEPs to the field and stores, and
   `*r = other` stores a whole struct value into the referenced location.
+- Growable slices and fixed arrays: `(*r)[i]` reads and `(*r)[i] = v` writes
+  work for `r: &[T]` and `r: &mut [T; N]`. For a growable array the reference
+  points at a slot holding the header pointer, so the element write loads the
+  header then stores through it.
 - Not supported yet: loading an entire aggregate as a scalar value through a
-  reference, and borrowing growable slices (`&[T]`).
+  reference, and returning a reference to a local (`NXS055`).
 
 ## Rules for future implementation
 

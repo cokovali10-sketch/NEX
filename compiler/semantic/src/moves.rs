@@ -159,6 +159,15 @@ impl<'a> MoveChecker<'a> {
                 self.check_expr_reads(reference);
                 self.check_expr_reads(value);
             }
+            StmtKind::AssignIndexDeref {
+                reference,
+                index,
+                value,
+            } => {
+                self.check_expr_reads(reference);
+                self.check_expr_reads(index);
+                self.check_expr_reads(value);
+            }
             StmtKind::If {
                 branches,
                 else_branch,

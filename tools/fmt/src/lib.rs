@@ -535,6 +535,14 @@ impl<'a> Printer<'a> {
                 }
                 self.push_node(format!("{target} = {}", expr_str(value)), Some(stmt.span));
             }
+            StmtKind::AssignIndexDeref {
+                reference,
+                index,
+                value,
+            } => {
+                let target = format!("(*{})[{}]", expr_str(reference), expr_str(index));
+                self.push_node(format!("{target} = {}", expr_str(value)), Some(stmt.span));
+            }
             StmtKind::If {
                 branches,
                 else_branch,

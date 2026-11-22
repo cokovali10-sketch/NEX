@@ -1619,6 +1619,54 @@ impl<'a> Checker<'a> {
                     self.infer(value);
                 }
             }
+            StmtKind::AssignIndexDeref {
+                reference,
+                index,
+                value,
+            } => {
+                let ref_ty = self.infer(reference);
+                let pointee = self.pointee_type(ref_ty);
+                let array_display = match pointee {
+                    Type::Array { display, .. } => Some(display),
+                    Type::DynArray(display) => Some(display),
+                    _ => None,
+                };
+                if !matches!(ref_ty, Type::Ref { .. }) {
+                    self.error(
+                        "NXS051",
+                        "cannot index-assign through a non-reference value".to_string(),
+                        statement.span,
+                    );
+                    self.infer(index);
+                    self.infer(value);
+                    return;
+                }
+                if let Some(display) = array_display {
+                    let info = self.analysis.arrays.get(display).cloned();
+                    if let Some(info) = info {
+                        let index_ty = self.infer(index);
+                        if index_ty != Type::Error && !index_ty.is_integer() {
+                            self.error(
+                                "NXS036",
+                                format!("array index must be an integer, found `{index_ty}`"),
+                                index.span,
+                            );
+                        }
+                        self.check_expected(value, info.elem);
+                    } else {
+                        self.infer(index);
+                        self.infer(value);
+                    }
+                } else {
+                    self.error(
+                        "NXS036",
+                        format!("cannot index-assign through a reference to `{pointee}`"),
+                        statement.span,
+                    );
+                    self.infer(index);
+                    self.infer(value);
+                }
+            }
             StmtKind::AssignDeref { place, value } => {
                 let place_ty = self.infer(place);
                 if let Type::Ref { .. } = place_ty {

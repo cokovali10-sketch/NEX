@@ -2451,6 +2451,15 @@ fn assignment_from_place(place: Expr, value: Expr, span: Span) -> Option<Stmt> {
                     },
                     span,
                 })
+            } else if let ExprKind::Deref(reference) = base.kind {
+                Some(Stmt {
+                    kind: StmtKind::AssignIndexDeref {
+                        reference,
+                        index: *index,
+                        value,
+                    },
+                    span,
+                })
             } else {
                 None
             }

@@ -686,6 +686,80 @@ fn lower_statement(
             });
             Ok(())
         }
+        StmtKind::AssignIndexDeref {
+            reference,
+            index,
+            value,
+        } => {
+            let pointee = match analysis.expr_type(reference.span) {
+                Some(Type::Ref { inner, .. }) => resolve_named_type(analysis, inner),
+                _ => Type::Error,
+            };
+            let elem_ty = analysis.expr_type(value.span).unwrap_or(Type::Error);
+            let base = lower_expr(builder, reference, scopes, storage, analysis, Type::Error)?;
+            let base_id = operand_value_id(builder, base)?;
+            match pointee {
+                Type::DynArray(_) => {
+                    // `reference` points at a slot holding the growable header
+                    // pointer; load it, then assign through the header.
+                    let header = builder.new_value();
+                    builder.emit(Inst::Load {
+                        dst: header,
+                        ptr: base_id,
+                        ty: IrType::String,
+                    });
+                    lower_dyn_assign_index(
+                        builder, header, index, value, elem_ty, scopes, storage, analysis,
+                    )
+                }
+                Type::Array { .. } => {
+                    // `reference` points at the inline array; index it directly.
+                    let idx_value =
+                        lower_expr(builder, index, scopes, storage, analysis, Type::Error)?;
+                    let index_ty = analysis.expr_type(index.span).unwrap_or(Type::I64);
+                    let array_info = analysis
+                        .arrays
+                        .values()
+                        .find(|candidate| {
+                            matches!(pointee, Type::Array { llvm, .. } if llvm == candidate.llvm)
+                        })
+                        .cloned();
+                    if let Some(found) = &array_info {
+                        lower_bounds_check(
+                            builder,
+                            idx_value.clone(),
+                            index_ty,
+                            Operand::Const(Const::Int(found.len as i64)),
+                        );
+                    }
+                    let elem = array_info.map(|found| found.elem).unwrap_or(Type::Error);
+                    let elem_ir = IrType::from_type(elem);
+                    let dst_ptr = builder.new_value();
+                    let array_llvm = match pointee {
+                        Type::Array { llvm, .. } => llvm,
+                        _ => unreachable!(),
+                    };
+                    builder.emit(Inst::IndexPtr {
+                        dst: dst_ptr,
+                        base: base_id,
+                        array_type: array_llvm,
+                        index: idx_value,
+                        elem_ty: elem_ir,
+                    });
+                    let operand =
+                        lower_expr(builder, value, scopes, storage, analysis, Type::Error)?;
+                    builder.emit(Inst::Store {
+                        ptr: dst_ptr,
+                        value: operand,
+                        ty: elem_ir,
+                    });
+                    Ok(())
+                }
+                _ => {
+                    Err("cannot index-assign through a reference to a non-array value".to_string())
+                }
+            }
+        }
         StmtKind::Return(value) => {
             if let Some(value) = value {
                 let operand = lower_expr(builder, value, scopes, storage, analysis, Type::Error)?;
@@ -2142,6 +2216,29 @@ fn ir_elem_size(ty: IrType) -> i64 {
 
 /// Lowers `a[i]` for a growable array: bounds-check against the stored length,
 /// then load from the data buffer.
+/// Resolves an interned type name (from `Type::Ref { inner }`) back to a `Type`.
+fn resolve_named_type(analysis: &Analysis, name: &str) -> Type {
+    if let Some(resolved) = Type::from_name(name) {
+        return resolved;
+    }
+    if let Some(info) = analysis.structs.get(name) {
+        return Type::Struct(info.name_static);
+    }
+    if let Some(info) = analysis.arrays.get(name) {
+        if info.len == 0 {
+            return Type::DynArray(info.display);
+        }
+        return Type::Array {
+            display: info.display,
+            llvm: info.llvm,
+        };
+    }
+    if let Some(info) = analysis.enums.get(name) {
+        return Type::Enum(info.name_static);
+    }
+    Type::Error
+}
+
 fn lower_dyn_index(
     builder: &mut FunctionBuilder,
     base: &Expr,

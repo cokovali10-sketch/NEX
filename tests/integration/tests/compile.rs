@@ -1041,6 +1041,24 @@ fn returning_reference_to_local_is_rejected() {
 }
 
 #[test]
+fn growable_slice_element_read_and_write_through_reference() {
+    let (stdout, stderr, code) = run_source(
+        "fn get(r: &[i64]) -> i64:\n    return (*r)[1]\n\nfn set(r: &mut [i64], v: i64):\n    (*r)[0] = v\n\nfn main():\n    var a: [i64] = []\n    push(a, 10)\n    push(a, 20)\n    push(a, 30)\n    println(get(&a))\n    set(&mut a, 99)\n    println(a[0])\n",
+    );
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "20\n99\n");
+}
+
+#[test]
+fn fixed_array_element_write_through_mutable_reference() {
+    let (stdout, stderr, code) = run_source(
+        "fn set(r: &mut [i64; 3], v: i64):\n    (*r)[1] = v\n\nfn main():\n    var a = [1, 2, 3]\n    set(&mut a, 99)\n    println(a[1])\n",
+    );
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "99\n");
+}
+
+#[test]
 fn array_bounds_are_checked() {
     let result = compile("fn main():\n    let a: [i64; 3] = [1, 2, 3]\n    print(a[5])\n");
     assert!(!result.has_errors(), "{:?}", result.diagnostics);

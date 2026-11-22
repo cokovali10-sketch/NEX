@@ -14,6 +14,11 @@
   returning a reference to a local (`NXS055`: `return &x` would dangle).
 - References to `string` work end-to-end: `&string` reads and `&mut string`
   writes (`*r = v`) through the pointer.
+- Growable-slice and fixed-array element access through references: `(*r)[i]`
+  reads and `(*r)[i] = v` writes for `r: &[T]` and `r: &mut [T; N]`. Added
+  `StmtKind::AssignIndexDeref` so the write stores through the reference (the
+  parser previously dropped `(*r)[i] = v` as a bare expression, a silent
+  miscompile).
 - Reading and writing aggregates through a reference: `(*r).field` and
   `(*r)[i]` for reads, and `(*r).field = v` / `*r = other` for writes, where
   `r: &Struct` / `&mut Struct` or `r: &[T; N]`. A whole-struct write through
