@@ -2426,6 +2426,17 @@ fn assignment_from_place(place: Expr, value: Expr, span: Span) -> Option<Stmt> {
                     },
                     span,
                 })
+            } else if let ExprKind::Deref(reference) = &current.kind {
+                // `(*r).field = value`: assign a field through a reference.
+                path.reverse();
+                Some(Stmt {
+                    kind: StmtKind::AssignFieldDeref {
+                        reference: reference.clone(),
+                        path,
+                        value,
+                    },
+                    span,
+                })
             } else {
                 None
             }

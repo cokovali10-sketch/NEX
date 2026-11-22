@@ -64,8 +64,20 @@ planned.
   borrowed, within one statement. It also rejects `&mut` of an immutable
   (`let`) binding (`NXS054`), so a mutable borrow always targets a `var`.
 - Not yet implemented: lifetimes (a borrow outliving its referent), borrowing
-  aggregates (`&Struct`, `&[T]`), and returning references. Borrows are
-  ephemeral and do not yet prevent a move across statements.
+  growable slices (`&[T]`), loading or assigning a whole aggregate through a
+  reference, and returning references. Borrows are ephemeral and do not yet
+  prevent a move across statements.
+
+## Aggregate field/element access through a reference
+
+- `(*r).field` works for `r: &Struct` / `&mut Struct` and `(*r)[i]` for
+  `r: &[T; N]` (fixed arrays): both lower to a field/element access on the
+  address the reference holds, so no whole-struct or whole-array load is
+  emitted.
+- Writes work too: `(*r).field = v` GEPs to the field and stores, and
+  `*r = other` stores a whole struct value into the referenced location.
+- Not supported yet: loading an entire aggregate as a scalar value through a
+  reference, and borrowing growable slices (`&[T]`).
 
 ## Rules for future implementation
 

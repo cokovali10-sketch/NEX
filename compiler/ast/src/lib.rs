@@ -204,6 +204,12 @@ fn offset_statement(statement: &mut Stmt, delta: usize) {
             offset_expr(place, delta);
             offset_expr(value, delta);
         }
+        StmtKind::AssignFieldDeref {
+            reference, value, ..
+        } => {
+            offset_expr(reference, delta);
+            offset_expr(value, delta);
+        }
         StmtKind::If {
             branches,
             else_branch,
@@ -362,6 +368,12 @@ pub enum StmtKind {
     /// Assignment through a reference: `*r = value`.
     AssignDeref {
         place: Box<Expr>,
+        value: Expr,
+    },
+    /// Field assignment through a reference: `(*r).field = value`.
+    AssignFieldDeref {
+        reference: Box<Expr>,
+        path: Vec<String>,
         value: Expr,
     },
     If {

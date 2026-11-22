@@ -545,6 +545,39 @@ fn lower_statement(
             });
             Ok(())
         }
+        StmtKind::AssignFieldDeref {
+            reference,
+            path: _,
+            value,
+        } => {
+            let Some(steps) = analysis.field_write(statement.span) else {
+                return Err(
+                    "missing field information for assignment through a reference".to_string(),
+                );
+            };
+            let base = lower_expr(builder, reference, scopes, storage, analysis, Type::Error)?;
+            let mut ptr = operand_value_id(builder, base)?;
+            let mut last_ty = IrType::Void;
+            for (struct_name, index, ty) in &steps {
+                last_ty = IrType::from_type(*ty);
+                let next = builder.new_value();
+                builder.emit(Inst::FieldPtr {
+                    dst: next,
+                    base: ptr,
+                    struct_name,
+                    index: *index,
+                    field_ty: last_ty,
+                });
+                ptr = next;
+            }
+            let operand = lower_expr(builder, value, scopes, storage, analysis, Type::Error)?;
+            builder.emit(Inst::Store {
+                ptr,
+                value: operand,
+                ty: last_ty,
+            });
+            Ok(())
+        }
         StmtKind::If {
             branches,
             else_branch,
@@ -948,6 +981,11 @@ fn lower_struct_place(
             } else {
                 Err(format!("variable `{name}` does not have a struct type"))
             }
+        }
+        ExprKind::Deref(inner) => {
+            // `(*r)` as a place: the address the reference `r` holds.
+            let op = lower_expr(builder, inner, scopes, storage, analysis, Type::Error)?;
+            operand_value_id(builder, op)
         }
         ExprKind::Call { callee, args, .. } if callee == "pop" => {
             let ty = analysis
@@ -1835,6 +1873,11 @@ fn lower_array_place(
             let slot = lookup_slot(scopes, name)
                 .ok_or_else(|| format!("unknown variable `{name}` during code generation"))?;
             Ok(slot.ptr)
+        }
+        ExprKind::Deref(inner) => {
+            // `(*r)` as a place: the base address the reference `r` holds.
+            let op = lower_expr(builder, inner, scopes, storage, analysis, Type::Error)?;
+            operand_value_id(builder, op)
         }
         ExprKind::Call { callee, .. } => {
             let resolved = analysis
@@ -5133,6 +5176,12 @@ fn lower_expr(
             let ptr = lower_expr(builder, inner, scopes, storage, analysis, Type::Error)?;
             let ptr_id = operand_value_id(builder, ptr)?;
             let pointee_ty = analysis.expr_type(expr.span).unwrap_or(Type::Error);
+            if matches!(pointee_ty, Type::Struct(_) | Type::Array { .. }) {
+                return Err(
+                    "cannot load an aggregate value through a reference; access a field or element instead"
+                        .to_string(),
+                );
+            }
             let ir_ty = IrType::from_type(pointee_ty);
             let dst = builder.new_value();
             builder.emit(Inst::Load {

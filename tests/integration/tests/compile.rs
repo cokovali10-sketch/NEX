@@ -985,6 +985,42 @@ fn mutable_borrow_of_immutable_binding_is_reported() {
 }
 
 #[test]
+fn struct_field_read_through_shared_reference() {
+    let (stdout, stderr, code) = run_source(
+        "struct Point:\n    x: i64\n    y: i64\n\nfn show(r: &Point):\n    println((*r).x)\n    println((*r).y)\n\nfn main():\n    var p = Point(3, 4)\n    show(&p)\n",
+    );
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "3\n4\n");
+}
+
+#[test]
+fn fixed_array_element_read_through_shared_reference() {
+    let (stdout, stderr, code) = run_source(
+        "fn first(r: &[i64; 3]) -> i64:\n    return (*r)[0]\n\nfn main():\n    var a = [10, 20, 30]\n    println(first(&a))\n",
+    );
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "10\n");
+}
+
+#[test]
+fn struct_field_write_through_mutable_reference() {
+    let (stdout, stderr, code) = run_source(
+        "struct P:\n    x: i64\n\nfn setx(r: &mut P, v: i64):\n    (*r).x = v\n\nfn main():\n    var a = P(1)\n    setx(&mut a, 9)\n    println(a.x)\n",
+    );
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "9\n");
+}
+
+#[test]
+fn whole_struct_write_through_mutable_reference() {
+    let (stdout, stderr, code) = run_source(
+        "struct P:\n    x: i64\n\nfn setp(r: &mut P, o: P):\n    *r = o\n\nfn main():\n    var a = P(1)\n    var b = P(2)\n    setp(&mut a, b)\n    println(a.x)\n",
+    );
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "2\n");
+}
+
+#[test]
 fn array_bounds_are_checked() {
     let result = compile("fn main():\n    let a: [i64; 3] = [1, 2, 3]\n    print(a[5])\n");
     assert!(!result.has_errors(), "{:?}", result.diagnostics);

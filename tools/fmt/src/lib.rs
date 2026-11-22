@@ -523,6 +523,18 @@ impl<'a> Printer<'a> {
                 let target = format!("*{}", expr_str(place));
                 self.push_node(format!("{target} = {}", expr_str(value)), Some(stmt.span));
             }
+            StmtKind::AssignFieldDeref {
+                reference,
+                path,
+                value,
+            } => {
+                let mut target = format!("(*{})", expr_str(reference));
+                for field in path {
+                    target.push('.');
+                    target.push_str(field);
+                }
+                self.push_node(format!("{target} = {}", expr_str(value)), Some(stmt.span));
+            }
             StmtKind::If {
                 branches,
                 else_branch,

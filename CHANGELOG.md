@@ -11,7 +11,12 @@
   borrow checker rejects aliasing conflicts (`NXS053`: two `&mut` of the same
   place, or `&` while mutably borrowed, in one statement), `&mut` of an
   immutable `let` binding (`NXS054`), and use of a moved value while borrowed.
-  Aggregates behind references and lifetimes are next.
+- Reading and writing aggregates through a reference: `(*r).field` and
+  `(*r)[i]` for reads, and `(*r).field = v` / `*r = other` for writes, where
+  `r: &Struct` / `&mut Struct` or `r: &[T; N]`. A whole-struct write through
+  `*r = other` copies the aggregate; a field write GEPs to the field. Loading a
+  whole aggregate as a scalar value, and borrowing growable slices `&[T]`, are
+  not supported yet.
 - Control-flow-aware move analysis: a binding is treated as moved after an
   `if` only when it is moved on every branch (including `else`), and moves
   inside a loop body or a single branch never leak out. This catches definite

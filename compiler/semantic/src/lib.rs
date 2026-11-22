@@ -1452,6 +1452,66 @@ impl<'a> Checker<'a> {
                 self.analysis.field_writes.insert(statement.span, steps);
                 self.check_expected(value, current_ty);
             }
+            StmtKind::AssignFieldDeref {
+                reference,
+                path,
+                value,
+            } => {
+                let ref_ty = self.infer(reference);
+                let mut current_ty = self.pointee_type(ref_ty);
+                if !matches!(ref_ty, Type::Ref { .. }) {
+                    self.error(
+                        "NXS051",
+                        "cannot assign a field through a non-reference value".to_string(),
+                        statement.span,
+                    );
+                    self.infer(value);
+                    return;
+                }
+                let mut failed = false;
+                let mut steps = Vec::with_capacity(path.len());
+                for field in path {
+                    if let Type::Struct(struct_name) = current_ty {
+                        let info = self.analysis.structs.get(struct_name).cloned();
+                        if let Some(info) = info {
+                            if let Some(index) =
+                                info.fields.iter().position(|(name, _)| name == field)
+                            {
+                                let field_ty = info.fields[index].1;
+                                steps.push((info.name_static, index as u32, field_ty));
+                                current_ty = field_ty;
+                            } else {
+                                self.error(
+                                    "NXS027",
+                                    format!("struct `{struct_name}` has no field `{field}`"),
+                                    statement.span,
+                                );
+                                failed = true;
+                                break;
+                            }
+                        } else {
+                            failed = true;
+                            break;
+                        }
+                    } else {
+                        self.error(
+                            "NXS027",
+                            format!(
+                                "cannot assign field `{field}` on a value of type `{current_ty}`"
+                            ),
+                            statement.span,
+                        );
+                        failed = true;
+                        break;
+                    }
+                }
+                if failed {
+                    self.infer(value);
+                    return;
+                }
+                self.analysis.field_writes.insert(statement.span, steps);
+                self.check_expected(value, current_ty);
+            }
             StmtKind::If {
                 branches,
                 else_branch,
