@@ -9,8 +9,9 @@
   `*r` (including `*r = value` assignment). References lower to a plain pointer
   (out-parameters read and write through the pointer). A statement-scoped
   borrow checker rejects aliasing conflicts (`NXS053`: two `&mut` of the same
-  place, or `&` while mutably borrowed, in one statement) and use of a moved
-  value while borrowed. Aggregates behind references and lifetimes are next.
+  place, or `&` while mutably borrowed, in one statement), `&mut` of an
+  immutable `let` binding (`NXS054`), and use of a moved value while borrowed.
+  Aggregates behind references and lifetimes are next.
 - Control-flow-aware move analysis: a binding is treated as moved after an
   `if` only when it is moved on every branch (including `else`), and moves
   inside a loop body or a single branch never leak out. This catches definite

@@ -972,16 +972,13 @@ fn emits_object_file() {
 }
 
 #[test]
-fn private_module_item_is_reported() {
+fn mutable_borrow_of_immutable_binding_is_reported() {
     let result = compile(
-        "module math:\n    fn secret() -> i64:\n        return 1\n\nfn main():\n    print(math.secret())\n",
+        "fn bump(r: &mut i64):\n    *r = *r + 1\n\nfn main():\n    let x = 5\n    bump(&mut x)\n",
     );
     assert!(result.has_errors());
     assert!(
-        result
-            .diagnostics
-            .iter()
-            .any(|diagnostic| diagnostic.code == "NXS038"),
+        result.diagnostics.iter().any(|d| d.code == "NXS054"),
         "{:?}",
         result.diagnostics
     );

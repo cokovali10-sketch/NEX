@@ -21,6 +21,7 @@ error[NXS006]: type mismatch: expected `i64`, found `string`
 - `NXS050`: use of a moved value (ownership stage 1).
 - `NXS051` / `NXS052`: invalid dereference / borrow target (references).
 - `NXS053`: conflicting borrows in one statement (borrow checker).
+- `NXS054`: `&mut` of an immutable (`let`) binding (borrow checker).
 - `NXC001`-`NXC002`: compiler and code generation.
 
 ## Rules

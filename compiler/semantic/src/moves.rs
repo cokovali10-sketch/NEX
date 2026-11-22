@@ -24,6 +24,7 @@ use crate::{Analysis, Type};
 #[derive(Debug, Clone, Copy)]
 struct VarState {
     ty: Type,
+    mutable: bool,
     moved: bool,
 }
 
@@ -79,6 +80,7 @@ impl<'a> MoveChecker<'a> {
                 param.name.clone(),
                 VarState {
                     ty: *ty,
+                    mutable: false,
                     moved: false,
                 },
             );
@@ -99,7 +101,11 @@ impl<'a> MoveChecker<'a> {
         self.active_borrows.clear();
         match &statement.kind {
             StmtKind::Let {
-                name, names, init, ..
+                name,
+                names,
+                mutable,
+                init,
+                ..
             } => {
                 self.check_expr_reads(init);
                 self.move_if_ident(init);
@@ -109,10 +115,10 @@ impl<'a> MoveChecker<'a> {
                     // Tuple destructuring: the individual element types are not
                     // tracked in this stage, so treat the bindings as Copy.
                     for binding in names {
-                        self.bind_local(binding, Type::Error);
+                        self.bind_local(binding, Type::Error, *mutable);
                     }
                 } else {
-                    self.bind_local(name, declared.unwrap_or(Type::Error));
+                    self.bind_local(name, declared.unwrap_or(Type::Error), *mutable);
                 }
             }
             StmtKind::Assign { name, value } => {
@@ -204,6 +210,7 @@ impl<'a> MoveChecker<'a> {
                     var.clone(),
                     VarState {
                         ty: Type::Error,
+                        mutable: false,
                         moved: false,
                     },
                 );
@@ -263,9 +270,16 @@ impl<'a> MoveChecker<'a> {
         self.mark_moved(name);
     }
 
-    fn bind_local(&mut self, name: &str, ty: Type) {
+    fn bind_local(&mut self, name: &str, ty: Type, mutable: bool) {
         if let Some(scope) = self.scopes.last_mut() {
-            scope.insert(name.to_string(), VarState { ty, moved: false });
+            scope.insert(
+                name.to_string(),
+                VarState {
+                    ty,
+                    mutable,
+                    moved: false,
+                },
+            );
         }
     }
 
@@ -356,6 +370,19 @@ impl<'a> MoveChecker<'a> {
             ExprKind::Try(inner) => self.check_expr_reads(inner),
             ExprKind::Borrow { mutable, place } => {
                 if let ExprKind::Ident(name) = &place.kind {
+                    if *mutable {
+                        if let Some(state) = self.lookup(name) {
+                            if !state.mutable {
+                                self.diagnostics.push(nex_diagnostics::Diagnostic::error(
+                                    "NXS054",
+                                    format!(
+                                        "cannot mutably borrow `{name}`: declare it with `var` first"
+                                    ),
+                                    place.span,
+                                ));
+                            }
+                        }
+                    }
                     if let Some(existing_mut) = self.active_borrows.get(name).copied() {
                         let conflict = *mutable || existing_mut;
                         if conflict {

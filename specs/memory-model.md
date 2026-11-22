@@ -61,7 +61,8 @@ planned.
   reads and writes the caller's value through that pointer.
 - A statement-scoped borrow checker rejects aliasing conflicts (`NXS053`):
   two `&mut` of the same place, or a shared `&` while a place is mutably
-  borrowed, within one statement.
+  borrowed, within one statement. It also rejects `&mut` of an immutable
+  (`let`) binding (`NXS054`), so a mutable borrow always targets a `var`.
 - Not yet implemented: lifetimes (a borrow outliving its referent), borrowing
   aggregates (`&Struct`, `&[T]`), and returning references. Borrows are
   ephemeral and do not yet prevent a move across statements.
