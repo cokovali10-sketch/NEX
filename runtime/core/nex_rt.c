@@ -3403,3 +3403,13 @@ void *nex_rt_array_clone(void *header, long long elem_size) {
     }
     return nex_rt_array_slice(header, len, elem_size, 0, len);
 }
+
+/* Frees a growable array: its backing data and the header. Safe on NULL. */
+void nex_rt_array_free(void *header) {
+    if (header == NULL) {
+        return;
+    }
+    void **data = (void **)header;
+    free(data[0]);
+    free(header);
+}

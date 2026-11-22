@@ -4,6 +4,13 @@
 
 ### Added
 
+- `drop(value)` builtin: explicitly frees a growable array `[T]` (its backing
+  data and header via `nex_rt_array_free`). `drop(x)` consumes `x` like a move,
+  so a later use is a `NXS050` error. Verified crash-free across a 100k-iteration
+  allocate/drop loop. This is the safe, explicit first step toward RAII;
+  automatic scope-exit drops (and freeing `string`s) wait on distinguishing
+  static literals from heap buffers and on parameter ownership.
+
 - References: `&T` (shared) and `&mut T` (mutable) as parameter/return types
   and as borrow expressions `&place` / `&mut place`, with explicit dereference
   `*r` (including `*r = value` assignment). References lower to a plain pointer

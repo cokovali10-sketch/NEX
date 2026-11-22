@@ -1059,6 +1059,28 @@ fn fixed_array_element_write_through_mutable_reference() {
 }
 
 #[test]
+fn drop_frees_growable_array_in_a_loop() {
+    let (stdout, stderr, code) = run_source(
+        "fn main():\n    var i = 0\n    while i < 100000:\n        var a: [i64] = []\n        push(a, i)\n        drop(a)\n        i = i + 1\n    println(\"done\")\n",
+    );
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "done\n");
+}
+
+#[test]
+fn use_after_drop_is_reported() {
+    let result = compile(
+        "fn main():\n    var a: [i64] = []\n    push(a, 1)\n    drop(a)\n    println(len(a))\n",
+    );
+    assert!(result.has_errors());
+    assert!(
+        result.diagnostics.iter().any(|d| d.code == "NXS050"),
+        "{:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
 fn array_bounds_are_checked() {
     let result = compile("fn main():\n    let a: [i64; 3] = [1, 2, 3]\n    print(a[5])\n");
     assert!(!result.has_errors(), "{:?}", result.diagnostics);

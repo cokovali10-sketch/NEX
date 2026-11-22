@@ -2897,6 +2897,29 @@ impl<'a> Checker<'a> {
             return ty;
         }
 
+        if callee == "drop" {
+            if args.len() != 1 {
+                self.error(
+                    "NXS004",
+                    format!("`drop` expects 1 argument, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
+                return Type::Void;
+            }
+            let ty = self.infer(&args[0]);
+            if !matches!(ty, Type::DynArray(_)) {
+                self.error(
+                    "NXS004",
+                    format!("`drop` expects a growable array, found `{ty}`"),
+                    args[0].span,
+                );
+            }
+            return Type::Void;
+        }
+
         if callee == "abs" {
             if args.len() != 1 {
                 self.error(

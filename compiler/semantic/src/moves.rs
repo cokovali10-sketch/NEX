@@ -385,9 +385,17 @@ impl<'a> MoveChecker<'a> {
                 self.check_expr_reads(left);
                 self.check_expr_reads(right);
             }
-            ExprKind::Call { args, .. } => {
-                for arg in args {
-                    self.check_expr_reads(arg);
+            ExprKind::Call { callee, args, .. } => {
+                if callee == "drop" {
+                    // `drop(x)` consumes `x`: flag a prior move, then mark it moved.
+                    for arg in args {
+                        self.check_expr_reads(arg);
+                        self.move_if_ident(arg);
+                    }
+                } else {
+                    for arg in args {
+                        self.check_expr_reads(arg);
+                    }
                 }
             }
             ExprKind::Cast { expr, .. } => self.check_expr_reads(expr),

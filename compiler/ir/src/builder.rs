@@ -4374,6 +4374,19 @@ fn lower_expr(
                 return Ok(Operand::Const(Const::Bool(false)));
             }
 
+            if callee == "drop" {
+                let arg_value =
+                    lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
+                let header = operand_value_id(builder, arg_value)?;
+                builder.emit(Inst::Call {
+                    dst: None,
+                    name: "nex_rt_array_free".to_string(),
+                    args: vec![Operand::Value(header)],
+                    ret: IrType::Void,
+                });
+                return Ok(Operand::Const(Const::Bool(false)));
+            }
+
             if callee == "arena_new" {
                 let arg_value =
                     lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
