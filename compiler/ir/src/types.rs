@@ -43,6 +43,9 @@ impl IrType {
             Type::Array { llvm, .. } => Self::Array(llvm),
             // Growable arrays are handled through a header pointer: the value is a\n            // plain pointer to `{ ptr, i64, i64 }`, so variables store one word.
             Type::DynArray(_) => Self::String,
+            // References are plain pointers; the pointee type is irrelevant at
+            // the IR value level (a reference is one pointer word).
+            Type::Ref { .. } => Self::String,
             Type::Enum(_) => Self::I32,
             Type::TypeParam(_) => Self::Void, // should never reach IR
             Type::Void => Self::Void,

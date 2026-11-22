@@ -200,6 +200,10 @@ fn offset_statement(statement: &mut Stmt, delta: usize) {
             offset_expr(index, delta);
             offset_expr(value, delta);
         }
+        StmtKind::AssignDeref { place, value } => {
+            offset_expr(place, delta);
+            offset_expr(value, delta);
+        }
         StmtKind::If {
             branches,
             else_branch,
@@ -291,6 +295,8 @@ fn offset_expr(expr: &mut Expr, delta: usize) {
             *name_span = offset_span(*name_span, delta);
         }
         ExprKind::Try(inner) => offset_expr(inner, delta),
+        ExprKind::Borrow { place, .. } => offset_expr(place, delta),
+        ExprKind::Deref(inner) => offset_expr(inner, delta),
     }
 }
 
@@ -351,6 +357,11 @@ pub enum StmtKind {
     AssignIndex {
         base: String,
         index: Expr,
+        value: Expr,
+    },
+    /// Assignment through a reference: `*r = value`.
+    AssignDeref {
+        place: Box<Expr>,
         value: Expr,
     },
     If {
@@ -451,6 +462,13 @@ pub enum ExprKind {
     },
     /// Error propagation: `expr?`.
     Try(Box<Expr>),
+    /// Shared (`&place`) or mutable (`&mut place`) borrow of a place expression.
+    Borrow {
+        mutable: bool,
+        place: Box<Expr>,
+    },
+    /// Dereference of a reference: `*r`.
+    Deref(Box<Expr>),
     /// Parser recovery node. It must be rejected by semantic analysis.
     Error,
 }

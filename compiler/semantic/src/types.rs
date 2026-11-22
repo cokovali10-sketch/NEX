@@ -36,6 +36,13 @@ pub enum Type {
     /// to find the element type in `Analysis::arrays`. See
     /// `specs/dynamic-arrays.md`.
     DynArray(&'static str),
+    /// Shared (`&T`) or mutable (`&mut T`) reference to a value of the interned
+    /// pointee type name. References are represented as a plain pointer at the
+    /// IR level; the pointee is resolved on demand from its name.
+    Ref {
+        inner: &'static str,
+        mutable: bool,
+    },
     /// Generic type parameter. Used only during semantic analysis of generic
     /// declarations; concrete instantiations replace it with a real type.
     TypeParam(&'static str),
@@ -83,6 +90,13 @@ impl Type {
             Self::Enum(name) => name,
             Self::Array { display, .. } => display,
             Self::DynArray(display) => display,
+            Self::Ref { mutable, .. } => {
+                if *mutable {
+                    "&mut T"
+                } else {
+                    "&T"
+                }
+            }
             Self::TypeParam(name) => name,
             Self::Void => "void",
             Self::Error => "<error>",

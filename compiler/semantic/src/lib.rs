@@ -1559,6 +1559,22 @@ impl<'a> Checker<'a> {
                     self.infer(value);
                 }
             }
+            StmtKind::AssignDeref { place, value } => {
+                let place_ty = self.infer(place);
+                if let Type::Ref { .. } = place_ty {
+                    let value_ty = self.infer(value);
+                    if value_ty != Type::Error {
+                        self.check_expected(value, self.pointee_type(place_ty));
+                    }
+                } else {
+                    self.error(
+                        "NXS051",
+                        "cannot dereference-assign to a non-reference value".to_string(),
+                        statement.span,
+                    );
+                    self.infer(value);
+                }
+            }
             StmtKind::Match { scrutinee, arms } => {
                 let scrut_ty = self.infer(scrutinee);
                 let is_enum = matches!(scrut_ty, Type::Enum(_));
@@ -1960,6 +1976,46 @@ impl<'a> Checker<'a> {
         actual
     }
 
+    /// Resolves the pointee type of a `Type::Ref` from its interned inner name.
+    fn pointee_type(&self, ty: Type) -> Type {
+        let Type::Ref { inner, .. } = ty else {
+            return Type::Error;
+        };
+        if let Some(resolved) = Type::from_name(inner) {
+            return resolved;
+        }
+        if let Some(info) = self.analysis.structs.get(inner) {
+            return Type::Struct(info.name_static);
+        }
+        if let Some(info) = self.analysis.arrays.get(inner) {
+            if info.len == 0 {
+                return Type::DynArray(info.display);
+            }
+            return Type::Array {
+                display: info.display,
+                llvm: info.llvm,
+            };
+        }
+        if self.analysis.enums.contains_key(inner) {
+            if let Some(info) = self.analysis.enums.get(inner) {
+                return Type::Enum(info.name_static);
+            }
+        }
+        Type::Error
+    }
+
+    /// True when an expression denotes a place (something you can take an
+    /// address of): a name, field, index, or dereference.
+    fn is_place(&self, expr: &Expr) -> bool {
+        matches!(
+            expr.kind,
+            ExprKind::Ident(_)
+                | ExprKind::Field { .. }
+                | ExprKind::Index { .. }
+                | ExprKind::Deref(_)
+        )
+    }
+
     fn infer(&mut self, expr: &Expr) -> Type {
         let ty = match &expr.kind {
             ExprKind::Int(_) => Type::I64,
@@ -1968,6 +2024,42 @@ impl<'a> Checker<'a> {
             ExprKind::Char(_) => Type::Char,
             ExprKind::Bool(_) => Type::Bool,
             ExprKind::Try(inner) => self.infer_try(inner, expr.span),
+            ExprKind::Borrow { mutable, place } => {
+                let inner_ty = self.infer(place);
+                if inner_ty == Type::Error || inner_ty == Type::Void {
+                    return Type::Error;
+                }
+                if !self.is_place(place) {
+                    self.error(
+                        "NXS052",
+                        "cannot borrow a non-place expression".to_string(),
+                        expr.span,
+                    );
+                    return Type::Error;
+                }
+                Type::Ref {
+                    inner: inner_ty.name(),
+                    mutable: *mutable,
+                }
+            }
+            ExprKind::Deref(inner) => {
+                let ref_ty = self.infer(inner);
+                match ref_ty {
+                    Type::Ref { inner: name, .. } => self.pointee_type(Type::Ref {
+                        inner: name,
+                        mutable: false,
+                    }),
+                    Type::Error => Type::Error,
+                    _ => {
+                        self.error(
+                            "NXS051",
+                            format!("cannot dereference a value of type `{ref_ty}`"),
+                            expr.span,
+                        );
+                        Type::Error
+                    }
+                }
+            }
             ExprKind::Ident(name) => {
                 if let Some(qualified) = self.analysis.aliases.get(name).cloned() {
                     // Resolve the alias by walking the qualified path.
@@ -5382,6 +5474,24 @@ impl<'a> Checker<'a> {
     }
 
     fn resolve_type(&mut self, ty: &nex_ast::TypeExpr) -> Type {
+        if ty.name == "&" || ty.name == "&mut" {
+            if ty.generic_args.len() != 1 {
+                self.error(
+                    "NXS052",
+                    "a reference type takes exactly one type argument".to_string(),
+                    ty.span,
+                );
+                return Type::Error;
+            }
+            let inner = self.resolve_type(&ty.generic_args[0]);
+            if inner == Type::Error {
+                return Type::Error;
+            }
+            return Type::Ref {
+                inner: inner.name(),
+                mutable: ty.name == "&mut",
+            };
+        }
         if let Some(elems) = &ty.tuple {
             if elems.is_empty() {
                 self.error(

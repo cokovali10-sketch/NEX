@@ -519,6 +519,10 @@ impl<'a> Printer<'a> {
                 }
                 self.push_node(format!("{target} = {}", expr_str(value)), Some(stmt.span));
             }
+            StmtKind::AssignDeref { place, value } => {
+                let target = format!("*{}", expr_str(place));
+                self.push_node(format!("{target} = {}", expr_str(value)), Some(stmt.span));
+            }
             StmtKind::If {
                 branches,
                 else_branch,
@@ -663,6 +667,14 @@ fn type_str(ty: &TypeExpr) -> String {
     if let Some(tuple) = &ty.tuple {
         let parts: Vec<String> = tuple.iter().map(type_str).collect();
         return format!("({})", parts.join(", "));
+    }
+    if ty.name == "&" || ty.name == "&mut" {
+        if let Some(inner) = ty.generic_args.first() {
+            if ty.name == "&mut" {
+                return format!("&mut {}", type_str(inner));
+            }
+            return format!("&{}", type_str(inner));
+        }
     }
     ty.name.clone()
 }
@@ -810,6 +822,17 @@ fn write_expr_inner(expr: &Expr, own: u8, out: &mut String) {
         ExprKind::Try(inner) => {
             write_expr(inner, own, out);
             out.push('?');
+        }
+        ExprKind::Borrow { mutable, place } => {
+            out.push('&');
+            if *mutable {
+                out.push_str("mut ");
+            }
+            write_expr(place, own, out);
+        }
+        ExprKind::Deref(inner) => {
+            out.push('*');
+            write_expr(inner, own, out);
         }
         ExprKind::Error => out.push_str("/* invalid expression */"),
     }

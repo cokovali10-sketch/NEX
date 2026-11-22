@@ -640,6 +640,19 @@ fn lower_statement(
             });
             Ok(())
         }
+        StmtKind::AssignDeref { place, value } => {
+            let ptr = lower_expr(builder, place, scopes, storage, analysis, Type::Error)?;
+            let ptr_id = operand_value_id(builder, ptr)?;
+            let value_ty = analysis.expr_type(value.span).unwrap_or(Type::Error);
+            let ir_ty = IrType::from_type(value_ty);
+            let operand = lower_expr(builder, value, scopes, storage, analysis, value_ty)?;
+            builder.emit(Inst::Store {
+                ptr: ptr_id,
+                value: operand,
+                ty: ir_ty,
+            });
+            Ok(())
+        }
         StmtKind::Return(value) => {
             if let Some(value) = value {
                 let operand = lower_expr(builder, value, scopes, storage, analysis, Type::Error)?;
@@ -5112,7 +5125,52 @@ fn lower_expr(
             Ok(Operand::Value(dst))
         }
         ExprKind::Try(inner) => lower_try(builder, inner, scopes, storage, analysis),
+        ExprKind::Borrow { place, .. } => {
+            let ptr = lower_borrow(builder, place, scopes, storage, analysis)?;
+            Ok(Operand::Value(ptr))
+        }
+        ExprKind::Deref(inner) => {
+            let ptr = lower_expr(builder, inner, scopes, storage, analysis, Type::Error)?;
+            let ptr_id = operand_value_id(builder, ptr)?;
+            let pointee_ty = analysis.expr_type(expr.span).unwrap_or(Type::Error);
+            let ir_ty = IrType::from_type(pointee_ty);
+            let dst = builder.new_value();
+            builder.emit(Inst::Load {
+                dst,
+                ptr: ptr_id,
+                ty: ir_ty,
+            });
+            Ok(Operand::Value(dst))
+        }
         ExprKind::Error => Err("invalid expression reached code generation".to_string()),
+    }
+}
+
+/// Lowers a borrow expression `&place` to the address of `place`.
+fn lower_borrow(
+    builder: &mut FunctionBuilder,
+    place: &Expr,
+    scopes: &mut Vec<HashMap<String, Slot>>,
+    storage: &HashMap<nex_diagnostics::Span, (ValueId, IrType)>,
+    analysis: &Analysis,
+) -> Result<ValueId, String> {
+    match &place.kind {
+        ExprKind::Ident(name) => {
+            if let Some(slot) = lookup_slot(scopes, name) {
+                Ok(slot.ptr)
+            } else if let Some(global) = analysis.globals.get(name) {
+                let op = lower_global_get(builder, global.slot, global.ty)?;
+                operand_value_id(builder, op)
+            } else {
+                Err(format!("cannot borrow unknown variable `{name}`"))
+            }
+        }
+        // `&*r` is just `r` (the reference it already holds).
+        ExprKind::Deref(inner) => {
+            let op = lower_expr(builder, inner, scopes, storage, analysis, Type::Error)?;
+            operand_value_id(builder, op)
+        }
+        _ => Err("cannot take the address of this expression".to_string()),
     }
 }
 

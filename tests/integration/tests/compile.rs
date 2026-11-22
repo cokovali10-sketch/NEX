@@ -2553,3 +2553,34 @@ fn move_in_loop_body_is_not_a_false_positive() {
     );
     assert!(!result.has_errors(), "{:?}", result.diagnostics);
 }
+
+#[test]
+fn mutable_reference_out_parameter() {
+    let (stdout, stderr, code) = run_source(
+        "fn bump(r: &mut i64):\n    *r = *r + 1\n\nfn main():\n    var x = 5\n    bump(&mut x)\n    println(x)\n",
+    );
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "6\n");
+}
+
+#[test]
+fn shared_reference_reads_value() {
+    let (stdout, stderr, code) = run_source(
+        "fn show(r: &i64):\n    println(*r)\n\nfn main():\n    var x = 42\n    show(&x)\n",
+    );
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "42\n");
+}
+
+#[test]
+fn two_mutable_borrows_in_one_statement_conflict() {
+    let result = compile(
+        "fn sink(a: &mut i64, b: &mut i64):\n    *a = *b\n\nfn main():\n    var x = 1\n    sink(&mut x, &mut x)\n",
+    );
+    assert!(result.has_errors());
+    assert!(
+        result.diagnostics.iter().any(|d| d.code == "NXS053"),
+        "{:?}",
+        result.diagnostics
+    );
+}

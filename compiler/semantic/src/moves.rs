@@ -35,6 +35,7 @@ pub(crate) fn check_moves(
         analysis,
         diagnostics: Vec::new(),
         scopes: Vec::new(),
+        active_borrows: HashMap::new(),
     };
 
     for function in &program.functions {
@@ -64,6 +65,9 @@ struct MoveChecker<'a> {
     diagnostics: Vec<nex_diagnostics::Diagnostic>,
     /// Lexical scopes, innermost last. Each maps a local name to its state.
     scopes: Vec<HashMap<String, VarState>>,
+    /// Borrows created while checking the current statement: name -> is_mut.
+    /// Ephemeral: cleared at the start of every statement.
+    active_borrows: HashMap<String, bool>,
 }
 
 impl<'a> MoveChecker<'a> {
@@ -92,6 +96,7 @@ impl<'a> MoveChecker<'a> {
     }
 
     fn check_statement(&mut self, statement: &Stmt) {
+        self.active_borrows.clear();
         match &statement.kind {
             StmtKind::Let {
                 name, names, init, ..
@@ -136,6 +141,10 @@ impl<'a> MoveChecker<'a> {
             } => {
                 self.check_name_read(base, statement.span);
                 self.check_expr_reads(index);
+                self.check_expr_reads(value);
+            }
+            StmtKind::AssignDeref { place, value } => {
+                self.check_expr_reads(place);
                 self.check_expr_reads(value);
             }
             StmtKind::If {
@@ -345,6 +354,31 @@ impl<'a> MoveChecker<'a> {
             }
             ExprKind::Field { base, .. } => self.check_expr_reads(base),
             ExprKind::Try(inner) => self.check_expr_reads(inner),
+            ExprKind::Borrow { mutable, place } => {
+                if let ExprKind::Ident(name) = &place.kind {
+                    if let Some(existing_mut) = self.active_borrows.get(name).copied() {
+                        let conflict = *mutable || existing_mut;
+                        if conflict {
+                            let message = if *mutable {
+                                format!(
+                                    "cannot mutably borrow `{name}`: it is already borrowed in this statement"
+                                )
+                            } else {
+                                format!(
+                                    "cannot borrow `{name}`: it is already mutably borrowed in this statement"
+                                )
+                            };
+                            self.diagnostics.push(nex_diagnostics::Diagnostic::error(
+                                "NXS053", message, place.span,
+                            ));
+                        }
+                    } else {
+                        self.active_borrows.insert(name.clone(), *mutable);
+                    }
+                }
+                self.check_expr_reads(place);
+            }
+            ExprKind::Deref(inner) => self.check_expr_reads(inner),
         }
     }
 }

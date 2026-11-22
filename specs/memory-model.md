@@ -53,6 +53,19 @@ planned.
   profile. Arena bump allocators already exist as builtins.
 - A safe slice type with explicit lifetime relationships.
 
+## References (stage 2, partial)
+
+- `&T` and `&mut T` reference types, the borrow expressions `&place` /
+  `&mut place`, and explicit dereference `*r` (reads and `*r = v` writes).
+  References compile to a single pointer; an out-parameter `fn f(r: &mut i64)`
+  reads and writes the caller's value through that pointer.
+- A statement-scoped borrow checker rejects aliasing conflicts (`NXS053`):
+  two `&mut` of the same place, or a shared `&` while a place is mutably
+  borrowed, within one statement.
+- Not yet implemented: lifetimes (a borrow outliving its referent), borrowing
+  aggregates (`&Struct`, `&[T]`), and returning references. Borrows are
+  ephemeral and do not yet prevent a move across statements.
+
 ## Rules for future implementation
 
 - Safe code must not allow use-after-free or out-of-bounds access.

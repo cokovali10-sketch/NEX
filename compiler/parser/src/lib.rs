@@ -1096,6 +1096,22 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_type(&mut self) -> TypeExpr {
+        if self.check(&TokenKind::Amp) {
+            let start = self.advance().span;
+            let mutable = matches!(self.peek(), TokenKind::Ident(name) if name == "mut");
+            if mutable {
+                self.advance();
+            }
+            let inner = self.parse_type();
+            let span = start.merge(inner.span);
+            return TypeExpr {
+                name: if mutable { "&mut" } else { "&" }.to_string(),
+                array: None,
+                tuple: None,
+                generic_args: vec![inner],
+                span,
+            };
+        }
         if self.check(&TokenKind::LParen) {
             let start = self.advance().span;
             let first = self.parse_type();
@@ -1853,6 +1869,29 @@ impl<'a> Parser<'a> {
                 },
                 span,
             }
+        } else if self.check(&TokenKind::Amp) {
+            let start = self.advance().span;
+            let mutable = matches!(self.peek(), TokenKind::Ident(name) if name == "mut");
+            if mutable {
+                self.advance();
+            }
+            let place = self.parse_cast();
+            let span = start.merge(place.span);
+            Expr {
+                kind: ExprKind::Borrow {
+                    mutable,
+                    place: Box::new(place),
+                },
+                span,
+            }
+        } else if self.check(&TokenKind::Star) {
+            let start = self.advance().span;
+            let operand = self.parse_cast();
+            let span = start.merge(operand.span);
+            Expr {
+                kind: ExprKind::Deref(Box::new(operand)),
+                span,
+            }
         } else {
             self.parse_postfix()
         }
@@ -2405,6 +2444,13 @@ fn assignment_from_place(place: Expr, value: Expr, span: Span) -> Option<Stmt> {
                 None
             }
         }
+        ExprKind::Deref(inner) => Some(Stmt {
+            kind: StmtKind::AssignDeref {
+                place: inner,
+                value,
+            },
+            span,
+        }),
         _ => None,
     }
 }
