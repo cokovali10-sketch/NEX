@@ -1,0 +1,16 @@
+# strx - small string helpers for NEX.
+# Use: use strx from "strx.nex"  then  strx.repeat("ab", 3)
+
+pub fn repeat(s: string, n: i64) -> string:
+    var out = ""
+    var i = 0
+    while i < n:
+        out = out + s
+        i = i + 1
+    return out
+
+pub fn shout(s: string) -> string:
+    return str_upper(s) + "!"
+
+pub fn surround(s: string, left: string, right: string) -> string:
+    return left + s + right

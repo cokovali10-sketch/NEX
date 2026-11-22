@@ -1,0 +1,15 @@
+[package]
+name = "nex-studio"
+version = "1.0.1"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "NEX Studio - a local web editor that compiles and runs NEX code"
+
+[[bin]]
+name = "nex-studio"
+path = "src/main.rs"
+
+[dependencies]

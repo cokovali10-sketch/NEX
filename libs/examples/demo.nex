@@ -1,0 +1,10 @@
+use mathx from "../mathx.nex"
+use strx from "../strx.nex"
+
+fn main():
+    println("mathx.square(9)  = " + to_string(mathx.square(9)))
+    println("mathx.cube(3)    = " + to_string(mathx.cube(3)))
+    println("mathx.gcd(48,36) = " + to_string(mathx.gcd(48, 36)))
+    println("mathx.clamp(15,0,10) = " + to_string(mathx.clamp(15, 0, 10)))
+    println(strx.repeat("ab", 3))
+    println(strx.surround("NEX", "[", "]"))
