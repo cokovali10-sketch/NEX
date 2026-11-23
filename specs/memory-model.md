@@ -83,6 +83,25 @@ planned.
 - Not supported yet: loading an entire aggregate as a scalar value through a
   reference, and returning a reference to a local (`NXS055`).
 
+## Automatic RAII for growable arrays
+
+- A local growable array `[T]` is a slot holding a heap header. At entry the
+  slot is initialised to a fresh empty array, and it is freed automatically
+  before every `ret` (the IR builder appends the frees to each `Ret` block).
+- Ownership is tracked per slot: a slot owns its buffer until it is assigned a
+  value that is a bare identifier (a borrow), at which point it stops owning.
+  Only owning slots are freed, so a growable-array parameter (owned by the
+  caller) is never freed by the callee.
+- Freeing the previous value before a store (reassignment or the next loop
+  iteration) keeps repeated allocations leak-free without double-frees.
+- `drop(x)` frees eagerly and leaves a fresh empty header in `x` so the scope
+  exit does not free a dangling pointer.
+- Returning an owned array transfers ownership to the caller (it is not freed).
+- `string` is deliberately not auto-freed: string literals are static, and
+  NEX does not yet distinguish static from heap strings.
+- Not yet implemented: `Drop` trait / user-defined destructors, and RAII for
+  structs.
+
 ## Rules for future implementation
 
 - Safe code must not allow use-after-free or out-of-bounds access.

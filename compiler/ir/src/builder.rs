@@ -21,6 +21,12 @@ struct FunctionBuilder {
     current: BlockId,
     entry_alloca_index: usize,
     loop_stack: Vec<(BlockId, BlockId)>,
+    /// Slots (alloca pointers) of local growable arrays `[T]`.
+    growable_slots: std::collections::HashSet<ValueId>,
+    /// Subset of `growable_slots` that currently own their heap buffer and must
+    /// be freed at scope exit (RAII). A slot leaves this set when it is assigned
+    /// a borrowed value (e.g. from another variable or a parameter).
+    owned: std::collections::HashSet<ValueId>,
 }
 
 impl FunctionBuilder {
@@ -48,7 +54,27 @@ impl FunctionBuilder {
             current: BlockId(0),
             entry_alloca_index: 0,
             loop_stack: Vec::new(),
+            growable_slots: std::collections::HashSet::new(),
+            owned: std::collections::HashSet::new(),
         }
+    }
+
+    /// Emits `free(slot)` (load the header pointer, call `nex_rt_array_free`).
+    /// `free(NULL)` is a safe no-op in the runtime, so uninitialised slots are
+    /// handled as long as they were null/empty initialised.
+    fn emit_array_free(&mut self, slot: ValueId) {
+        let value = self.new_value();
+        self.emit(Inst::Load {
+            dst: value,
+            ptr: slot,
+            ty: IrType::String,
+        });
+        self.emit(Inst::Call {
+            dst: None,
+            name: "nex_rt_array_free".to_string(),
+            args: vec![Operand::Value(value)],
+            ret: IrType::Void,
+        });
     }
 
     fn new_value(&mut self) -> ValueId {
@@ -209,6 +235,25 @@ pub fn build(program: &Program, analysis: &Analysis) -> Result<IrModule, String>
             }
             let ir_ty = IrType::from_type(ty);
             let ptr = builder.alloca_at_entry(ir_ty);
+            // Growable arrays own a heap header. Initialise the slot to an empty
+            // array so a scope exit before the declaration frees a valid pointer,
+            // and treat it as owned until reassigned from a borrowed value.
+            if matches!(ty, Type::DynArray(_)) {
+                let empty = builder.new_value();
+                builder.emit(Inst::Call {
+                    dst: Some(empty),
+                    name: "nex_rt_array_new".to_string(),
+                    args: Vec::new(),
+                    ret: IrType::String,
+                });
+                builder.emit(Inst::Store {
+                    ptr,
+                    value: Operand::Value(empty),
+                    ty: IrType::String,
+                });
+                builder.growable_slots.insert(ptr);
+                builder.owned.insert(ptr);
+            }
             storage.insert(span, (ptr, ir_ty));
         }
 
@@ -233,6 +278,40 @@ pub fn build(program: &Program, analysis: &Analysis) -> Result<IrModule, String>
                     "function `{}` may exit without returning a value",
                     function.name
                 ));
+            }
+        }
+
+        // RAII: before every `ret`, free each growable-array local that still
+        // owns its buffer. `insts` are emitted before the terminator, so pushing
+        // frees onto a Ret block runs them just before returning. Each block has
+        // at most one executed Ret per run, so every owned slot is freed once.
+        if !builder.owned.is_empty() {
+            let ret_blocks: Vec<usize> = builder
+                .func
+                .blocks
+                .iter()
+                .enumerate()
+                .filter(|(_, block)| matches!(block.terminator, Some(Terminator::Ret(_))))
+                .map(|(index, _)| index)
+                .collect();
+            let owned_slots: Vec<ValueId> = builder.owned.iter().copied().collect();
+            for block_index in ret_blocks {
+                let mut frees = Vec::new();
+                for slot in &owned_slots {
+                    let loaded = builder.new_value();
+                    frees.push(Inst::Load {
+                        dst: loaded,
+                        ptr: *slot,
+                        ty: IrType::String,
+                    });
+                    frees.push(Inst::Call {
+                        dst: None,
+                        name: "nex_rt_array_free".to_string(),
+                        args: vec![Operand::Value(loaded)],
+                        ret: IrType::Void,
+                    });
+                }
+                builder.func.blocks[block_index].insts.extend(frees);
             }
         }
 
@@ -388,8 +467,19 @@ fn lower_statement(
                     builder, ptr, source, info.llvm, info.elem, info.len, analysis,
                 )?;
             } else {
+                if builder.growable_slots.contains(&ptr) && builder.owned.contains(&ptr) {
+                    builder.emit_array_free(ptr);
+                }
                 let value = lower_expr(builder, init, scopes, storage, analysis, expected)?;
                 builder.emit(Inst::Store { ptr, value, ty });
+                if matches!(expected, Type::DynArray(_)) {
+                    if matches!(init.kind, ExprKind::Ident(_)) {
+                        // Bound from another variable: this slot borrows, not owns.
+                        builder.owned.remove(&ptr);
+                    } else {
+                        builder.owned.insert(ptr);
+                    }
+                }
             }
             if let Some(scope) = scopes.last_mut() {
                 scope.insert(name.clone(), Slot { ptr, ty });
@@ -500,6 +590,9 @@ fn lower_statement(
                     Ok(())
                 }
                 (ptr, ty) => {
+                    if builder.growable_slots.contains(&ptr) && builder.owned.contains(&ptr) {
+                        builder.emit_array_free(ptr);
+                    }
                     let operand =
                         lower_expr(builder, value, scopes, storage, analysis, Type::Error)?;
                     builder.emit(Inst::Store {
@@ -507,6 +600,13 @@ fn lower_statement(
                         value: operand,
                         ty,
                     });
+                    if builder.growable_slots.contains(&ptr) {
+                        if matches!(value.kind, ExprKind::Ident(_)) {
+                            builder.owned.remove(&ptr);
+                        } else {
+                            builder.owned.insert(ptr);
+                        }
+                    }
                     Ok(())
                 }
             }
@@ -762,6 +862,15 @@ fn lower_statement(
         }
         StmtKind::Return(value) => {
             if let Some(value) = value {
+                // Returning an owned growable array transfers ownership to the
+                // caller: do not free it at scope exit.
+                if let ExprKind::Ident(name) = &value.kind {
+                    if let Some(slot) = lookup_slot(scopes, name) {
+                        if builder.growable_slots.contains(&slot.ptr) {
+                            builder.owned.remove(&slot.ptr);
+                        }
+                    }
+                }
                 let operand = lower_expr(builder, value, scopes, storage, analysis, Type::Error)?;
                 lower_deferred(builder, deferred, scopes, storage, analysis)?;
                 builder.terminate(Terminator::Ret(Some(operand)));
@@ -4398,6 +4507,27 @@ fn lower_expr(
                     args: vec![Operand::Value(header)],
                     ret: IrType::Void,
                 });
+                // Leave a fresh empty header in the slot so RAII's
+                // free-before-store and scope-exit free stay valid (no dangling
+                // pointer freed twice).
+                if let ExprKind::Ident(name) = &args[0].kind {
+                    if let Some(slot) = lookup_slot(scopes, name) {
+                        if builder.growable_slots.contains(&slot.ptr) {
+                            let empty = builder.new_value();
+                            builder.emit(Inst::Call {
+                                dst: Some(empty),
+                                name: "nex_rt_array_new".to_string(),
+                                args: Vec::new(),
+                                ret: IrType::String,
+                            });
+                            builder.emit(Inst::Store {
+                                ptr: slot.ptr,
+                                value: Operand::Value(empty),
+                                ty: IrType::String,
+                            });
+                        }
+                    }
+                }
                 return Ok(Operand::Const(Const::Bool(false)));
             }
 

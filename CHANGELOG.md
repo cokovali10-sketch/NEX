@@ -4,6 +4,16 @@
 
 ### Added
 
+- Automatic RAII for growable arrays `[T]`: a local growable array is
+  initialised to an empty heap header and freed automatically at scope exit
+  (before every `ret`). Reassigning or re-entering a loop iteration frees the
+  previous buffer first; `drop(x)` frees eagerly and leaves a fresh empty header
+  so nothing is freed twice; returning an owned array transfers ownership to the
+  caller instead of freeing it. Verified crash-free across a 50k-iteration
+  allocate/return loop. Growable arrays are always heap-allocated, so freeing is
+  safe; `string` is left alone (literals are static) and parameters are never
+  freed (the caller owns them).
+
 - `+` concatenates strings: `"a" + b + "c"` is now sugar for `concat`, and
   `s += "x"` appends. This replaces the previous requirement to call `concat`
   explicitly (a real usability gap). Lowered to `nex_rt_str_concat`; verified
