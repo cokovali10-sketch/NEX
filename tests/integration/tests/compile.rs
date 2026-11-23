@@ -2695,3 +2695,20 @@ fn two_mutable_borrows_in_one_statement_conflict() {
         result.diagnostics
     );
 }
+
+#[test]
+fn fstring_interpolates_expressions() {
+    let (stdout, stderr, code) = run_source(
+        "fn main():\n    var name = \"NEX\"\n    var x = 42\n    println(f\"hello {name}\")\n    println(f\"sum = {x + 1}\")\n",
+    );
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "hello NEX\nsum = 43\n");
+}
+
+#[test]
+fn string_slice_with_range() {
+    let (stdout, stderr, code) =
+        run_source("fn main():\n    var s = \"hello world\"\n    println(s[0..5])\n");
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "hello\n");
+}

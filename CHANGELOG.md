@@ -4,6 +4,9 @@
 
 ### Added
 
+- f-string interpolation is covered by tests and documented: `f"hello {name}"`,
+  `f"sum = {x + 1}"` splice expressions (via `to_string`) into a string. String
+  slicing `s[a..b]` (the `slice` builtin) is likewise covered by a test.
 - Automatic RAII for growable arrays `[T]`: a local growable array is
   initialised to an empty heap header and freed automatically at scope exit
   (before every `ret`). Reassigning or re-entering a loop iteration frees the
