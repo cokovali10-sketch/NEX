@@ -14,3 +14,40 @@ pub fn shout(s: string) -> string:
 
 pub fn surround(s: string, left: string, right: string) -> string:
     return left + s + right
+
+pub fn reverse(s: string) -> string:
+    var out = ""
+    var i = len(s) - 1
+    while i >= 0:
+        out = out + char_at(s, i)
+        i = i - 1
+    return out
+
+# Number of occurrences of `ch` (a one-character string) in `s`.
+pub fn count_char(s: string, ch: string) -> i64:
+    var count = 0
+    var i = 0
+    while i < len(s):
+        if char_at(s, i) == ch:
+            count = count + 1
+        i = i + 1
+    return count
+
+pub fn is_empty(s: string) -> bool:
+    return len(s) == 0
+
+pub fn has_prefix(s: string, prefix: string) -> bool:
+    if len(prefix) > len(s):
+        return false
+    return str_substring(s, 0, len(prefix)) == prefix
+
+pub fn has_suffix(s: string, suffix: string) -> bool:
+    if len(suffix) > len(s):
+        return false
+    return str_substring(s, len(s) - len(suffix), len(suffix)) == suffix
+
+# Capitalise the first character, leave the rest as-is.
+pub fn capitalize(s: string) -> string:
+    if len(s) == 0:
+        return s
+    return str_upper(str_substring(s, 0, 1)) + str_substring(s, 1, len(s))

@@ -2,9 +2,19 @@ use mathx from "../mathx.nex"
 use strx from "../strx.nex"
 
 fn main():
-    println("mathx.square(9)  = " + to_string(mathx.square(9)))
-    println("mathx.cube(3)    = " + to_string(mathx.cube(3)))
-    println("mathx.gcd(48,36) = " + to_string(mathx.gcd(48, 36)))
-    println("mathx.clamp(15,0,10) = " + to_string(mathx.clamp(15, 0, 10)))
-    println(strx.repeat("ab", 3))
-    println(strx.surround("NEX", "[", "]"))
+    println("== mathx ==")
+    println("square(9)      = " + to_string(mathx.square(9)))
+    println("gcd(48, 36)    = " + to_string(mathx.gcd(48, 36)))
+    println("clamp(15,0,10) = " + to_string(mathx.clamp(15, 0, 10)))
+    println("abs(-7)        = " + to_string(mathx.abs(0 - 7)))
+    println("pow(2, 10)     = " + to_string(mathx.pow(2, 10)))
+    println("sum_to(100)    = " + to_string(mathx.sum_to(100)))
+    println("is_prime(97)   = " + to_string(mathx.is_prime(97)))
+    println("fib(10)        = " + to_string(mathx.fib(10)))
+
+    println("== strx ==")
+    println("repeat(\"ab\", 3)   = " + strx.repeat("ab", 3))
+    println("reverse(\"hello\")  = " + strx.reverse("hello"))
+    println("capitalize(\"nex\") = " + strx.capitalize("nex"))
+    println("has_prefix(\"nexa\",\"ne\") = " + to_string(strx.has_prefix("nexa", "ne")))
+    println("count_char(\"banana\",\"a\") = " + to_string(strx.count_char("banana", "a")))
