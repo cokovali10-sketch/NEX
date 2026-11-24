@@ -177,6 +177,7 @@ const ES_LEFT: u32 = 0x0000;
 const ES_CENTER: u32 = 0x0001;
 
 const BS_OWNERDRAW: u32 = 0x0000000B;
+const BS_NOTIFY: u32 = 0x00004000;
 
 const WM_DESTROY: u32 = 0x0002;
 const WM_SIZE: u32 = 0x0005;
@@ -303,6 +304,7 @@ fn run_code(code: &str) -> String {
         Ok(result) => result,
         Err(error) => return format!("compile error: {error}\n"),
     };
+    let _ = std::fs::write("C:/Users/Acer/AppData/Local/Temp/opencode/nex-analysis/debug3.txt", format!("has_errors: {} | artifacts: {} | exe: {}", result.has_errors(), result.artifacts.is_some(), result.artifacts.as_ref().and_then(|a| a.executable.as_ref()).map(|p| p.display().to_string()).unwrap_or_default()));
 
     let mut out = String::new();
     for diagnostic in &result.diagnostics {
@@ -475,7 +477,7 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -
         WM_COMMAND => {
             let id = (w & 0xFFFF) as usize;
             let code = (w >> 16) as u32;
-            if id == BTN_RUN && code == 0 {
+            if id == BTN_RUN {
                 let code = get_text(CONTROLS.edit);
                 let output = run_code(&code);
                 set_text(CONTROLS.output, &output);
@@ -746,7 +748,7 @@ fn main() {
             0,
             class_btn.as_ptr(),
             b"Run\0".as_ptr(),
-            WS_CHILD | WS_VISIBLE | BS_OWNERDRAW,
+            WS_CHILD | WS_VISIBLE | BS_OWNERDRAW | BS_NOTIFY,
             900,
             8,
             110,

@@ -2244,7 +2244,7 @@ fn lower_dyn_array_literal(
         .ok_or_else(|| "missing element type for growable array".to_string())?;
     let elem_ir = IrType::from_type(elem);
     let count = elements.len() as i64;
-    let bytes = count.saturating_mul(ir_elem_size(elem_ir).max(1));
+    let bytes = count.saturating_mul(ir_elem_size(analysis, elem_ir).max(1));
 
     let data_value = builder.new_value();
     builder.emit(Inst::Call {
@@ -2326,13 +2326,28 @@ fn field_ptr(
 }
 
 /// Size in bytes of an IR type when stored in memory.
-fn ir_elem_size(ty: IrType) -> i64 {
+fn ir_elem_size(analysis: &Analysis, ty: IrType) -> i64 {
     match ty {
         IrType::I8 | IrType::U8 | IrType::Bool | IrType::Char => 1,
         IrType::I16 | IrType::U16 => 2,
         IrType::I32 | IrType::U32 | IrType::F32 => 4,
         IrType::I64 | IrType::U64 | IrType::F64 | IrType::String | IrType::Array(_) => 8,
-        IrType::Struct(_) => 8,
+        IrType::Struct(name) => {
+            // Compute struct size from field types.
+            if let Some(info) = analysis.struct_info(name) {
+                let mut size: i64 = 0;
+                for (_, field_ty) in &info.fields {
+                    size += ir_elem_size(analysis, IrType::from_type(*field_ty));
+                }
+                // Align to 8 bytes for arrays.
+                if size > 0 && size % 8 != 0 {
+                    size += 8 - (size % 8);
+                }
+                size.max(8)
+            } else {
+                8
+            }
+        }
         IrType::Void => 0,
     }
 }
@@ -2955,7 +2970,7 @@ fn lower_expr(
                         let value =
                             lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
                         let elem_size = info
-                            .map(|info| ir_elem_size(IrType::from_type(info.elem)))
+                            .map(|info| ir_elem_size(analysis, IrType::from_type(info.elem)))
                             .unwrap_or(8);
                         let dst = builder.new_value();
                         builder.emit(Inst::Call {
@@ -4337,7 +4352,7 @@ fn lower_expr(
                     args: vec![
                         Operand::Value(header),
                         Operand::Value(needed),
-                        Operand::Const(Const::Int(ir_elem_size(elem_ir))),
+                        Operand::Const(Const::Int(ir_elem_size(analysis, elem_ir))),
                     ],
                     ret: IrType::String,
                 });
@@ -4732,7 +4747,7 @@ fn lower_expr(
                         let start_id = start;
                         let end_id = end;
                         let len_operand = Operand::Const(Const::Int(info.len as i64));
-                        let elem_size = ir_elem_size(IrType::from_type(info.elem));
+                        let elem_size = ir_elem_size(analysis, IrType::from_type(info.elem));
                         let dst = builder.new_value();
                         builder.emit(Inst::Call {
                             dst: Some(dst),
@@ -4776,7 +4791,7 @@ fn lower_expr(
                             lower_expr(builder, &args[2], scopes, storage, analysis, Type::Error)?;
                         let start_id = start;
                         let end_id = end;
-                        let elem_size = ir_elem_size(IrType::from_type(info.elem));
+                        let elem_size = ir_elem_size(analysis, IrType::from_type(info.elem));
                         let dst = builder.new_value();
                         builder.emit(Inst::Call {
                             dst: Some(dst),
