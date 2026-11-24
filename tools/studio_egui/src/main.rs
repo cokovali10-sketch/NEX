@@ -1,4 +1,4 @@
-﻿//! NEX Studio (egui) вЂ” a PyCharm-style desktop IDE for the NEX language.
+//! NEX Studio (egui) — a PyCharm-style desktop IDE for the NEX language.
 //!
 //! Rust + egui (GPU) + egui_code_editor (syntax-highlighted editable code).
 //! Compiles NEX in process (nex_driver) and runs the result.
@@ -23,6 +23,15 @@ fn main():
     println(f"items: {len(cart)}, total: {total}")
 "#;
 
+const C_TEXT: Color32 = Color32::from_rgb(169, 183, 198);
+const C_MUTED: Color32 = Color32::from_rgb(120, 128, 138);
+const C_BG: Color32 = Color32::from_rgb(43, 43, 43);
+const C_PANEL: Color32 = Color32::from_rgb(49, 51, 53);
+const C_TOOL: Color32 = Color32::from_rgb(60, 63, 65);
+const C_GREEN: Color32 = Color32::from_rgb(106, 154, 76);
+const C_RED: Color32 = Color32::from_rgb(230, 96, 96);
+const C_YELLOW: Color32 = Color32::from_rgb(210, 168, 90);
+
 fn nex_syntax() -> Syntax {
     Syntax::new("NEX")
         .with_comment("#")
@@ -37,12 +46,21 @@ fn nex_syntax() -> Syntax {
         ])
 }
 
+#[derive(Clone, Copy, PartialEq)]
+enum Activity {
+    Files,
+    Search,
+    Run,
+}
+
 struct Studio {
     code: String,
     output: String,
     status: String,
     files: Vec<(String, String)>,
     active: usize,
+    activity: Activity,
+    find: String,
 }
 
 impl Studio {
@@ -68,11 +86,13 @@ impl Studio {
             status: "ready".to_string(),
             files,
             active: 0,
+            activity: Activity::Files,
+            find: String::new(),
         }
     }
 
     fn run(&mut self) {
-        self.status = "compilingвЂ¦".to_string();
+        self.status = "compiling…".to_string();
         self.output.clear();
 
         let dir = std::env::temp_dir().join("nex_studio_egui");
@@ -151,19 +171,15 @@ fn setup_style(ctx: &egui::Context) {
     let mut s = (*ctx.global_style()).clone();
     s.visuals = egui::Visuals::dark();
 
-    let bg = Color32::from_rgb(43, 43, 43);
-    let panel = Color32::from_rgb(49, 51, 53);
-    let toolbar = Color32::from_rgb(60, 63, 65);
     let border = Color32::from_rgb(72, 72, 72);
-    let text = Color32::from_rgb(169, 183, 198);
     let accent = Color32::from_rgb(54, 88, 128);
 
-    s.visuals.panel_fill = bg;
-    s.visuals.window_fill = bg;
-    s.visuals.faint_bg_color = panel;
+    s.visuals.panel_fill = C_BG;
+    s.visuals.window_fill = C_BG;
+    s.visuals.faint_bg_color = C_PANEL;
     s.visuals.extreme_bg_color = Color32::from_rgb(30, 30, 30);
-    s.visuals.widgets.noninteractive.bg_fill = bg;
-    s.visuals.widgets.inactive.bg_fill = toolbar;
+    s.visuals.widgets.noninteractive.bg_fill = C_BG;
+    s.visuals.widgets.inactive.bg_fill = C_TOOL;
     s.visuals.widgets.inactive.fg_stroke = egui::Stroke::new(1.0f32, border);
     s.visuals.widgets.hovered.bg_fill = Color32::from_rgb(75, 78, 80);
     s.visuals.widgets.hovered.fg_stroke = egui::Stroke::new(1.0f32, Color32::from_rgb(96, 99, 102));
@@ -172,15 +188,70 @@ fn setup_style(ctx: &egui::Context) {
     s.visuals.selection.bg_fill = accent;
     s.visuals.selection.stroke = egui::Stroke::new(1.0f32, Color32::from_rgb(88, 166, 255));
     s.visuals.window_stroke = egui::Stroke::new(1.0f32, border);
+    s.visuals.override_text_color = Some(C_TEXT);
 
-    s.visuals.override_text_color = Some(text);
     s.spacing.item_spacing = egui::vec2(9.0, 7.0);
     s.spacing.button_padding = egui::vec2(12.0, 5.0);
     s.text_styles.insert(
         egui::TextStyle::Button,
         egui::FontId::new(13.0, egui::FontFamily::Proportional),
     );
+    s.text_styles.insert(
+        egui::TextStyle::Small,
+        egui::FontId::new(11.5, egui::FontFamily::Proportional),
+    );
     ctx.set_global_style(s);
+}
+
+/// Draws a small activity-bar icon into `rect`.
+fn draw_activity_icon(ui: &egui::Ui, rect: egui::Rect, kind: Activity, color: Color32) {
+    let p = ui.painter();
+    let c = rect.center();
+    let stroke = egui::Stroke::new(1.6f32, color);
+    match kind {
+        Activity::Files => {
+            // two stacked "documents"
+            let r1 = egui::Rect::from_min_size(
+                egui::pos2(c.x - 9.0, c.y - 10.0),
+                egui::vec2(14.0, 18.0),
+            );
+            p.rect_stroke(
+                r1,
+                egui::CornerRadius::same(2),
+                stroke,
+                egui::StrokeKind::Inside,
+            );
+            for i in 0..3 {
+                let y = r1.top() + 5.0 + i as f32 * 4.0;
+                p.line_segment(
+                    [
+                        egui::pos2(r1.left() + 3.0, y),
+                        egui::pos2(r1.right() - 3.0, y),
+                    ],
+                    stroke,
+                );
+            }
+        }
+        Activity::Search => {
+            let center = egui::pos2(c.x - 2.0, c.y - 2.0);
+            p.circle_stroke(center, 7.0, stroke);
+            p.line_segment(
+                [
+                    egui::pos2(c.x + 3.0, c.y + 3.0),
+                    egui::pos2(c.x + 9.0, c.y + 9.0),
+                ],
+                stroke,
+            );
+        }
+        Activity::Run => {
+            let pts = vec![
+                egui::pos2(c.x - 6.0, c.y - 9.0),
+                egui::pos2(c.x - 6.0, c.y + 9.0),
+                egui::pos2(c.x + 9.0, c.y),
+            ];
+            p.add(egui::Shape::convex_polygon(pts, color, egui::Stroke::NONE));
+        }
+    }
 }
 
 impl eframe::App for Studio {
@@ -215,7 +286,7 @@ impl eframe::App for Studio {
                     }
                 });
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.colored_label(Color32::from_rgb(133, 133, 133), &self.status);
+                    ui.colored_label(C_MUTED, &self.status);
                 });
             });
         });
@@ -231,6 +302,8 @@ impl eframe::App for Studio {
                         ui.separator();
                         ui.colored_label(Color32::WHITE, "UTF-8");
                         ui.separator();
+                        ui.colored_label(Color32::WHITE, "Spaces: 4");
+                        ui.separator();
                         ui.colored_label(Color32::WHITE, "NEX");
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             ui.colored_label(Color32::WHITE, &self.status);
@@ -239,42 +312,123 @@ impl eframe::App for Studio {
                 });
         });
 
-        // Sidebar.
-        egui::Panel::left("files")
-            .resizable(true)
-            .default_size(200.0)
+        // Activity bar.
+        egui::Panel::left("activity")
+            .exact_size(50.0)
             .show(ctx, |ui| {
                 egui::Frame::new()
-                    .fill(Color32::from_rgb(49, 51, 53))
-                    .inner_margin(egui::Margin::symmetric(8, 6))
+                    .fill(Color32::from_rgb(30, 30, 30))
+                    .inner_margin(egui::Margin::symmetric(4, 6))
                     .show(ui, |ui| {
-                        ui.colored_label(Color32::from_rgb(133, 133, 133), "PROJECT");
-                        ui.add_space(3.0);
-                        for (index, (name, _)) in self.files.iter().enumerate() {
-                            let selected = self.active == index;
-                            if ui.selectable_label(selected, format!("  {name}")).clicked() {
-                                self.active = index;
-                                self.code = self.files[index].1.clone();
+                        for kind in [Activity::Files, Activity::Search, Activity::Run] {
+                            let (rect, resp) = ui
+                                .allocate_exact_size(egui::vec2(40.0, 44.0), egui::Sense::click());
+                            let active = self.activity == kind;
+                            if resp.clicked() {
+                                self.activity = kind;
+                                if kind == Activity::Run {
+                                    self.run();
+                                }
+                            }
+                            let color = if active { Color32::WHITE } else { C_MUTED };
+                            if active {
+                                ui.painter().rect_filled(
+                                    rect,
+                                    egui::CornerRadius::same(4),
+                                    Color32::from_rgb(54, 88, 128),
+                                );
+                            }
+                            draw_activity_icon(ui, rect, kind, color);
+                        }
+                    });
+            });
+
+        // Sidebar (project tree or search).
+        egui::Panel::left("files")
+            .resizable(true)
+            .default_size(220.0)
+            .show(ctx, |ui| {
+                egui::Frame::new()
+                    .fill(C_PANEL)
+                    .inner_margin(egui::Margin::symmetric(10, 8))
+                    .show(ui, |ui| {
+                        if self.activity == Activity::Search {
+                            ui.colored_label(C_MUTED, "SEARCH");
+                            ui.add_space(4.0);
+                            ui.add(
+                                egui::TextEdit::singleline(&mut self.find)
+                                    .hint_text("Search in file…")
+                                    .desired_width(f32::INFINITY),
+                            );
+                            ui.add_space(6.0);
+                            if !self.find.is_empty() {
+                                let mut count = 0;
+                                for (i, line) in self.code.lines().enumerate() {
+                                    if line.contains(&self.find) {
+                                        count += 1;
+                                        ui.colored_label(
+                                            C_TEXT,
+                                            format!("{:>4}: {}", i + 1, line.trim()),
+                                        );
+                                    }
+                                }
+                                if count == 0 {
+                                    ui.colored_label(C_MUTED, "No matches");
+                                }
+                            }
+                        } else {
+                            ui.colored_label(C_MUTED, "PROJECT");
+                            ui.add_space(4.0);
+                            // Root row.
+                            ui.colored_label(C_TEXT, "▾  NEX");
+                            for (index, (name, _)) in self.files.iter().enumerate() {
+                                let selected = self.active == index;
+                                let indent = if name.contains('/') { 16.0 } else { 4.0 };
+                                ui.add_space(2.0);
+                                ui.horizontal(|ui| {
+                                    ui.add_space(indent);
+                                    let file_icon =
+                                        if name.ends_with(".nex") { "◆" } else { "•" };
+                                    let text = egui::RichText::new(format!("{file_icon} {name}"))
+                                        .monospace()
+                                        .size(13.0)
+                                        .color(if selected { Color32::WHITE } else { C_TEXT });
+                                    if ui.selectable_label(selected, text).clicked() {
+                                        self.active = index;
+                                        self.code = self.files[index].1.clone();
+                                    }
+                                });
                             }
                         }
                     });
             });
 
-        // Central: tab + editor (fills) + console.
+        // Central: tab bar + editor (fills) + colored console.
         egui::CentralPanel::default().show(ctx, |ui| {
+            // Tab header.
             egui::Frame::new()
-                .fill(Color32::from_rgb(60, 63, 65))
-                .inner_margin(egui::Margin::symmetric(14, 5))
+                .fill(C_TOOL)
+                .inner_margin(egui::Margin::symmetric(6, 5))
                 .show(ui, |ui| {
-                    let name = self.files[self.active].0.clone();
-                    ui.colored_label(
-                        Color32::from_rgb(169, 183, 198),
-                        egui::RichText::new(format!("в—Џ {name}")).monospace(),
-                    );
+                    ui.horizontal(|ui| {
+                        // Active tab.
+                        egui::Frame::new()
+                            .fill(C_BG)
+                            .inner_margin(egui::Margin::symmetric(14, 6))
+                            .show(ui, |ui| {
+                                let name = self.files[self.active].0.clone();
+                                ui.colored_label(
+                                    C_TEXT,
+                                    egui::RichText::new(format!("● {name}")).monospace(),
+                                );
+                            });
+                        ui.colored_label(C_MUTED, "✕");
+                    });
                 });
-            ui.add_space(4.0);
+            ui.add_space(2.0);
 
-            let console_h = 170.0;
+            // Editor fills remaining height.
+            let console_h = 160.0;
             let avail = ui.available_height();
             let rows = (((avail - console_h - 16.0) / 20.0).floor() as usize).max(6);
             let mut editor = CodeEditor::default()
@@ -291,19 +445,50 @@ impl eframe::App for Studio {
 
             ui.add_space(5.0);
             ui.separator();
-            ui.colored_label(Color32::from_rgb(133, 133, 133), "CONSOLE");
+            ui.horizontal(|ui| {
+                ui.colored_label(C_MUTED, "CONSOLE");
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.small_button("Clear").clicked() {
+                        self.output.clear();
+                    }
+                });
+            });
+
+            // Colored console (errors red, warnings yellow).
+            let mut job = egui::text::LayoutJob::default();
+            let mono = egui::FontId::monospace(13.0);
+            for line in self.output.lines() {
+                let color = if line.starts_with("error") {
+                    C_RED
+                } else if line.starts_with("warning") {
+                    C_YELLOW
+                } else {
+                    C_TEXT
+                };
+                job.append(
+                    line,
+                    0.0,
+                    egui::TextFormat {
+                        color,
+                        font_id: mono.clone(),
+                        ..Default::default()
+                    },
+                );
+                job.append(
+                    "\n",
+                    0.0,
+                    egui::TextFormat {
+                        color,
+                        font_id: mono.clone(),
+                        ..Default::default()
+                    },
+                );
+            }
             egui::ScrollArea::vertical()
                 .auto_shrink([false, false])
                 .max_height(console_h)
                 .show(ui, |ui| {
-                    ui.add(
-                        egui::TextEdit::multiline(&mut self.output)
-                            .font(egui::TextStyle::Monospace)
-                            .desired_width(f32::INFINITY)
-                            .desired_rows(7)
-                            .interactive(false)
-                            .text_color(Color32::from_rgb(169, 183, 198)),
-                    );
+                    ui.add(egui::Label::new(job).wrap());
                 });
         });
     }
@@ -313,7 +498,7 @@ fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([1200.0, 800.0])
-            .with_min_inner_size([760.0, 480.0])
+            .with_min_inner_size([800.0, 520.0])
             .with_title("NEX Studio"),
         ..Default::default()
     };
@@ -326,4 +511,3 @@ fn main() -> eframe::Result {
         }),
     )
 }
-
