@@ -28,7 +28,7 @@
 use std::ffi::c_void;
 use std::process::Command;
 
-use nex_driver::{compile_source, CompileOptions};
+use nex_driver::{CompileOptions, compile_source};
 
 type HWND = isize;
 type HINSTANCE = isize;
@@ -183,7 +183,7 @@ const WM_SIZE: u32 = 0x0005;
 const WM_COMMAND: u32 = 0x0111;
 const WM_SETFONT: u32 = 0x0030;
 const WM_CTLCOLOREDIT: u32 = 0x0133;
-    const WM_CTLCOLORBTN: u32 = 0x0135;
+const WM_CTLCOLORBTN: u32 = 0x0135;
 const WM_CTLCOLORSTATIC: u32 = 0x0138;
 const WM_DRAWITEM: u32 = 0x002B;
 const WM_ERASEBKGND: u32 = 0x0014;
@@ -245,7 +245,12 @@ static mut BG_BRUSH: HGDIOBJ = 0;
 static mut EDIT_BRUSH: HGDIOBJ = 0;
 static mut TOOL_BRUSH: HGDIOBJ = 0;
 static mut SIDEBAR_BRUSH: HGDIOBJ = 0;
-static mut RUN_RECT: RECT = RECT { left: 0, top: 0, right: 0, bottom: 0 };
+static mut RUN_RECT: RECT = RECT {
+    left: 0,
+    top: 0,
+    right: 0,
+    bottom: 0,
+};
 static mut RUN_HOVER: bool = false;
 static mut FONT_MONO: HGDIOBJ = 0;
 static mut FONT_SMALL: HGDIOBJ = 0;
@@ -303,7 +308,11 @@ fn run_code(code: &str) -> String {
     for diagnostic in &result.diagnostics {
         let span_start = diagnostic.span.map(|span| span.start).unwrap_or(0);
         let line = line_of(code, span_start);
-        let label = if diagnostic.is_error() { "error" } else { "warning" };
+        let label = if diagnostic.is_error() {
+            "error"
+        } else {
+            "warning"
+        };
         out.push_str(&format!(
             "{label} [{}] line {line}: {}\n",
             diagnostic.code, diagnostic.message
@@ -385,7 +394,13 @@ unsafe fn draw_run_button(draw: &DRAWITEMSTRUCT) {
     SetTextColor(dc, rgb(255, 255, 255));
     SelectObject(dc, FONT_SMALL);
     let text = b"\xe2\x96\xb6 Run\0";
-    DrawTextA(dc, text.as_ptr(), -1, &rc, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    DrawTextA(
+        dc,
+        text.as_ptr(),
+        -1,
+        &rc,
+        DT_CENTER | DT_VCENTER | DT_SINGLELINE,
+    );
 }
 
 unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESULT {
@@ -429,7 +444,12 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -
         }
         WM_ERASEBKGND => {
             let dc = w as HDC;
-            let mut rc = RECT { left: 0, top: 0, right: 0, bottom: 0 };
+            let mut rc = RECT {
+                left: 0,
+                top: 0,
+                right: 0,
+                bottom: 0,
+            };
             GetClientRect(hwnd, &mut rc);
             FillRect(dc, &rc, BG_BRUSH);
             1
@@ -478,7 +498,14 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -
                 let main_w = width - main_x;
                 // Toolbar strip across the top.
                 // Sidebar with the project tree (full height under the toolbar).
-                MoveWindow(CONTROLS.sidebar, 0, toolbar_h, sidebar_w, height - toolbar_h - status_h, 1);
+                MoveWindow(
+                    CONTROLS.sidebar,
+                    0,
+                    toolbar_h,
+                    sidebar_w,
+                    height - toolbar_h - status_h,
+                    1,
+                );
                 // Tab header above the editor.
                 MoveWindow(CONTROLS.tab, main_x, toolbar_h, main_w - 180, tab_h, 1);
                 // Run button in the toolbar.
@@ -551,14 +578,36 @@ fn main() {
         TOOL_BRUSH = CreateSolidBrush(rgb(60, 63, 65));
         SIDEBAR_BRUSH = CreateSolidBrush(rgb(49, 51, 53));
         FONT_MONO = CreateFontA(
-            -16, 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET,
-            OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
-            DEFAULT_PITCH, b"Consolas\0".as_ptr(),
+            -16,
+            0,
+            0,
+            0,
+            FW_NORMAL,
+            0,
+            0,
+            0,
+            DEFAULT_CHARSET,
+            OUT_DEFAULT_PRECIS,
+            CLIP_DEFAULT_PRECIS,
+            DEFAULT_QUALITY,
+            DEFAULT_PITCH,
+            b"Consolas\0".as_ptr(),
         );
         FONT_SMALL = CreateFontA(
-            -15, 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET,
-            OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
-            DEFAULT_PITCH, b"Segoe UI\0".as_ptr(),
+            -15,
+            0,
+            0,
+            0,
+            FW_NORMAL,
+            0,
+            0,
+            0,
+            DEFAULT_CHARSET,
+            OUT_DEFAULT_PRECIS,
+            CLIP_DEFAULT_PRECIS,
+            DEFAULT_QUALITY,
+            DEFAULT_PITCH,
+            b"Segoe UI\0".as_ptr(),
         );
 
         let wc = WNDCLASSA {
@@ -626,7 +675,10 @@ fn main() {
             class_status.as_ptr(),
             to_cstring("● main.nex").as_ptr(),
             WS_CHILD | WS_VISIBLE | ES_LEFT,
-            190, 44, 400, 30,
+            190,
+            44,
+            400,
+            30,
             hwnd,
             TAB_ID as HMENU,
             instance,
@@ -639,7 +691,10 @@ fn main() {
             class_edit.as_ptr(),
             b"   1\0".as_ptr(),
             WS_CHILD | WS_VISIBLE | WS_BORDER | ES_MULTILINE | ES_READONLY | ES_CENTER,
-            8, 46, 56, 300,
+            8,
+            46,
+            56,
+            300,
             hwnd,
             GUTTER_ID as HMENU,
             instance,
@@ -659,7 +714,10 @@ fn main() {
                 | ES_WANTRETURN
                 | WS_VSCROLL
                 | WS_HSCROLL,
-            68, 46, 400, 300,
+            68,
+            46,
+            400,
+            300,
             hwnd,
             EDIT_ID as HMENU,
             instance,
@@ -672,7 +730,10 @@ fn main() {
             class_edit.as_ptr(),
             to_cstring("Ready. Press Run to compile and execute.").as_ptr(),
             WS_CHILD | WS_VISIBLE | WS_BORDER | ES_MULTILINE | ES_READONLY | WS_VSCROLL,
-            8, 360, 400, 180,
+            8,
+            360,
+            400,
+            180,
             hwnd,
             0,
             instance,

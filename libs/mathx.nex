@@ -91,3 +91,51 @@ pub fn count_digit(n: i64, digit: i64) -> i64:
             count = count + 1
         x = x / 10
     return count
+
+pub fn min3(a: i64, b: i64, c: i64) -> i64:
+    var m = a
+    if b < m:
+        m = b
+    if c < m:
+        m = c
+    return m
+
+pub fn max3(a: i64, b: i64, c: i64) -> i64:
+    var m = a
+    if b > m:
+        m = b
+    if c > m:
+        m = c
+    return m
+
+pub fn is_even(n: i64) -> bool:
+    return n % 2 == 0
+
+pub fn is_odd(n: i64) -> bool:
+    return n % 2 != 0
+
+# Sum of the integers in [start, end).
+pub fn sum_range(start: i64, end: i64) -> i64:
+    var sum = 0
+    var i = start
+    while i < end:
+        sum = sum + i
+        i = i + 1
+    return sum
+
+pub fn mean(a: i64, b: i64) -> i64:
+    return (a + b) / 2
+
+pub fn count_digits(n: i64) -> i64:
+    var x = abs(n)
+    if x == 0:
+        return 1
+    var count = 0
+    while x > 0:
+        count = count + 1
+        x = x / 10
+    return count
+
+# Linear interpolation between a and b; t is a percentage in [0, 100].
+pub fn lerp(a: i64, b: i64, t: i64) -> i64:
+    return a + (b - a) * t / 100

@@ -225,7 +225,11 @@ pub fn render(source: &SourceFile, diagnostic: &Diagnostic) -> String {
     );
 
     if let Some(span) = diagnostic.span {
-        let (line, column) = source.line_col(span.start);
+        // Spans from imported modules are offset by the driver and can exceed
+        // this source's length; clamp so rendering never panics.
+        let text_len = source.text.len();
+        let span_start = span.start.min(text_len);
+        let (line, column) = source.line_col(span_start);
         let line_text = source.line_text(line);
         let _ = writeln!(out, " --> {}:{}:{}", source.name(), line, column);
         let _ = writeln!(out, "  |");
@@ -236,8 +240,8 @@ pub fn render(source: &SourceFile, diagnostic: &Diagnostic) -> String {
             .copied()
             .unwrap_or(0);
         let line_end = line_start + line_text.len();
-        let highlight_end = span.end.min(line_end).max(span.start);
-        let width = source.text[span.start.min(highlight_end)..highlight_end]
+        let highlight_end = span.end.min(line_end).max(span_start).min(text_len);
+        let width = source.text[span_start.min(highlight_end)..highlight_end]
             .chars()
             .count()
             .max(1);

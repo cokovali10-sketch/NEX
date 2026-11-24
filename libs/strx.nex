@@ -51,3 +51,61 @@ pub fn capitalize(s: string) -> string:
     if len(s) == 0:
         return s
     return str_upper(str_substring(s, 0, 1)) + str_substring(s, 1, len(s))
+
+pub fn str_pad_left(s: string, width: i64, ch: string) -> string:
+    var out = s
+    while len(out) < width:
+        out = ch + out
+    return out
+
+pub fn str_pad_right(s: string, width: i64, ch: string) -> string:
+    var out = s
+    while len(out) < width:
+        out = out + ch
+    return out
+
+# Replace every occurrence of `old` with `new`.
+pub fn str_replace(s: string, old: string, new: string) -> string:
+    var out = ""
+    var i = 0
+    while i < len(s):
+        if len(old) > 0 && i + len(old) <= len(s) && str_substring(s, i, i + len(old)) == old:
+            out = out + new
+            i = i + len(old)
+        else:
+            out = out + char_at(s, i)
+            i = i + 1
+    return out
+
+# Count non-overlapping occurrences of `sub` in `s`.
+pub fn str_count(s: string, sub: string) -> i64:
+    if len(sub) == 0:
+        return 0
+    var count = 0
+    var i = 0
+    while i + len(sub) <= len(s):
+        if str_substring(s, i, i + len(sub)) == sub:
+            count = count + 1
+            i = i + len(sub)
+        else:
+            i = i + 1
+    return count
+
+pub fn is_alpha(s: string) -> bool:
+    if len(s) != 1:
+        return false
+    return str_contains("abcdefghijklmnopqrstuvwxyz", str_lower(s))
+
+pub fn is_digit(s: string) -> bool:
+    if len(s) != 1:
+        return false
+    return str_contains("0123456789", s)
+
+# Sum of the character codes of every character in `s`.
+pub fn ascii_sum(s: string) -> i64:
+    var sum = 0
+    var i = 0
+    while i < len(s):
+        sum = sum + char_code(char_at(s, i))
+        i = i + 1
+    return sum

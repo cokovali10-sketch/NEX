@@ -4,6 +4,18 @@
 
 ### Added
 
+- 21 new standard-library functions across `libs/`: `mathx` (min3, max3,
+  is_even, is_odd, sum_range, mean, count_digits, lerp), `strx` (str_pad_left,
+  str_pad_right, str_replace, str_count, is_alpha, is_digit, ascii_sum), and the
+  new `seq` module for `[i64]` (sum, max, min, count, index_of, reverse). All
+  exercised by `libs/examples/functions20.nex` and verified by running it.
+
+### Fixed
+
+- Diagnostic rendering no longer panics when a span (e.g. from an imported
+  module, offset by the driver) exceeds the source length; the caret range is
+  clamped to the source bounds.
+
 - f-string interpolation is covered by tests and documented: `f"hello {name}"`,
   `f"sum = {x + 1}"` splice expressions (via `to_string`) into a string. String
   slicing `s[a..b]` (the `slice` builtin) is likewise covered by a test.

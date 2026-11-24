@@ -1,0 +1,42 @@
+use mathx from "../mathx.nex"
+use strx from "../strx.nex"
+use seq from "../seq.nex"
+
+fn main():
+    println("== mathx ==")
+    println("min3(4,2,7)      = " + to_string(mathx.min3(4, 2, 7)))
+    println("max3(4,9,2)      = " + to_string(mathx.max3(4, 9, 2)))
+    println("is_even(10)       = " + to_string(mathx.is_even(10)))
+    println("is_odd(7)         = " + to_string(mathx.is_odd(7)))
+    println("sum_range(1,5)    = " + to_string(mathx.sum_range(1, 5)))
+    println("mean(10,20)       = " + to_string(mathx.mean(10, 20)))
+    println("count_digits(12345) = " + to_string(mathx.count_digits(12345)))
+    println("lerp(0,100,50)    = " + to_string(mathx.lerp(0, 100, 50)))
+
+    println("== strx ==")
+    println("pad_left(7,3,0)    = " + strx.str_pad_left("7", 3, "0"))
+    println("pad_right(7,3,.)   = " + strx.str_pad_right("7", 3, "."))
+    println("replace(a-b-c,-,+) = " + strx.str_replace("a-b-c", "-", "+"))
+    println("count(banana,an)   = " + to_string(strx.str_count("banana", "an")))
+    println("is_alpha(A)        = " + to_string(strx.is_alpha("A")))
+    println("is_digit(5)        = " + to_string(strx.is_digit("5")))
+    println("ascii_sum(AB)      = " + to_string(strx.ascii_sum("AB")))
+
+    println("== seq ==")
+    var a: [i64] = []
+    push(a, 5)
+    push(a, 3)
+    push(a, 9)
+    push(a, 3)
+    println("sum   = " + to_string(seq.sum(a)))
+    println("max   = " + to_string(seq.max(a)))
+    println("min   = " + to_string(seq.min(a)))
+    println("count(3) = " + to_string(seq.count(a, 3)))
+    println("index_of(9) = " + to_string(seq.index_of(a, 9)))
+    var r = seq.reverse(a)
+    var i = 0
+    var line = ""
+    while i < len(r):
+        line = line + to_string(r[i])
+        i = i + 1
+    println("reverse = " + line)
