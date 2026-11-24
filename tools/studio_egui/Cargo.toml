@@ -1,0 +1,17 @@
+[workspace]
+
+[package]
+name = "nex-studio-egui"
+version = "1.0.1"
+edition = "2021"
+rust-version = "1.85"
+license = "MIT"
+
+[[bin]]
+name = "nex-studio-egui"
+path = "src/main.rs"
+
+[dependencies]
+eframe = { version = "0.34", default-features = false, features = ["glow", "default_fonts", "accesskit"] }
+egui_code_editor = "0.2"
+nex-driver = { path = "../../compiler/driver" }
