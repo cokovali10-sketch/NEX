@@ -135,6 +135,9 @@ version = "1.0.1"
 [[package]]
 name = "nex-studio-native"
 version = "1.0.1"
+dependencies = [
+ "nex-driver",
+]
 
 [[package]]
 name = "proc-macro2"

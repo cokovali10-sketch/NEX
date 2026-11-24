@@ -6,10 +6,11 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
-description = "NEX Studio (native) - a desktop editor for NEX built in Rust with the Win32 API (no external crates)"
+description = "NEX Studio (native) - a desktop editor for NEX built in Rust with the Win32 API, compiling in-process"
 
 [[bin]]
 name = "nex-studio-native"
 path = "src/main.rs"
 
 [dependencies]
+nex-driver = { path = "../../compiler/driver" }

@@ -1,15 +1,16 @@
 //! NEX Studio (native) — a real desktop editor for the NEX language.
 //!
-//! Pure Rust + the Win32 API via FFI: no external crates, so it builds reliably
-//! on this machine. It edits NEX source in a multiline edit control; on Run it
-//! writes the buffer to a temp file, invokes the `nexc` compiler (NEX's own
-//! Rust compiler) to build an executable, runs it, and shows stdout/stderr.
-//! The runtime it exercises is the C `nex_rt.c`, so the app is Rust driving a
-//! Rust + C toolchain — exactly the "our language + Rust + C/C++" stack.
+//! Pure Rust + the Win32 API via FFI: no external GUI crates. Unlike a web
+//! editor, this is a native window. It edits NEX source in a multiline edit
+//! control; on Run it compiles **in process** (linking NEX's own Rust compiler,
+//! `nex_driver`) and then runs the produced executable. Compiling in-process
+//! avoids spawning the `nexc` driver as a child process.
+//!
+//! Stack: Rust UI host + NEX compiler (Rust) + C runtime (`nex_rt.c`) — i.e.
+//! "our language + Rust + C".
 
 #![windows_subsystem = "windows"]
-// Win32 FFI is inherently unsafe and uses raw pointers / global mutable state;
-// the standard lints do not apply to this style of code.
+// Win32 FFI is inherently unsafe and uses raw pointers / global mutable state.
 #![allow(clippy::missing_safety_doc)]
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 #![allow(clippy::too_many_arguments)]
@@ -20,14 +21,14 @@
 #![allow(clippy::single_match)]
 #![allow(clippy::field_reassign_with_default)]
 #![allow(clippy::upper_case_acronyms)]
-#![allow(clippy::type_complexity)]
-#![allow(clippy::unnecessary_cast)]
 #![allow(clippy::manual_c_str_literals)]
+#![allow(clippy::unnecessary_cast)]
 #![allow(unsafe_op_in_unsafe_fn)]
 
 use std::ffi::c_void;
-use std::path::PathBuf;
 use std::process::Command;
+
+use nex_driver::{CompileOptions, compile_source};
 
 type HWND = isize;
 type HINSTANCE = isize;
@@ -124,22 +125,30 @@ const WM_SIZE: u32 = 0x0005;
 const WM_COMMAND: u32 = 0x0111;
 const WM_SETFONT: u32 = 0x0030;
 
+const EM_LINEINDEX: u32 = 0x00BB;
+const EM_LINEFROMCHAR: u32 = 0x00C9;
+const EN_CHANGE: u32 = 0x0300;
+
 const SW_SHOW: i32 = 5;
 const ANSI_FIXED_FONT: i32 = 11;
 const IDC_ARROW: usize = 32512;
 
 const BTN_RUN: usize = 1;
+const EDIT_ID: usize = 0;
+const STATUS_ID: usize = 2;
 
 struct Controls {
     edit: HWND,
     output: HWND,
     run: HWND,
+    status: HWND,
 }
 
 static mut CONTROLS: Controls = Controls {
     edit: 0,
     output: 0,
     run: 0,
+    status: 0,
 };
 
 fn to_cstring(text: &str) -> Vec<u8> {
@@ -164,47 +173,95 @@ unsafe fn get_text(hwnd: HWND) -> String {
     String::from_utf8_lossy(&buf).to_string()
 }
 
-/// Writes the code, compiles with `nexc`, runs it, and returns combined output.
-fn run_code(code: &str, nexc: &PathBuf) -> String {
+/// Line (1-based) of a byte offset within `source`.
+fn line_of(source: &str, offset: usize) -> usize {
+    source
+        .as_bytes()
+        .iter()
+        .take(offset.min(source.len()))
+        .filter(|byte| **byte == b'\n')
+        .count()
+        + 1
+}
+
+/// Compiles the code in process and runs the produced executable.
+fn run_code(code: &str) -> String {
     let dir = std::env::temp_dir().join("nex_studio_native");
     let _ = std::fs::remove_dir_all(&dir);
     let _ = std::fs::create_dir_all(&dir);
-    let source = dir.join("main.nex");
-    if let Err(error) = std::fs::write(&source, code) {
+    let source_path = dir.join("main.nex");
+    if let Err(error) = std::fs::write(&source_path, code) {
         return format!("failed to write source: {error}\n");
     }
 
-    let compile = Command::new(nexc)
-        .arg("main.nex")
-        .arg("--emit")
-        .arg("exe")
-        .current_dir(&dir)
-        .output();
-
-    let compile = match compile {
-        Ok(output) => output,
-        Err(error) => return format!("failed to run compiler: {error}\n"),
+    let options = CompileOptions {
+        build_dir: Some(dir.clone()),
+        ..CompileOptions::default()
     };
 
-    let mut out = String::from_utf8_lossy(&compile.stdout).to_string();
-    out.push_str(&String::from_utf8_lossy(&compile.stderr));
+    let result = compile_source("main.nex", code.to_string(), options);
+    let result = match result {
+        Ok(result) => result,
+        Err(error) => return format!("compile error: {error}\n"),
+    };
 
-    let exe = dir
-        .join("build")
-        .join("debug")
-        .join(if cfg!(windows) { "main.exe" } else { "main" });
+    // Render diagnostics with line numbers.
+    let mut out = String::new();
+    for diagnostic in &result.diagnostics {
+        let span_start = diagnostic.span.map(|span| span.start).unwrap_or(0);
+        let line = line_of(code, span_start);
+        let label = if diagnostic.is_error() {
+            "error"
+        } else {
+            "warning"
+        };
+        out.push_str(&format!(
+            "{label} [{}] line {line}: {}\n",
+            diagnostic.code, diagnostic.message
+        ));
+    }
 
-    if !compile.status.success() || !exe.is_file() {
+    if result.has_errors() {
         return out;
     }
 
-    if let Ok(run) = Command::new(&exe).current_dir(&dir).output() {
-        out.push_str(&String::from_utf8_lossy(&run.stdout));
-        out.push_str(&String::from_utf8_lossy(&run.stderr));
-    } else {
-        out.push_str("\nfailed to run executable\n");
+    let Some(artifacts) = result.artifacts else {
+        out.push_str("no artifacts produced\n");
+        return out;
+    };
+    let Some(exe) = artifacts.executable else {
+        out.push_str("no executable produced\n");
+        return out;
+    };
+
+    match Command::new(&exe).current_dir(&dir).output() {
+        Ok(run) => {
+            out.push_str(&String::from_utf8_lossy(&run.stdout));
+            let err = String::from_utf8_lossy(&run.stderr);
+            if !err.is_empty() {
+                out.push_str(&err);
+            }
+        }
+        Err(error) => out.push_str(&format!("\nfailed to run executable: {error}\n")),
     }
     out
+}
+
+/// Updates the status label with the caret line/column.
+unsafe fn update_caret() {
+    let edit = CONTROLS.edit;
+    if edit == 0 {
+        return;
+    }
+    let caret = SendMessageA(edit, EM_LINEINDEX, (-1isize) as WPARAM, 0) as i32;
+    let caret = caret.max(0);
+    let line = SendMessageA(edit, EM_LINEFROMCHAR, caret as WPARAM, 0) as i32;
+    let line_start = SendMessageA(edit, EM_LINEINDEX, line as WPARAM, 0) as i32;
+    let col = caret - line_start;
+    set_text(
+        CONTROLS.status,
+        &format!("Ln {}, Col {}   UTF-8   4 spaces", line + 1, col + 1),
+    );
 }
 
 unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESULT {
@@ -213,16 +270,11 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -
             let id = (w & 0xFFFF) as usize;
             let code = (w >> 16) as u32;
             if id == BTN_RUN && code == 0 {
-                if let Some(nexc) = locate_nexc() {
-                    let code = get_text(CONTROLS.edit);
-                    let output = run_code(&code, &nexc);
-                    set_text(CONTROLS.output, &output);
-                } else {
-                    set_text(
-                        CONTROLS.output,
-                        "compiler `nexc` not found. Build it: cargo build -p nex-driver\n",
-                    );
-                }
+                let code = get_text(CONTROLS.edit);
+                let output = run_code(&code);
+                set_text(CONTROLS.output, &output);
+            } else if id == EDIT_ID && code == EN_CHANGE {
+                update_caret();
             }
             0
         }
@@ -231,11 +283,20 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -
             let height = ((l >> 16) & 0xFFFF) as i32;
             let run_h = 34;
             let out_h = 180;
-            let edit_h = height - run_h - out_h - 24;
+            let status_h = 22;
+            let edit_h = height - run_h - out_h - status_h - 32;
             if CONTROLS.edit != 0 {
                 MoveWindow(CONTROLS.edit, 8, 8, width - 16, edit_h, 1);
                 MoveWindow(CONTROLS.output, 8, 8 + edit_h + 8, width - 16, out_h, 1);
                 MoveWindow(CONTROLS.run, 8, 8 + edit_h + 8 + out_h + 6, 120, 28, 1);
+                MoveWindow(
+                    CONTROLS.status,
+                    140,
+                    8 + edit_h + 8 + out_h + 6,
+                    width - 156,
+                    28,
+                    1,
+                );
             }
             0
         }
@@ -245,23 +306,6 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -
         }
         _ => DefWindowProcA(hwnd, msg, w, l),
     }
-}
-
-fn locate_nexc() -> Option<PathBuf> {
-    if let Ok(path) = std::env::var("NEXC") {
-        let path = PathBuf::from(path);
-        if path.is_file() {
-            return Some(path);
-        }
-    }
-    let exe_name = if cfg!(windows) { "nexc.exe" } else { "nexc" };
-    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    [
-        manifest.join("../../target/debug").join(exe_name),
-        manifest.join("../../target/release").join(exe_name),
-    ]
-    .into_iter()
-    .find(|candidate| candidate.is_file())
 }
 
 const EXAMPLE: &str = "struct Item:
@@ -277,14 +321,13 @@ fn main():
     for it in cart:
         println(it.name + \": \" + to_string(it.price))
         total = total + it.price
-    println(\"total: \" + to_string(total))
+    println(f\"items: {len(cart)}, total: {total}\")
 ";
 
 fn main() {
     unsafe {
         let instance = GetModuleHandleA(std::ptr::null());
         let class_name = b"NexStudioWnd\0";
-
         let cursor = LoadCursorA(instance, IDC_ARROW as *const u8);
 
         let wc = WNDCLASSA {
@@ -321,8 +364,8 @@ fn main() {
         }
 
         let font = GetStockObject(ANSI_FIXED_FONT);
-
         let class_edit = b"EDIT\0";
+
         let edit = CreateWindowExA(
             0,
             class_edit.as_ptr(),
@@ -340,7 +383,7 @@ fn main() {
             400,
             300,
             hwnd,
-            0,
+            EDIT_ID as HMENU,
             instance,
             std::ptr::null_mut(),
         );
@@ -379,10 +422,32 @@ fn main() {
         );
         SendMessageA(run, WM_SETFONT, font as WPARAM, 1);
 
-        CONTROLS = Controls { edit, output, run };
+        let class_status = b"STATIC\0";
+        let status = CreateWindowExA(
+            0,
+            class_status.as_ptr(),
+            b"Ln 1, Col 1\0".as_ptr(),
+            WS_CHILD | WS_VISIBLE | 0x00000001, // SS_LEFT
+            140,
+            510,
+            400,
+            28,
+            hwnd,
+            STATUS_ID as HMENU,
+            instance,
+            std::ptr::null_mut(),
+        );
+
+        CONTROLS = Controls {
+            edit,
+            output,
+            run,
+            status,
+        };
 
         ShowWindow(hwnd, SW_SHOW);
         UpdateWindow(hwnd);
+        update_caret();
 
         let mut msg: MSG = std::mem::zeroed();
         while GetMessageA(&mut msg, 0, 0, 0) > 0 {
