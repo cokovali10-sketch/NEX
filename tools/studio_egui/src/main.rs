@@ -3,9 +3,12 @@
 //! Rust + egui (GPU) + egui_code_editor (syntax-highlighted editable code).
 //! Compiles NEX in process (nex_driver) and runs the result.
 
+#![allow(deprecated)]
+
 use eframe::egui;
 use egui::Color32;
 use egui_code_editor::{CodeEditor, ColorTheme, Syntax};
+use std::time::Instant;
 
 const EXAMPLE: &str = r#"struct Item:
     name: string
@@ -29,8 +32,8 @@ const C_BG: Color32 = Color32::from_rgb(43, 43, 43);
 const C_PANEL: Color32 = Color32::from_rgb(49, 51, 53);
 const C_TOOL: Color32 = Color32::from_rgb(60, 63, 65);
 const C_GREEN: Color32 = Color32::from_rgb(106, 154, 76);
-const C_RED: Color32 = Color32::from_rgb(230, 96, 96);
-const C_YELLOW: Color32 = Color32::from_rgb(210, 168, 90);
+const C_BLUE: Color32 = Color32::from_rgb(0, 122, 204);
+const C_ACCENT: Color32 = Color32::from_rgb(54, 88, 128);
 
 fn nex_syntax() -> Syntax {
     Syntax::new("NEX")
@@ -50,7 +53,6 @@ fn nex_syntax() -> Syntax {
 enum Activity {
     Files,
     Search,
-    Run,
 }
 
 struct Studio {
@@ -61,6 +63,11 @@ struct Studio {
     active: usize,
     activity: Activity,
     find: String,
+    font_size: f32,
+    compile_time: Option<f64>,
+    cursor_line: usize,
+    cursor_col: usize,
+    show_console: bool,
 }
 
 impl Studio {
@@ -76,22 +83,33 @@ impl Studio {
                 include_str!("../../../libs/strx.nex").to_string(),
             ),
             (
-                "libs/examples/demo.nex".to_string(),
-                include_str!("../../../libs/examples/demo.nex").to_string(),
+                "libs/seq.nex".to_string(),
+                include_str!("../../../libs/seq.nex").to_string(),
+            ),
+            (
+                "libs/examples/functions20.nex".to_string(),
+                include_str!("../../../libs/examples/functions20.nex").to_string(),
             ),
         ];
         Self {
             code: files[0].1.clone(),
-            output: String::new(),
+            output: "Ready. Press Run (Ctrl+Enter) to compile and execute.\n".to_string(),
             status: "ready".to_string(),
             files,
             active: 0,
             activity: Activity::Files,
             find: String::new(),
+            font_size: 14.0,
+            compile_time: None,
+            cursor_line: 1,
+            cursor_col: 1,
+            show_console: true,
         }
     }
 
     fn run(&mut self) {
+        self.show_console = true;
+        let started = Instant::now();
         self.status = "compiling…".to_string();
         self.output.clear();
 
@@ -112,6 +130,7 @@ impl Studio {
             Err(error) => {
                 self.output = format!("compile error: {error}\n");
                 self.status = "error".to_string();
+                self.compile_time = Some(started.elapsed().as_secs_f64());
                 return;
             }
         };
@@ -137,6 +156,7 @@ impl Studio {
         if result.has_errors() {
             self.output = out;
             self.status = "error".to_string();
+            self.compile_time = Some(started.elapsed().as_secs_f64());
             return;
         }
         let Some(artifacts) = result.artifacts else {
@@ -156,14 +176,34 @@ impl Studio {
                 if !err.is_empty() {
                     out.push_str(&err);
                 }
-                self.status = format!("ok (exit {})", run.status.code().unwrap_or(0));
+                let code = run.status.code().unwrap_or(0);
+                self.status = if code == 0 {
+                    "ok".to_string()
+                } else {
+                    format!("exit {code}")
+                };
             }
             Err(error) => {
                 out.push_str(&format!("\nfailed to run executable: {error}\n"));
                 self.status = "run error".to_string();
             }
         }
+        self.compile_time = Some(started.elapsed().as_secs_f64());
         self.output = out;
+    }
+
+    fn switch_to(&mut self, index: usize) {
+        persist_current(&mut self.files, self.active, &self.code);
+        self.active = index;
+        self.code = self.files[index].1.clone();
+        self.cursor_line = 1;
+        self.cursor_col = 1;
+    }
+}
+
+fn persist_current(files: &mut [(String, String)], active: usize, code: &str) {
+    if let Some(slot) = files.get_mut(active) {
+        slot.1 = code.to_string();
     }
 }
 
@@ -172,8 +212,6 @@ fn setup_style(ctx: &egui::Context) {
     s.visuals = egui::Visuals::dark();
 
     let border = Color32::from_rgb(72, 72, 72);
-    let accent = Color32::from_rgb(54, 88, 128);
-
     s.visuals.panel_fill = C_BG;
     s.visuals.window_fill = C_BG;
     s.visuals.faint_bg_color = C_PANEL;
@@ -183,9 +221,9 @@ fn setup_style(ctx: &egui::Context) {
     s.visuals.widgets.inactive.fg_stroke = egui::Stroke::new(1.0f32, border);
     s.visuals.widgets.hovered.bg_fill = Color32::from_rgb(75, 78, 80);
     s.visuals.widgets.hovered.fg_stroke = egui::Stroke::new(1.0f32, Color32::from_rgb(96, 99, 102));
-    s.visuals.widgets.active.bg_fill = accent;
-    s.visuals.widgets.active.fg_stroke = egui::Stroke::new(1.0f32, accent);
-    s.visuals.selection.bg_fill = accent;
+    s.visuals.widgets.active.bg_fill = C_ACCENT;
+    s.visuals.widgets.active.fg_stroke = egui::Stroke::new(1.0f32, C_ACCENT);
+    s.visuals.selection.bg_fill = C_ACCENT;
     s.visuals.selection.stroke = egui::Stroke::new(1.0f32, Color32::from_rgb(88, 166, 255));
     s.visuals.window_stroke = egui::Stroke::new(1.0f32, border);
     s.visuals.override_text_color = Some(C_TEXT);
@@ -203,14 +241,12 @@ fn setup_style(ctx: &egui::Context) {
     ctx.set_global_style(s);
 }
 
-/// Draws a small activity-bar icon into `rect`.
 fn draw_activity_icon(ui: &egui::Ui, rect: egui::Rect, kind: Activity, color: Color32) {
     let p = ui.painter();
     let c = rect.center();
     let stroke = egui::Stroke::new(1.6f32, color);
     match kind {
         Activity::Files => {
-            // two stacked "documents"
             let r1 = egui::Rect::from_min_size(
                 egui::pos2(c.x - 9.0, c.y - 10.0),
                 egui::vec2(14.0, 18.0),
@@ -233,8 +269,7 @@ fn draw_activity_icon(ui: &egui::Ui, rect: egui::Rect, kind: Activity, color: Co
             }
         }
         Activity::Search => {
-            let center = egui::pos2(c.x - 2.0, c.y - 2.0);
-            p.circle_stroke(center, 7.0, stroke);
+            p.circle_stroke(egui::pos2(c.x - 2.0, c.y - 2.0), 7.0, stroke);
             p.line_segment(
                 [
                     egui::pos2(c.x + 3.0, c.y + 3.0),
@@ -243,14 +278,6 @@ fn draw_activity_icon(ui: &egui::Ui, rect: egui::Rect, kind: Activity, color: Co
                 stroke,
             );
         }
-        Activity::Run => {
-            let pts = vec![
-                egui::pos2(c.x - 6.0, c.y - 9.0),
-                egui::pos2(c.x - 6.0, c.y + 9.0),
-                egui::pos2(c.x + 9.0, c.y),
-            ];
-            p.add(egui::Shape::convex_polygon(pts, color, egui::Stroke::NONE));
-        }
     }
 }
 
@@ -258,28 +285,50 @@ impl eframe::App for Studio {
     fn ui(&mut self, _ui: &mut egui::Ui, _frame: &mut eframe::Frame) {}
 
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Keyboard shortcuts.
+        if ctx
+            .input(|i| i.key_pressed(egui::Key::Enter) && (i.modifiers.ctrl || i.modifiers.command))
+        {
+            self.run();
+        }
+        if ctx.input(|i| {
+            (i.key_pressed(egui::Key::Equals) || i.key_pressed(egui::Key::Plus))
+                && (i.modifiers.ctrl || i.modifiers.command)
+        }) {
+            self.font_size = (self.font_size + 1.0).min(28.0);
+        }
+        if ctx
+            .input(|i| i.key_pressed(egui::Key::Minus) && (i.modifiers.ctrl || i.modifiers.command))
+        {
+            self.font_size = (self.font_size - 1.0).max(9.0);
+        }
+
         // Menu bar.
         egui::Panel::top("menu_bar").show(ctx, |ui| {
             egui::MenuBar::new().ui(ui, |ui| {
                 ui.menu_button("File", |ui| {
-                    if ui.button("New").clicked() {
-                        self.code.clear();
-                        self.output.clear();
+                    if ui.button("New file").clicked() {
+                        self.files.push(("untitled.nex".to_string(), String::new()));
+                        self.switch_to(self.files.len() - 1);
                         ui.close_menu();
                     }
                     if ui.button("Load example").clicked() {
                         self.code = EXAMPLE.to_string();
-                        self.files[self.active].1 = self.code.clone();
+                        persist_current(&mut self.files, self.active, &self.code);
                         ui.close_menu();
                     }
                 });
                 ui.menu_button("Run", |ui| {
-                    if ui.button("Run").clicked() {
+                    if ui.button("Run  (Ctrl+Enter)").clicked() {
                         self.run();
                         ui.close_menu();
                     }
                 });
                 ui.menu_button("View", |ui| {
+                    if ui.button("Toggle console").clicked() {
+                        self.show_console = !self.show_console;
+                        ui.close_menu();
+                    }
                     if ui.button("Clear console").clicked() {
                         self.output.clear();
                         ui.close_menu();
@@ -294,11 +343,16 @@ impl eframe::App for Studio {
         // Status bar.
         egui::Panel::bottom("status_bar").show(ctx, |ui| {
             egui::Frame::new()
-                .fill(Color32::from_rgb(0, 122, 204))
+                .fill(C_BLUE)
                 .inner_margin(egui::Margin::symmetric(10, 3))
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
                         ui.colored_label(Color32::WHITE, "main");
+                        ui.separator();
+                        ui.colored_label(
+                            Color32::WHITE,
+                            format!("Ln {}, Col {}", self.cursor_line, self.cursor_col),
+                        );
                         ui.separator();
                         ui.colored_label(Color32::WHITE, "UTF-8");
                         ui.separator();
@@ -306,7 +360,11 @@ impl eframe::App for Studio {
                         ui.separator();
                         ui.colored_label(Color32::WHITE, "NEX");
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            ui.colored_label(Color32::WHITE, &self.status);
+                            let msg = match self.compile_time {
+                                Some(t) => format!("{}  ·  {:.2}s", self.status, t),
+                                None => self.status.clone(),
+                            };
+                            ui.colored_label(Color32::WHITE, msg);
                         });
                     });
                 });
@@ -320,22 +378,19 @@ impl eframe::App for Studio {
                     .fill(Color32::from_rgb(30, 30, 30))
                     .inner_margin(egui::Margin::symmetric(4, 6))
                     .show(ui, |ui| {
-                        for kind in [Activity::Files, Activity::Search, Activity::Run] {
+                        for kind in [Activity::Files, Activity::Search] {
                             let (rect, resp) = ui
                                 .allocate_exact_size(egui::vec2(40.0, 44.0), egui::Sense::click());
                             let active = self.activity == kind;
                             if resp.clicked() {
                                 self.activity = kind;
-                                if kind == Activity::Run {
-                                    self.run();
-                                }
                             }
                             let color = if active { Color32::WHITE } else { C_MUTED };
                             if active {
                                 ui.painter().rect_filled(
                                     rect,
                                     egui::CornerRadius::same(4),
-                                    Color32::from_rgb(54, 88, 128),
+                                    C_ACCENT,
                                 );
                             }
                             draw_activity_icon(ui, rect, kind, color);
@@ -343,7 +398,7 @@ impl eframe::App for Studio {
                     });
             });
 
-        // Sidebar (project tree or search).
+        // Sidebar.
         egui::Panel::left("files")
             .resizable(true)
             .default_size(220.0)
@@ -379,23 +434,21 @@ impl eframe::App for Studio {
                         } else {
                             ui.colored_label(C_MUTED, "PROJECT");
                             ui.add_space(4.0);
-                            // Root row.
                             ui.colored_label(C_TEXT, "▾  NEX");
-                            for (index, (name, _)) in self.files.iter().enumerate() {
+                            let file_names: Vec<String> =
+                                self.files.iter().map(|(n, _)| n.clone()).collect();
+                            for (index, name) in file_names.iter().enumerate() {
                                 let selected = self.active == index;
                                 let indent = if name.contains('/') { 16.0 } else { 4.0 };
-                                ui.add_space(2.0);
                                 ui.horizontal(|ui| {
                                     ui.add_space(indent);
-                                    let file_icon =
-                                        if name.ends_with(".nex") { "◆" } else { "•" };
-                                    let text = egui::RichText::new(format!("{file_icon} {name}"))
+                                    let icon = if name.ends_with(".nex") { "◆" } else { "•" };
+                                    let text = egui::RichText::new(format!("{icon} {name}"))
                                         .monospace()
                                         .size(13.0)
                                         .color(if selected { Color32::WHITE } else { C_TEXT });
                                     if ui.selectable_label(selected, text).clicked() {
-                                        self.active = index;
-                                        self.code = self.files[index].1.clone();
+                                        self.switch_to(index);
                                     }
                                 });
                             }
@@ -403,93 +456,123 @@ impl eframe::App for Studio {
                     });
             });
 
-        // Central: tab bar + editor (fills) + colored console.
+        // Central.
         egui::CentralPanel::default().show(ctx, |ui| {
-            // Tab header.
+            // Toolbar.
+            ui.horizontal(|ui| {
+                ui.add_space(4.0);
+                if ui
+                    .add(
+                        egui::Button::new("▶ Run")
+                            .fill(C_GREEN)
+                            .min_size(egui::vec2(84.0, 26.0)),
+                    )
+                    .clicked()
+                {
+                    self.run();
+                }
+                ui.separator();
+                // Font size controls.
+                if ui.small_button("A-").clicked() {
+                    self.font_size = (self.font_size - 1.0).max(9.0);
+                }
+                if ui.small_button("A+").clicked() {
+                    self.font_size = (self.font_size + 1.0).min(28.0);
+                }
+                ui.separator();
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.button("Example").clicked() {
+                        self.code = EXAMPLE.to_string();
+                        persist_current(&mut self.files, self.active, &self.code);
+                    }
+                });
+            });
+            ui.add_space(2.0);
+
+            // Tab bar.
             egui::Frame::new()
                 .fill(C_TOOL)
-                .inner_margin(egui::Margin::symmetric(6, 5))
+                .inner_margin(egui::Margin::symmetric(4, 3))
                 .show(ui, |ui| {
-                    ui.horizontal(|ui| {
-                        // Active tab.
-                        egui::Frame::new()
-                            .fill(C_BG)
-                            .inner_margin(egui::Margin::symmetric(14, 6))
-                            .show(ui, |ui| {
-                                let name = self.files[self.active].0.clone();
-                                ui.colored_label(
-                                    C_TEXT,
-                                    egui::RichText::new(format!("● {name}")).monospace(),
-                                );
-                            });
-                        ui.colored_label(C_MUTED, "✕");
+                    ui.horizontal_wrapped(|ui| {
+                        let file_names: Vec<String> =
+                            self.files.iter().map(|(n, _)| n.clone()).collect();
+                        for (index, name) in file_names.iter().enumerate() {
+                            let active = self.active == index;
+                            egui::Frame::new()
+                                .fill(if active { C_BG } else { C_TOOL })
+                                .inner_margin(egui::Margin::symmetric(10, 4))
+                                .show(ui, |ui| {
+                                    ui.horizontal(|ui| {
+                                        let text = egui::RichText::new(format!("● {name}"))
+                                            .monospace()
+                                            .color(if active { Color32::WHITE } else { C_MUTED });
+                                        if ui.selectable_label(active, text).clicked() {
+                                            self.switch_to(index);
+                                        }
+                                    });
+                                });
+                        }
                     });
                 });
             ui.add_space(2.0);
 
-            // Editor fills remaining height.
-            let console_h = 160.0;
+            // Editor.
+            let console_reserve = if self.show_console { 170.0 } else { 20.0 };
             let avail = ui.available_height();
-            let rows = (((avail - console_h - 16.0) / 20.0).floor() as usize).max(6);
+            let rows = (((avail - console_reserve - 14.0) / (self.font_size * 1.42)).floor()
+                as usize)
+                .max(5);
             let mut editor = CodeEditor::default()
                 .id_source("main")
                 .with_theme(ColorTheme::SONOKAI)
-                .with_fontsize(14.0)
+                .with_fontsize(self.font_size)
                 .with_rows(rows)
                 .with_numlines(true)
                 .with_syntax(nex_syntax());
             let response = editor.show(ui, &mut self.code);
             if response.response.changed() {
-                self.files[self.active].1 = self.code.clone();
+                persist_current(&mut self.files, self.active, &self.code);
             }
+            // Cursor line/col.
+            let char_off = response.cursor_range.map(|r| r.primary.index).unwrap_or(0);
+            let offset = self
+                .code
+                .char_indices()
+                .nth(char_off)
+                .map(|(b, _)| b)
+                .unwrap_or(self.code.len());
+            let bytes = &self.code.as_bytes()[..offset];
+            let line = bytes.iter().filter(|b| **b == b'\n').count() + 1;
+            let col = bytes.iter().rev().take_while(|b| **b != b'\n').count() + 1;
+            self.cursor_line = line;
+            self.cursor_col = col;
 
-            ui.add_space(5.0);
-            ui.separator();
-            ui.horizontal(|ui| {
-                ui.colored_label(C_MUTED, "CONSOLE");
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.small_button("Clear").clicked() {
-                        self.output.clear();
-                    }
+            if self.show_console {
+                ui.add_space(5.0);
+                ui.separator();
+                ui.horizontal(|ui| {
+                    ui.colored_label(C_MUTED, "CONSOLE");
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui.small_button("Clear").clicked() {
+                            self.output.clear();
+                        }
+                    });
                 });
-            });
-
-            // Colored console (errors red, warnings yellow).
-            let mut job = egui::text::LayoutJob::default();
-            let mono = egui::FontId::monospace(13.0);
-            for line in self.output.lines() {
-                let color = if line.starts_with("error") {
-                    C_RED
-                } else if line.starts_with("warning") {
-                    C_YELLOW
-                } else {
-                    C_TEXT
-                };
-                job.append(
-                    line,
-                    0.0,
-                    egui::TextFormat {
-                        color,
-                        font_id: mono.clone(),
-                        ..Default::default()
-                    },
-                );
-                job.append(
-                    "\n",
-                    0.0,
-                    egui::TextFormat {
-                        color,
-                        font_id: mono.clone(),
-                        ..Default::default()
-                    },
-                );
+                egui::ScrollArea::vertical()
+                    .auto_shrink([false, false])
+                    .max_height(160.0)
+                    .show(ui, |ui| {
+                        ui.add(
+                            egui::TextEdit::multiline(&mut self.output)
+                                .font(egui::TextStyle::Monospace)
+                                .desired_width(f32::INFINITY)
+                                .desired_rows(6)
+                                .interactive(false)
+                                .text_color(C_TEXT),
+                        );
+                    });
             }
-            egui::ScrollArea::vertical()
-                .auto_shrink([false, false])
-                .max_height(console_h)
-                .show(ui, |ui| {
-                    ui.add(egui::Label::new(job).wrap());
-                });
         });
     }
 }
@@ -498,7 +581,7 @@ fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([1200.0, 800.0])
-            .with_min_inner_size([800.0, 520.0])
+            .with_min_inner_size([820.0, 540.0])
             .with_title("NEX Studio"),
         ..Default::default()
     };
