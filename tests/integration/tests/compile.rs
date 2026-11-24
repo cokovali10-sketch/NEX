@@ -2597,12 +2597,31 @@ fn reassignment_revives_a_moved_variable() {
 }
 
 #[test]
-fn clone_string_keeps_source_usable() {
+fn string_slice_with_range() {
+    let (stdout, stderr, code) =
+        run_source("fn main():\n    var s = \"hello world\"\n    println(s[0..5])\n");
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "hello\n");
+}
+
+#[test]
+fn storing_a_reference_is_rejected() {
+    let result = compile("fn main():\n    var x = 1\n    var r = &mut x\n    println(r)\n");
+    assert!(result.has_errors());
+    assert!(
+        result.diagnostics.iter().any(|d| d.code == "NXS056"),
+        "{:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn passing_a_reference_directly_is_allowed() {
     let (stdout, stderr, code) = run_source(
-        "fn main():\n    var a = \"hi\"\n    var b = clone(a)\n    println(a)\n    println(b)\n",
+        "fn bump(r: &mut i64):\n    *r = *r + 1\n\nfn main():\n    var x = 5\n    bump(&mut x)\n    println(x)\n",
     );
     assert_eq!(code, 0, "stderr: {stderr}");
-    assert_eq!(stdout, "hi\nhi\n");
+    assert_eq!(stdout, "6\n");
 }
 
 #[test]
@@ -2703,12 +2722,4 @@ fn fstring_interpolates_expressions() {
     );
     assert_eq!(code, 0, "stderr: {stderr}");
     assert_eq!(stdout, "hello NEX\nsum = 43\n");
-}
-
-#[test]
-fn string_slice_with_range() {
-    let (stdout, stderr, code) =
-        run_source("fn main():\n    var s = \"hello world\"\n    println(s[0..5])\n");
-    assert_eq!(code, 0, "stderr: {stderr}");
-    assert_eq!(stdout, "hello\n");
 }

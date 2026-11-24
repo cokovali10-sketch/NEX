@@ -109,6 +109,9 @@ impl<'a> MoveChecker<'a> {
             } => {
                 self.check_expr_reads(init);
                 self.move_if_ident(init);
+                if matches!(init.kind, ExprKind::Borrow { .. }) {
+                    self.store_borrow_error(statement.span);
+                }
                 // New bindings are live; record their declared type when known.
                 let declared = self.analysis.decl_type(statement.span);
                 if let Some(names) = names {
@@ -124,6 +127,9 @@ impl<'a> MoveChecker<'a> {
             StmtKind::Assign { name, value } => {
                 self.check_expr_reads(value);
                 self.move_if_ident(value);
+                if matches!(value.kind, ExprKind::Borrow { .. }) {
+                    self.store_borrow_error(statement.span);
+                }
                 // Assigning to a binding re-initialises it: it becomes live again.
                 self.reinit(name);
             }
@@ -341,6 +347,17 @@ impl<'a> MoveChecker<'a> {
                 return;
             }
         }
+    }
+
+    /// Rejects storing a reference in a variable. Without lifetimes, a stored
+    /// reference could outlive its referent, so (for now) references must be
+    /// passed directly to a function call.
+    fn store_borrow_error(&mut self, span: nex_diagnostics::Span) {
+        self.diagnostics.push(nex_diagnostics::Diagnostic::error(
+            "NXS056",
+            "cannot store a reference in a variable; lifetimes are not implemented yet — pass it directly to a function",
+            span,
+        ));
     }
 
     /// Rejects `return &local` / `return &mut local`: the returned reference
