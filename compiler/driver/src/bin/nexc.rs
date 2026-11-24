@@ -4,6 +4,10 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
+    nex_driver::run_with_large_stack(real_main)
+}
+
+fn real_main() -> ExitCode {
     let args = std::env::args().skip(1).collect::<Vec<_>>();
     if args.iter().any(|arg| arg == "--version" || arg == "-V") {
         println!("nexc {}", env!("CARGO_PKG_VERSION"));

@@ -1217,6 +1217,20 @@ fn lower_struct_place(
                     };
                     let ir_ty = IrType::from_type(*field_ty);
                     let value = lower_expr(builder, arg, scopes, storage, analysis, *field_ty)?;
+                    // Storing an owned growable array in a struct field moves
+                    // the buffer into the struct. If the original local keeps
+                    // ownership it is freed at scope exit and the field
+                    // dangles: getting a struct back from a function used to
+                    // read heap garbage because of exactly this.
+                    if matches!(*field_ty, Type::DynArray(_)) {
+                        if let ExprKind::Ident(name) = &arg.kind {
+                            if let Some(slot) = lookup_slot(scopes, name) {
+                                if builder.growable_slots.contains(&slot.ptr) {
+                                    builder.owned.remove(&slot.ptr);
+                                }
+                            }
+                        }
+                    }
                     let field_ptr = builder.new_value();
                     builder.emit(Inst::FieldPtr {
                         dst: field_ptr,
@@ -4501,32 +4515,46 @@ fn lower_expr(
                 let arg_value =
                     lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
                 let header = operand_value_id(builder, arg_value)?;
-                builder.emit(Inst::Call {
+                let free = Inst::Call {
                     dst: None,
                     name: "nex_rt_array_free".to_string(),
                     args: vec![Operand::Value(header)],
                     ret: IrType::Void,
-                });
-                // Leave a fresh empty header in the slot so RAII's
-                // free-before-store and scope-exit free stay valid (no dangling
-                // pointer freed twice).
+                };
                 if let ExprKind::Ident(name) = &args[0].kind {
-                    if let Some(slot) = lookup_slot(scopes, name) {
-                        if builder.growable_slots.contains(&slot.ptr) {
-                            let empty = builder.new_value();
-                            builder.emit(Inst::Call {
-                                dst: Some(empty),
-                                name: "nex_rt_array_new".to_string(),
-                                args: Vec::new(),
-                                ret: IrType::String,
-                            });
-                            builder.emit(Inst::Store {
-                                ptr: slot.ptr,
-                                value: Operand::Value(empty),
-                                ty: IrType::String,
-                            });
-                        }
+                    // `drop` may only release memory this function owns. A
+                    // parameter (or any value that was never allocated in this
+                    // frame) belongs to the caller; freeing it caused a
+                    // use-after-free and usually a heap-corruption abort once
+                    // the caller touched the value again.
+                    let Some(slot) = lookup_slot(scopes, name) else {
+                        return Ok(Operand::Const(Const::Bool(false)));
+                    };
+                    if !builder.growable_slots.contains(&slot.ptr)
+                        || !builder.owned.contains(&slot.ptr)
+                    {
+                        return Ok(Operand::Const(Const::Bool(false)));
                     }
+                    builder.emit(free);
+                    // Leave a fresh empty header in the slot so RAII's
+                    // free-before-store and scope-exit free stay valid (no
+                    // dangling pointer freed twice).
+                    let empty = builder.new_value();
+                    builder.emit(Inst::Call {
+                        dst: Some(empty),
+                        name: "nex_rt_array_new".to_string(),
+                        args: Vec::new(),
+                        ret: IrType::String,
+                    });
+                    builder.emit(Inst::Store {
+                        ptr: slot.ptr,
+                        value: Operand::Value(empty),
+                        ty: IrType::String,
+                    });
+                } else {
+                    // A temporary such as `drop(make_array())` is not bound to a
+                    // slot and is owned by this expression, so free it directly.
+                    builder.emit(free);
                 }
                 return Ok(Operand::Const(Const::Bool(false)));
             }
@@ -4815,6 +4843,38 @@ fn lower_expr(
                     "str_index_of_from" => ("nex_rt_str_index_of_from", IrType::I64),
                     "char_at" => ("nex_rt_char_at", IrType::String),
                     _ => ("nex_rt_char_code", IrType::I64),
+                };
+                let dst = builder.new_value();
+                builder.emit(Inst::Call {
+                    dst: Some(dst),
+                    name: name.to_string(),
+                    args: call_args,
+                    ret,
+                });
+                return Ok(Operand::Value(dst));
+            }
+
+            // Unicode-aware string functions
+            if callee == "utf8_len" || callee == "utf8_char_at" || callee == "utf8_substr" || callee == "utf8_reverse" || callee == "utf8_upper" || callee == "utf8_lower" || callee == "utf8_char_code_at" {
+                let mut call_args = Vec::new();
+                for arg in args {
+                    call_args.push(lower_expr(
+                        builder,
+                        arg,
+                        scopes,
+                        storage,
+                        analysis,
+                        Type::Error,
+                    )?);
+                }
+                let (name, ret) = match callee {
+                    "utf8_len" => ("nex_rt_utf8_len", IrType::I64),
+                    "utf8_char_at" => ("nex_rt_utf8_char_at", IrType::String),
+                    "utf8_substr" => ("nex_rt_utf8_substr", IrType::String),
+                    "utf8_reverse" => ("nex_rt_utf8_reverse", IrType::String),
+                    "utf8_upper" => ("nex_rt_utf8_upper", IrType::String),
+                    "utf8_lower" => ("nex_rt_utf8_lower", IrType::String),
+                    _ => ("nex_rt_utf8_char_code_at", IrType::I64),
                 };
                 let dst = builder.new_value();
                 builder.emit(Inst::Call {

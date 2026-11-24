@@ -49,7 +49,15 @@ struct Parser<'a> {
     tokens: &'a [Token],
     pos: usize,
     diagnostics: Vec<Diagnostic>,
+    /// Current syntactic nesting level. Guards against stack overflow on
+    /// adversarial or accidentally huge input such as 20k nested parentheses.
+    depth: u32,
+    depth_reported: bool,
 }
+
+/// Maximum expression/block nesting the parser accepts. Deeper input produces
+/// an `NXP016` diagnostic instead of aborting the compiler process.
+const MAX_PARSE_DEPTH: u32 = 256;
 
 impl<'a> Parser<'a> {
     fn new(tokens: &'a [Token]) -> Self {
@@ -57,7 +65,32 @@ impl<'a> Parser<'a> {
             tokens,
             pos: 0,
             diagnostics: Vec::new(),
+            depth: 0,
+            depth_reported: false,
         }
+    }
+
+    /// Increments the nesting counter, or reports `NXP016` once and returns
+    /// `false` when the limit is reached.
+    fn enter_nesting(&mut self) -> bool {
+        if self.depth >= MAX_PARSE_DEPTH {
+            if !self.depth_reported {
+                self.depth_reported = true;
+                let span = self.peek_token().span;
+                self.error(
+                    "NXP016",
+                    format!("nesting is too deep (maximum {MAX_PARSE_DEPTH} levels)"),
+                    span,
+                );
+            }
+            return false;
+        }
+        self.depth += 1;
+        true
+    }
+
+    fn leave_nesting(&mut self) {
+        self.depth = self.depth.saturating_sub(1);
     }
 
     fn parse_program(mut self) -> ParseResult {
@@ -1255,6 +1288,19 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_block(&mut self) -> Block {
+        if !self.enter_nesting() {
+            let span = self.peek_token().span;
+            return Block {
+                stmts: Vec::new(),
+                span,
+            };
+        }
+        let block = self.parse_block_inner();
+        self.leave_nesting();
+        block
+    }
+
+    fn parse_block_inner(&mut self) -> Block {
         let start = self.peek_token().span.start;
         self.expect(&TokenKind::Colon, "before an indented block");
         self.expect_line_end();
@@ -1693,7 +1739,15 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_expr(&mut self) -> Expr {
-        self.parse_or()
+        if !self.enter_nesting() {
+            return Expr {
+                kind: ExprKind::Error,
+                span: self.peek_token().span,
+            };
+        }
+        let expr = self.parse_or();
+        self.leave_nesting();
+        expr
     }
 
     fn parse_or(&mut self) -> Expr {
@@ -1858,6 +1912,18 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_unary(&mut self) -> Expr {
+        if !self.enter_nesting() {
+            return Expr {
+                kind: ExprKind::Error,
+                span: self.peek_token().span,
+            };
+        }
+        let expr = self.parse_unary_inner();
+        self.leave_nesting();
+        expr
+    }
+
+    fn parse_unary_inner(&mut self) -> Expr {
         if self.check(&TokenKind::Minus) {
             let start = self.advance().span;
             let operand = self.parse_cast();

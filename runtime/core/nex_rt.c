@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <limits.h>
 #include <string.h>
 #include <math.h>
 #include <ctype.h>
@@ -268,6 +269,84 @@ char *nex_rt_str_lower(const char *value) {
     return result;
 }
 
+/* Unicode-aware uppercase: handles Cyrillic and basic Latin */
+char *nex_rt_utf8_upper(const char *value) {
+    if (value == NULL) return NULL;
+    size_t byte_len = strlen(value);
+    char *result = (char *)malloc(byte_len + 1);
+    if (result == NULL) return NULL;
+    
+    size_t src = 0, dst = 0;
+    while (value[src] != '\0') {
+        unsigned char b = (unsigned char)value[src];
+        if (b < 0x80) {
+            /* ASCII */
+            result[dst++] = (char)toupper(b);
+            src++;
+        } else if ((b & 0xE0) == 0xC0) {
+            /* 2-byte UTF-8 */
+            unsigned char b2 = (unsigned char)value[src + 1];
+            long long cp = ((b & 0x1F) << 6) | (b2 & 0x3F);
+            /* Cyrillic lowercase to uppercase */
+            if (cp >= 0x0430 && cp <= 0x044F) cp -= 0x20;
+            else if (cp == 0x0451) cp = 0x0401; /* ё -> Ё */
+            /* Encode back */
+            result[dst++] = (char)(0xC0 | ((cp >> 6) & 0x1F));
+            result[dst++] = (char)(0x80 | (cp & 0x3F));
+            src += 2;
+        } else if ((b & 0xF0) == 0xE0) {
+            /* 3-byte UTF-8 - pass through */
+            result[dst++] = value[src++];
+            result[dst++] = value[src++];
+            result[dst++] = value[src++];
+        } else {
+            /* 4-byte or invalid - pass through */
+            result[dst++] = value[src++];
+        }
+    }
+    result[dst] = '\0';
+    return result;
+}
+
+/* Unicode-aware lowercase: handles Cyrillic and basic Latin */
+char *nex_rt_utf8_lower(const char *value) {
+    if (value == NULL) return NULL;
+    size_t byte_len = strlen(value);
+    char *result = (char *)malloc(byte_len + 1);
+    if (result == NULL) return NULL;
+    
+    size_t src = 0, dst = 0;
+    while (value[src] != '\0') {
+        unsigned char b = (unsigned char)value[src];
+        if (b < 0x80) {
+            /* ASCII */
+            result[dst++] = (char)tolower(b);
+            src++;
+        } else if ((b & 0xE0) == 0xC0) {
+            /* 2-byte UTF-8 */
+            unsigned char b2 = (unsigned char)value[src + 1];
+            long long cp = ((b & 0x1F) << 6) | (b2 & 0x3F);
+            /* Cyrillic uppercase to lowercase */
+            if (cp >= 0x0410 && cp <= 0x042F) cp += 0x20;
+            else if (cp == 0x0401) cp = 0x0451; /* Ё -> ё */
+            /* Encode back */
+            result[dst++] = (char)(0xC0 | ((cp >> 6) & 0x1F));
+            result[dst++] = (char)(0x80 | (cp & 0x3F));
+            src += 2;
+        } else if ((b & 0xF0) == 0xE0) {
+            /* 3-byte UTF-8 - pass through */
+            result[dst++] = value[src++];
+            result[dst++] = value[src++];
+            result[dst++] = value[src++];
+        } else {
+            /* 4-byte or invalid - pass through */
+            result[dst++] = value[src++];
+        }
+    }
+    result[dst] = '\0';
+    return result;
+}
+
 char *nex_rt_str_trim(const char *value) {
     if (value == NULL) {
         return NULL;
@@ -326,6 +405,12 @@ char *nex_rt_str_repeat(const char *value, long long count) {
         return empty;
     }
     size_t value_length = strlen(value);
+    /* Guard against `value_length * count` overflowing size_t: without this
+       check the multiplication wraps to a small number, `malloc` succeeds, and
+       the memcpy loop below writes far past the end of the allocation. */
+    if (value_length != 0 && (size_t)count > (SIZE_MAX - 1) / value_length) {
+        return NULL;
+    }
     size_t total = value_length * (size_t)count;
     char *result = (char *)malloc(total + 1);
     if (result == NULL) {
@@ -986,11 +1071,148 @@ char *nex_rt_char_at(const char *value, long long index) {
     return result;
 }
 
+/* Helper: count UTF-8 code points in a string */
+static size_t nex_rt_utf8_count(const char *str) {
+    if (str == NULL) return 0;
+    size_t count = 0;
+    const unsigned char *p = (const unsigned char *)str;
+    while (*p != '\0') {
+        /* Determine character length from first byte */
+        if (*p < 0x80) p += 1;
+        else if ((*p & 0xE0) == 0xC0) p += 2;
+        else if ((*p & 0xF0) == 0xE0) p += 3;
+        else if ((*p & 0xF8) == 0xF0) p += 4;
+        else p += 1; /* invalid, skip */
+        count++;
+    }
+    return count;
+}
+
+/* Helper: get byte offset for code point index */
+static size_t nex_rt_utf8_byte_offset(const char *str, size_t char_idx) {
+    if (str == NULL) return 0;
+    size_t count = 0;
+    const unsigned char *p = (const unsigned char *)str;
+    while (*p != '\0' && count < char_idx) {
+        if (*p < 0x80) p += 1;
+        else if ((*p & 0xE0) == 0xC0) p += 2;
+        else if ((*p & 0xF0) == 0xE0) p += 3;
+        else if ((*p & 0xF8) == 0xF0) p += 4;
+        else p += 1;
+        count++;
+    }
+    return (size_t)(p - (const unsigned char *)str);
+}
+
+/* Helper: get codepoint at byte position */
+static long long nex_rt_utf8_codepoint_at(const char *str, size_t byte_idx) {
+    if (str == NULL) return -1;
+    const unsigned char *p = (const unsigned char *)str + byte_idx;
+    if (*p == '\0') return -1;
+    unsigned char first = *p;
+    if (first < 0x80) {
+        return (long long)first;
+    } else if ((first & 0xE0) == 0xC0) {
+        if (p[1] == '\0') return -1;
+        return ((first & 0x1F) << 6) | (p[1] & 0x3F);
+    } else if ((first & 0xF0) == 0xE0) {
+        if (p[1] == '\0' || p[2] == '\0') return -1;
+        return ((first & 0x0F) << 12) | ((p[1] & 0x3F) << 6) | (p[2] & 0x3F);
+    } else if ((first & 0xF8) == 0xF0) {
+        if (p[1] == '\0' || p[2] == '\0' || p[3] == '\0') return -1;
+        return ((first & 0x07) << 18) | ((p[1] & 0x3F) << 12) |
+               ((p[2] & 0x3F) << 6) | (p[3] & 0x3F);
+    }
+    return -1;
+}
+
+/* Helper: get byte length of codepoint at byte position */
+static size_t nex_rt_utf8_codepoint_len(const char *str, size_t byte_idx) {
+    if (str == NULL) return 0;
+    const unsigned char *p = (const unsigned char *)str + byte_idx;
+    if (*p == '\0') return 0;
+    if (*p < 0x80) return 1;
+    if ((*p & 0xE0) == 0xC0) return 2;
+    if ((*p & 0xF0) == 0xE0) return 3;
+    if ((*p & 0xF8) == 0xF0) return 4;
+    return 1;
+}
+
+/* Unicode-aware string length (code point count) */
+long long nex_rt_utf8_len(const char *value) {
+    if (value == NULL) return 0;
+    return (long long)nex_rt_utf8_count(value);
+}
+
+/* Unicode-aware char_at: returns UTF-8 string for the character at codepoint index */
+char *nex_rt_utf8_char_at(const char *value, long long index) {
+    if (value == NULL || index < 0) return NULL;
+    size_t char_count = nex_rt_utf8_count(value);
+    if ((size_t)index >= char_count) return NULL;
+    
+    size_t byte_idx = nex_rt_utf8_byte_offset(value, (size_t)index);
+    size_t char_len = nex_rt_utf8_codepoint_len(value, byte_idx);
+    
+    char *result = (char *)malloc(char_len + 1);
+    if (result == NULL) return NULL;
+    memcpy(result, value + byte_idx, char_len);
+    result[char_len] = '\0';
+    return result;
+}
+
+/* Unicode-aware substring by codepoint indices */
+char *nex_rt_utf8_substr(const char *value, long long start, long long end) {
+    if (value == NULL) return NULL;
+    size_t char_count = nex_rt_utf8_count(value);
+    if (start < 0) start = 0;
+    if (end > (long long)char_count) end = (long long)char_count;
+    if (end < start) { end = start; }
+    
+    size_t start_byte = nex_rt_utf8_byte_offset(value, (size_t)start);
+    size_t end_byte = nex_rt_utf8_byte_offset(value, (size_t)end);
+    size_t count = end_byte - start_byte;
+    
+    char *result = (char *)malloc(count + 1);
+    if (result == NULL) return NULL;
+    memcpy(result, value + start_byte, count);
+    result[count] = '\0';
+    return result;
+}
+
+/* Unicode-aware character code at codepoint index */
+long long nex_rt_utf8_char_code_at(const char *value, long long index) {
+    if (value == NULL || index < 0) return -1;
+    size_t char_count = nex_rt_utf8_count(value);
+    if ((size_t)index >= char_count) return -1;
+    size_t byte_idx = nex_rt_utf8_byte_offset(value, (size_t)index);
+    return nex_rt_utf8_codepoint_at(value, byte_idx);
+}
+
 long long nex_rt_char_code(const char *value) {
     if (value == NULL || value[0] == '\0') {
         return -1;
     }
-    return (long long)(unsigned char)value[0];
+    return nex_rt_utf8_codepoint_at(value, 0);
+}
+
+/* Unicode-aware string reverse: reverses code points, not bytes */
+char *nex_rt_utf8_reverse(const char *value) {
+    if (value == NULL) return NULL;
+    size_t char_count = nex_rt_utf8_count(value);
+    size_t byte_len = strlen(value);
+    
+    char *result = (char *)malloc(byte_len + 1);
+    if (result == NULL) return NULL;
+    
+    size_t dst_byte = 0;
+    for (size_t i = char_count; i > 0; i--) {
+        size_t src_byte = nex_rt_utf8_byte_offset(value, i - 1);
+        size_t char_len = nex_rt_utf8_codepoint_len(value, src_byte);
+        memcpy(result + dst_byte, value + src_byte, char_len);
+        dst_byte += char_len;
+    }
+    result[byte_len] = '\0';
+    return result;
 }
 
 /* Growable arrays: a three-word header { data, len, cap } allocated by the
@@ -1027,12 +1249,32 @@ void *nex_rt_array_ensure(void *header, long long needed_len, long long elem_siz
     if (needed_len <= cap) {
         return header;
     }
-    long long new_cap = cap > 0 ? cap * 2 : 4;
+    if (needed_len < 0 || elem_size < 0 || cap < 0) {
+        return NULL;
+    }
+    long long new_cap = cap > 0 ? cap : 4;
+    if (cap > 0) {
+        /* Doubling an already-large capacity must not wrap to a negative
+           value: that used to make the loop below spin forever or produce a
+           tiny `realloc` that later writes ran past. */
+        if ((size_t)cap > SIZE_MAX / 2) {
+            return NULL;
+        }
+        new_cap = cap * 2;
+    }
     while (new_cap < needed_len) {
+        if ((size_t)new_cap > SIZE_MAX / 2) {
+            new_cap = needed_len;
+            break;
+        }
         new_cap *= 2;
     }
-    long long bytes = new_cap * (elem_size > 0 ? elem_size : 1);
-    void *grown = realloc(data[0], (size_t)bytes);
+    size_t element = (size_t)(elem_size > 0 ? elem_size : 1);
+    if ((size_t)new_cap > SIZE_MAX / element) {
+        return NULL;
+    }
+    size_t bytes = (size_t)new_cap * element;
+    void *grown = realloc(data[0], bytes);
     if (grown == NULL) {
         return NULL;
     }
@@ -2204,6 +2446,19 @@ static _Thread_local char *nex_tls_params[NEX_ROUTER_MAX_PARAMS];
 static _Thread_local char *nex_tls_values[NEX_ROUTER_MAX_PARAMS];
 static _Thread_local int nex_tls_param_count;
 
+/* Frees the captures owned by the current thread and resets the count. The
+   strings were allocated by `nex_router_split`; ownership for matched params
+   moved to the TLS slots in `nex_rt_router_match`. */
+static void nex_router_clear_params(void) {
+    for (int i = 0; i < nex_tls_param_count && i < NEX_ROUTER_MAX_PARAMS; i++) {
+        free(nex_tls_params[i]);
+        free(nex_tls_values[i]);
+        nex_tls_params[i] = NULL;
+        nex_tls_values[i] = NULL;
+    }
+    nex_tls_param_count = 0;
+}
+
 static char **nex_router_split(const char *text, size_t *count) {
     size_t capacity = 8;
     char **parts = (char **)malloc(capacity * sizeof(char *));
@@ -2291,6 +2546,10 @@ long long nex_rt_router_match(long long handle, const char *method, const char *
     if (router == NULL || method == NULL || path == NULL) {
         return 0;
     }
+    /* Release the captures from the previous match on this thread. Without
+       this, every matched request leaked its pattern and value strings for
+       the lifetime of the process (a long-running server grew without bound). */
+    nex_router_clear_params();
     size_t path_count = 0;
     char **path_parts = nex_router_split(path, &path_count);
     int path_matched = 0;
@@ -2309,11 +2568,16 @@ long long nex_rt_router_match(long long handle, const char *method, const char *
         int matched = 1;
         for (size_t i = 0; i < pattern_count; i++) {
             if (pattern_parts[i][0] == ':') {
-                if (param_count < NEX_ROUTER_MAX_PARAMS) {
-                    params[param_count] = pattern_parts[i];
-                    values[param_count] = path_parts[i];
-                    param_count++;
+                if (param_count >= NEX_ROUTER_MAX_PARAMS) {
+                    /* More captures than the runtime can expose: treat the
+                       route as non-matching instead of silently dropping
+                       params (which produced wrong handler results). */
+                    matched = 0;
+                    break;
                 }
+                params[param_count] = pattern_parts[i];
+                values[param_count] = path_parts[i];
+                param_count++;
                 continue;
             }
             if (strcmp(pattern_parts[i], path_parts[i]) != 0) {

@@ -66,12 +66,42 @@ impl CompileResult {
     }
 }
 
+/// Stack size for compiler work. Recursive parser/checker/IR passes consume
+/// deep stacks on deeply nested input; a large fixed stack lets the parser's
+/// nesting limit report a diagnostic instead of aborting the process.
+pub const COMPILER_STACK_SIZE: usize = 64 * 1024 * 1024;
+
+/// Runs `task` on a worker thread with a large stack and propagates panics.
+pub fn run_with_large_stack<F, T>(task: F) -> T
+where
+    F: FnOnce() -> T + Send + 'static,
+    T: Send + 'static,
+{
+    let handle = std::thread::Builder::new()
+        .name("nex-compiler".to_string())
+        .stack_size(COMPILER_STACK_SIZE)
+        .spawn(task)
+        .expect("failed to spawn the NEX compiler thread");
+    match handle.join() {
+        Ok(value) => value,
+        Err(payload) => std::panic::resume_unwind(payload),
+    }
+}
+
 pub fn compile_source(
     name: impl Into<String>,
     source_text: String,
     options: CompileOptions,
 ) -> Result<CompileResult, DriverError> {
-    let source_name = name.into();
+    let name = name.into();
+    run_with_large_stack(move || compile_source_inner(name, source_text, options))
+}
+
+fn compile_source_inner(
+    source_name: String,
+    source_text: String,
+    options: CompileOptions,
+) -> Result<CompileResult, DriverError> {
     let mut visited = std::collections::HashSet::new();
     let (mut program, sources, mut diagnostics) =
         load_program_text(&source_name, source_text, &mut visited)?;

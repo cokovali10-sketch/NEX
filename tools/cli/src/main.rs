@@ -15,6 +15,12 @@ use std::process::{Command, ExitCode};
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 fn main() -> ExitCode {
+    // The CLI parses/formats/checks deeply recursive input; a large stack keeps
+    // pathological nesting a diagnostic instead of a process abort.
+    nex_driver::run_with_large_stack(real_main)
+}
+
+fn real_main() -> ExitCode {
     let args: Vec<String> = env::args().skip(1).collect();
     if args.is_empty() {
         print_help();

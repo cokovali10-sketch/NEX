@@ -129,7 +129,7 @@ unsafe extern "system" {
 
 #[link(name = "gdi32")]
 unsafe extern "system" {
-    fn GetStockObject(index: i32) -> HGDIOBJ;
+    // fn GetStockObject(index: i32) -> HGDIOBJ;
     fn CreateSolidBrush(color: u32) -> HGDIOBJ;
     fn CreateFontA(
         height: i32,
@@ -151,7 +151,7 @@ unsafe extern "system" {
     fn SetBkColor(dc: HDC, color: u32) -> u32;
     fn SetBkMode(dc: HDC, mode: i32) -> i32;
     fn FillRect(dc: HDC, rect: *const RECT, brush: HGDIOBJ) -> i32;
-    fn RoundRect(dc: HDC, l: i32, t: i32, r: i32, b: i32, w: i32, h: i32) -> i32;
+    // fn RoundRect(dc: HDC, l: i32, t: i32, r: i32, b: i32, w: i32, h: i32) -> i32;
     fn DrawTextA(dc: HDC, text: *const u8, count: i32, rect: *const RECT, flags: u32) -> i32;
     fn SelectObject(dc: HDC, obj: HGDIOBJ) -> HGDIOBJ;
     fn DeleteObject(obj: HGDIOBJ) -> i32;
@@ -211,7 +211,7 @@ fn rgb(r: u8, g: u8, b: u8) -> u32 {
     (r as u32) | ((g as u32) << 8) | ((b as u32) << 16)
 }
 
-const COL_BG: u32 = 0x00_1E_1E_1E; // placeholder, computed in rgb()
+// const COL_BG: u32 = 0x00_1E_1E_1E; // placeholder, computed in rgb()
 const _UNUSED: () = ();
 
 const BTN_RUN: usize = 1;

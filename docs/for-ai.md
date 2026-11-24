@@ -297,6 +297,8 @@ per-function notes lives in `docs/standard-library.md`; the most used are:
 | `sum_of` / `min_of` / `max_of` / `product` / `count` | `(array[, value]) -> ...` | numeric reductions and element count |
 | `concat` / `to_string` | `(string, string) -> string` / `(value) -> string` | string building |
 | `str_substring` / `str_index_of_from` | `(string, i64[, i64]) -> ...` | byte ranges |
+| `utf8_len` / `utf8_char_at` / `utf8_substr` / `utf8_reverse` | `(string[, i64, i64]) -> ...` | Unicode-aware string operations |
+| `utf8_upper` / `utf8_lower` | `(string) -> string` | Unicode case conversion (Cyrillic) |
 | `str_contains` / `str_upper` / `str_lower` / `str_trim` | `(string) -> ...` | case and whitespace |
 | `read_file` / `write_file` / `file_exists` / `file_size` | `(string[, string]) -> ...` | whole-file I/O |
 | `tcp_listen` / `tcp_accept` / `tcp_connect` / `tcp_read` / `tcp_write` / `tcp_close` / `tcp_set_timeout` | `(...) -> i64` | blocking sockets, `-1` = failure |
@@ -390,11 +392,9 @@ see `docs/language-server.md` for the LSP handshake and capabilities.
 
 ## Limitations (do not work around them by disabling checks)
 
-- No ownership/borrowing/lifetimes yet. Strings and arrays allocated by
-  builtins (`concat`, `str_*`, JSON handles, map handles) are never freed;
-  processes rely on OS cleanup at exit.
-- Not everything is mutable through a const: `let` is immutable, `var` is
-  mutable.
+- Move semantics only for strings and arrays: other types (structs, tuples, etc.) are copied.
+- Partial borrow checking: `&T`/`&mut T` can be passed to functions but not stored in variables.
+- No lifetimes: reference safety is not checked.
 - No async/await. Servers are blocking TCP + threads/pools.
 - Generics are monomorphized; there is no trait object or dynamic dispatch.
 - JSON DOM is read-only.
@@ -403,13 +403,21 @@ see `docs/language-server.md` for the LSP handshake and capabilities.
   them (see `docs/memory-model.md`).
 - Strings are indexable (`s[1]`) and sliceable (`s[1..3]`), but are not
   iterable with `for`.
-- `nex fmt` preserves `#` comments and module-level `var` declarations; the
-  output is syntactically valid NEX, but blank lines are normalized.
-- Cross-platform claims: Windows x86-64 is the primary tested host; CI also
-  tests Ubuntu. macOS is untested. Do not claim platform support you have not
-  measured.
-- Printing a struct/array/tuple is supported, but there is no derive or
-  user-controlled formatting yet.
+- No closures or first-class functions.
+- No enum payloads or match destructuring.
+- No struct field defaults or named arguments.
+- No non-ASCII identifiers.
+- UTF-8 indexing/length/slicing is byte-based, not Unicode-aware.
+- Integer overflow wraps silently in debug mode.
+- Division by zero is a runtime error, not compile-time.
+- No package registry; `nex add` copies to `deps/` but compiler ignores it.
+- No incremental build cache; always rebuilds everything.
+- No REPL, debugger, or sampling profiler.
+- No benchmarking framework; manual timing only.
+- No source-level debugging metadata.
+- No fuzzing or formal verification.
+- No Windows/macOS testing beyond CI.
+- No derive macros or user-controlled formatting.
 
 ## Style for NEX code written by an agent
 

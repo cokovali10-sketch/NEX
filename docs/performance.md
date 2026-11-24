@@ -1,17 +1,27 @@
 # Performance
 
-NEX does not claim performance advantages over other languages. Performance
-must be measured with reproducible benchmarks.
+NEX is designed for good performance with predictable behavior:
 
-## Build profiles
+## Compiler Performance
+- Fast incremental builds (planned)
+- Parallel compilation (planned)
+- Large stack mode for deep recursion
 
-- Debug: no optimization.
-- Release: `-O2`.
-- Max: `-O3`.
+## Runtime Performance
+- Native code generation via LLVM
+- No garbage collection (manual memory management)
+- Stack-allocated values for small types
+- Heap allocation only for strings and arrays
 
-## Benchmark methodology
+## Optimization Levels
+- Debug: no optimizations, fast compile
+- Release: standard optimizations
+- Max: maximum optimizations, slower compile
 
-- Use the same hardware and input for all compared programs.
-- Record compiler version, flags, and runtime versions.
-- Store results in machine-readable form.
-- Avoid measuring startup and compile time as runtime performance unless stated.
+## Memory Usage
+- Strings and arrays grow as needed
+- No automatic GC: use `drop()` to free memory
+- Arena allocator for temporary allocations
+
+## Benchmarks
+See `benchmark-methodology.md` for detailed benchmarking approach and results.

@@ -78,7 +78,14 @@ elements is unspecified. An empty array joins to `""`.
 | `str_replace` | `(value: string, from: string, to: string) -> string` | Replaces every occurrence; an empty `from` returns a copy. |
 | `str_index_of_from` | `(value: string, needle: string, start: i64) -> i64` | Index of the first match at or after `start`, or `-1`. Use it with `str_substring` to split. |
 | `char_at` | `(value: string, index: i64) -> string` | One-character string, or empty when the index is out of range. |
-| `char_code` | `(value: string) -> i64` | Code of the first character, `-1` for an empty string. |
+| `char_code` | `(value: string) -> i64` | Unicode codepoint of the first character, `-1` for an empty string. |
+| `utf8_len` | `(value: string) -> i64` | Number of Unicode code points in the string. |
+| `utf8_char_at` | `(value: string, index: i64) -> string` | Unicode character at the given code point index. |
+| `utf8_substr` | `(value: string, start: i64, end: i64) -> string` | Substring by Unicode code point indices. |
+| `utf8_reverse` | `(value: string) -> string` | Reverse the string by code points. |
+| `utf8_upper` | `(value: string) -> string` | Uppercase (supports Cyrillic). |
+| `utf8_lower` | `(value: string) -> string` | Lowercase (supports Cyrillic). |
+| `utf8_char_code_at` | `(value: string, index: i64) -> i64` | Unicode codepoint at the given index. |
 | `to_string` | `(value: i64 or f64 or bool) -> string` | Decimal representation, `%g` for floats, `true`/`false`. |
 | `parse_i64` | `(value: string) -> i64` | Decimal parse; returns `0` when the text is not a number. |
 | `str_split_count` | `(value: string, separator: string) -> i64` | Number of fields a split would produce. |
