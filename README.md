@@ -44,6 +44,8 @@ runtime (`runtime/core/nex_rt.c`) — not a hidden language runtime.
 
 - Current release: **NEX 1.0.1 - Stable Core** (first published binaries for
   Windows and Linux; supersedes the asset-less `v1.0.0` tag).
+- A standalone NEX Studio desktop app is in development, with project browsing,
+  editing, project search, compiler diagnostics, and build/run support.
 - Implemented: lexer, parser, AST, semantic analysis, type checking, NEX IR,
   LLVM textual IR backend, native executable generation, CLI, and end-to-end
   tests.

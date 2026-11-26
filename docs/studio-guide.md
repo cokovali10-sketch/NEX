@@ -24,20 +24,23 @@ read from `[build] entry` in `nex.toml`; when that is missing, Studio looks for
 ## Current features
 
 - Native desktop window with a dark NEX theme.
-- Project explorer showing `.nex` files from the selected folder.
+- Windows folder picker, editable path fallback, and up to ten recent projects.
+- Nested project tree with `.nex` files and folders from the selected folder.
 - Syntax-highlighted editor, multiple tabs, and unsaved-change markers.
-- Create a new `.nex` file using a relative path inside the project.
+- Create `.nex` files and folders using relative paths inside the project.
 - Save all files with the toolbar or Ctrl+S.
+- Search loaded NEX source files in the project and jump to matching lines.
+- Debounced background compiler diagnostics in a clickable Problems panel.
+- Prompts before closing unsaved tabs or exiting with unsaved changes.
 - Build and run the project in the background with Ctrl+Enter.
 - Build output is written to the project's `build/` folder.
 
 ## Current limits
 
-- Enter the project folder path in the Open Project dialog; a native folder
-  picker is not wired up yet.
-- Project search currently searches the active file.
-- NEX LSP diagnostics, completion, hover, and go-to-definition are not yet
-  connected to the editor.
+- The native folder picker is available on Windows; other platforms can use the
+  editable path field.
+- Background diagnostics use the NEX compiler directly. The editor does not yet
+  use the `nex lsp` protocol for completion, hover, or go-to-definition.
 - Debugger and profiler panels are still planned.
 
 The `tools/studio` local web editor and `tools/studio_native` Win32 prototype

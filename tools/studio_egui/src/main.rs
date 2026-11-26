@@ -8,6 +8,9 @@
 use eframe::egui;
 use egui::Color32;
 use egui_code_editor::{CodeEditor, ColorTheme, Syntax};
+use std::collections::BTreeSet;
+use std::ffi::c_void;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::Instant;
@@ -49,10 +52,22 @@ struct Studio {
     open_files: Vec<usize>,
     active: usize,
     project_root: Option<PathBuf>,
+    recent_projects: Vec<PathBuf>,
     project_path_input: String,
     create_path_input: String,
+    create_folder_path_input: String,
     show_project_dialog: bool,
     show_new_file_dialog: bool,
+    show_new_folder_dialog: bool,
+    check_sender: Sender<CheckCompletion>,
+    check_receiver: Receiver<CheckCompletion>,
+    check_due: Option<Instant>,
+    check_revision: u64,
+    diagnostics: Vec<EditorDiagnostic>,
+    jump_to_line: Option<usize>,
+    show_problems: bool,
+    show_exit_prompt: bool,
+    pending_close_tab: Option<usize>,
     run_sender: Sender<RunCompletion>,
     run_receiver: Receiver<RunCompletion>,
     is_running: bool,
@@ -77,9 +92,143 @@ struct RunCompletion {
     elapsed: f64,
 }
 
+struct CheckCompletion {
+    revision: u64,
+    diagnostics: Vec<EditorDiagnostic>,
+}
+
+#[derive(Clone)]
+struct EditorDiagnostic {
+    file: String,
+    line: Option<usize>,
+    column: Option<usize>,
+    severity: String,
+    code: String,
+    message: String,
+}
+
+fn recent_projects_path() -> Option<PathBuf> {
+    std::env::var_os("APPDATA")
+        .map(PathBuf::from)
+        .or_else(|| {
+            std::env::var_os("USERPROFILE")
+                .map(PathBuf::from)
+                .map(|home| home.join("AppData").join("Roaming"))
+        })
+        .map(|config| {
+            config
+                .join("NEX")
+                .join("Studio")
+                .join("recent-projects.txt")
+        })
+}
+
+fn load_recent_projects() -> Vec<PathBuf> {
+    let Some(path) = recent_projects_path() else {
+        return Vec::new();
+    };
+    let Ok(contents) = fs::read_to_string(path) else {
+        return Vec::new();
+    };
+    let mut recent = Vec::new();
+    for line in contents.lines() {
+        let path = PathBuf::from(line.trim());
+        if path.is_dir() && !recent.contains(&path) {
+            recent.push(path);
+            if recent.len() == 10 {
+                break;
+            }
+        }
+    }
+    recent
+}
+
+fn remember_project(path: &Path, recent: &mut Vec<PathBuf>) -> std::io::Result<()> {
+    recent.retain(|item| item != path);
+    recent.insert(0, path.to_path_buf());
+    recent.truncate(10);
+    if let Some(file) = recent_projects_path() {
+        if let Some(parent) = file.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let contents = recent
+            .iter()
+            .map(|item| item.display().to_string())
+            .collect::<Vec<_>>()
+            .join("\n");
+        fs::write(file, contents)?;
+    }
+    Ok(())
+}
+
+#[cfg(windows)]
+#[repr(C)]
+struct BrowseInfoW {
+    hwnd_owner: isize,
+    pidl_root: *mut c_void,
+    display_name: *mut u16,
+    title: *const u16,
+    flags: u32,
+    callback: Option<unsafe extern "system" fn(isize, u32, isize, isize) -> i32>,
+    l_param: isize,
+    image: i32,
+}
+
+#[cfg(windows)]
+#[link(name = "shell32")]
+unsafe extern "system" {
+    fn SHBrowseForFolderW(info: *const BrowseInfoW) -> *mut c_void;
+    fn SHGetPathFromIDListW(item: *const c_void, path: *mut u16) -> i32;
+}
+
+#[cfg(windows)]
+#[link(name = "ole32")]
+unsafe extern "system" {
+    fn CoTaskMemFree(memory: *mut c_void);
+}
+
+#[cfg(windows)]
+fn pick_project_folder() -> Option<PathBuf> {
+    use std::os::windows::ffi::OsStringExt;
+
+    let mut display_name = vec![0u16; 260];
+    let title: Vec<u16> = "Select a NEX project folder\0".encode_utf16().collect();
+    let info = BrowseInfoW {
+        hwnd_owner: 0,
+        pidl_root: std::ptr::null_mut(),
+        display_name: display_name.as_mut_ptr(),
+        title: title.as_ptr(),
+        flags: 0x0001 | 0x0010 | 0x0040,
+        callback: None,
+        l_param: 0,
+        image: 0,
+    };
+    let item = unsafe { SHBrowseForFolderW(&info) };
+    if item.is_null() {
+        return None;
+    }
+    let mut path = vec![0u16; 32_768];
+    let success = unsafe { SHGetPathFromIDListW(item, path.as_mut_ptr()) } != 0;
+    unsafe { CoTaskMemFree(item) };
+    if !success {
+        return None;
+    }
+    let length = path.iter().position(|unit| *unit == 0)?;
+    Some(PathBuf::from(std::ffi::OsString::from_wide(
+        &path[..length],
+    )))
+}
+
+#[cfg(not(windows))]
+fn pick_project_folder() -> Option<PathBuf> {
+    None
+}
+
 impl Studio {
     fn new() -> Self {
         let (run_sender, run_receiver) = mpsc::channel();
+        let (check_sender, check_receiver) = mpsc::channel();
+        let recent_projects = load_recent_projects();
         let current = std::env::current_dir().unwrap_or_default();
         let startup_root = std::env::args_os()
             .nth(1)
@@ -130,6 +279,9 @@ impl Studio {
         } else {
             Vec::new()
         };
+        let initial_check_due = project_root
+            .as_ref()
+            .map(|_| Instant::now() + std::time::Duration::from_millis(100));
         Self {
             code,
             output: "Welcome to NEX Studio. Open a project folder to begin.\n".to_string(),
@@ -138,10 +290,22 @@ impl Studio {
             open_files,
             active,
             project_root,
+            recent_projects,
             project_path_input,
             create_path_input: "src/new_file.nex".to_string(),
+            create_folder_path_input: "src/new_folder".to_string(),
             show_project_dialog: false,
             show_new_file_dialog: false,
+            show_new_folder_dialog: false,
+            check_sender,
+            check_receiver,
+            check_due: initial_check_due,
+            check_revision: 0,
+            diagnostics: Vec::new(),
+            jump_to_line: None,
+            show_problems: false,
+            show_exit_prompt: false,
+            pending_close_tab: None,
             run_sender,
             run_receiver,
             is_running: false,
@@ -214,6 +378,8 @@ impl Studio {
         self.code = self.files[index].code.clone();
         self.cursor_line = 1;
         self.cursor_col = 1;
+        self.diagnostics.clear();
+        self.queue_check();
     }
 
     fn persist_current(&mut self) {
@@ -260,6 +426,10 @@ impl Studio {
                 self.open_files = vec![self.active];
                 self.project_root = Some(root.clone());
                 self.project_path_input = root.display().to_string();
+                if let Err(error) = remember_project(&root, &mut self.recent_projects) {
+                    self.status = format!("Project opened; could not update recent list: {error}");
+                }
+                self.queue_check();
                 self.output = format!(
                     "Opened {} source files from {}\n",
                     self.files.len(),
@@ -275,24 +445,54 @@ impl Studio {
         }
     }
 
+    fn open_project_folder(&mut self, root: PathBuf) {
+        self.project_path_input = root.display().to_string();
+        self.open_project();
+    }
+
+    fn refresh_project(&mut self) {
+        let Some(root) = self.project_root.clone() else {
+            return;
+        };
+        if let Err(error) = self.save_all() {
+            self.status = format!("Save before refresh: {error}");
+            return;
+        }
+        let active_path = self.files.get(self.active).map(|file| file.path.clone());
+        let open_paths: Vec<String> = self
+            .open_files
+            .iter()
+            .filter_map(|&index| self.files.get(index).map(|file| file.path.clone()))
+            .collect();
+        match load_project(&root) {
+            Ok(files) => {
+                self.files = files;
+                self.open_files = open_paths
+                    .iter()
+                    .filter_map(|path| self.files.iter().position(|file| &file.path == path))
+                    .collect();
+                self.active = active_path
+                    .as_ref()
+                    .and_then(|path| self.files.iter().position(|file| &file.path == path))
+                    .or_else(|| project_file_index(&root, &self.files))
+                    .unwrap_or(0);
+                if !self.open_files.contains(&self.active) {
+                    self.open_files.push(self.active);
+                }
+                self.code = self.files[self.active].code.clone();
+                self.status = "Project refreshed".to_string();
+            }
+            Err(error) => self.status = format!("Refresh failed: {error}"),
+        }
+    }
+
     fn create_file(&mut self) {
         let Some(root) = self.project_root.as_ref() else {
             self.status = "Open a project first".to_string();
             return;
         };
         let relative = Path::new(self.create_path_input.trim());
-        if relative.as_os_str().is_empty()
-            || relative.is_absolute()
-            || relative.components().any(|part| {
-                matches!(
-                    part,
-                    std::path::Component::ParentDir
-                        | std::path::Component::RootDir
-                        | std::path::Component::Prefix(_)
-                )
-            })
-            || relative.extension().is_none_or(|ext| ext != "nex")
-        {
+        if !safe_relative_path(relative) || relative.extension().is_none_or(|ext| ext != "nex") {
             self.status = "Choose a relative .nex file path".to_string();
             return;
         }
@@ -323,6 +523,229 @@ impl Studio {
         }
         self.show_new_file_dialog = false;
     }
+
+    fn create_folder(&mut self) {
+        let Some(root) = self.project_root.as_ref() else {
+            self.status = "Open a project first".to_string();
+            return;
+        };
+        let relative = Path::new(self.create_folder_path_input.trim());
+        if !safe_relative_path(relative) {
+            self.status = "Choose a folder path inside the project".to_string();
+            return;
+        }
+        let destination = root.join(relative);
+        match fs::create_dir_all(&destination) {
+            Ok(()) => self.show_new_folder_dialog = false,
+            Err(error) => self.status = format!("Could not create folder: {error}"),
+        }
+    }
+
+    fn queue_check(&mut self) {
+        self.check_revision = self.check_revision.wrapping_add(1);
+        self.check_due = Some(Instant::now() + std::time::Duration::from_millis(350));
+    }
+
+    fn start_due_check(&mut self) {
+        let Some(due) = self.check_due else {
+            return;
+        };
+        if Instant::now() < due {
+            return;
+        }
+        self.check_due = None;
+        self.persist_current();
+        let (Some(root), Some(file)) = (
+            self.project_root.clone(),
+            self.files.get(self.active).map(|file| file.path.clone()),
+        ) else {
+            self.diagnostics.clear();
+            return;
+        };
+        let Some(source) = self.files.get(self.active).map(|file| file.code.clone()) else {
+            return;
+        };
+        let revision = self.check_revision;
+        let sender = self.check_sender.clone();
+        self.status = "Checking source…".to_string();
+        std::thread::spawn(move || {
+            let diagnostics = check_source(&root, &file, source);
+            let _ = sender.send(CheckCompletion {
+                revision,
+                diagnostics,
+            });
+        });
+    }
+
+    fn has_unsaved_changes(&self) -> bool {
+        self.files.iter().any(|file| file.code != file.saved)
+    }
+
+    fn request_close_tab(&mut self, index: usize) {
+        if self
+            .files
+            .get(index)
+            .is_some_and(|file| file.code != file.saved)
+        {
+            self.pending_close_tab = Some(index);
+        } else {
+            self.close_tab(index, false);
+        }
+    }
+
+    fn close_tab(&mut self, index: usize, save: bool) {
+        if save {
+            if let Err(error) = self.save_all() {
+                self.status = format!("Could not save before closing tab: {error}");
+                return;
+            }
+        } else if let Some(file) = self.files.get_mut(index) {
+            file.code.clone_from(&file.saved);
+            if self.active == index {
+                self.code.clone_from(&file.saved);
+            }
+        }
+        self.open_files.retain(|&open| open != index);
+        if self.active == index {
+            self.active = self.open_files.last().copied().unwrap_or(0);
+            self.code = self
+                .files
+                .get(self.active)
+                .map(|file| file.code.clone())
+                .unwrap_or_default();
+            self.cursor_line = 1;
+            self.cursor_col = 1;
+            if !self.open_files.is_empty() {
+                self.queue_check();
+            }
+        }
+        self.pending_close_tab = None;
+    }
+
+    fn save_and_exit(&mut self, ctx: &egui::Context) {
+        match self.save_all() {
+            Ok(()) => {
+                self.show_exit_prompt = false;
+                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            }
+            Err(error) => self.status = format!("Could not save before exit: {error}"),
+        }
+    }
+
+    fn discard_and_exit(&mut self, ctx: &egui::Context) {
+        self.persist_current();
+        for file in &mut self.files {
+            file.saved.clone_from(&file.code);
+        }
+        self.show_exit_prompt = false;
+        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+    }
+
+    fn show_project_tree(&mut self, ui: &mut egui::Ui, prefix: &str) {
+        let Some(root) = self.project_root.clone() else {
+            return;
+        };
+        for node in project_nodes(&root, &self.files, prefix) {
+            match node {
+                ProjectNode::Directory { name, path } => {
+                    egui::CollapsingHeader::new(
+                        egui::RichText::new(format!("▸  {name}")).color(C_TEXT),
+                    )
+                    .id_salt(format!("project-folder:{path}"))
+                    .default_open(true)
+                    .show(ui, |ui| self.show_project_tree(ui, &path));
+                }
+                ProjectNode::File { index, name } => {
+                    let selected = self.active == index;
+                    let dirty = self.files[index].code != self.files[index].saved;
+                    let label = format!("{}  {name}", if dirty { "●" } else { "◇" });
+                    if ui
+                        .selectable_label(
+                            selected,
+                            egui::RichText::new(label)
+                                .monospace()
+                                .size(13.0)
+                                .color(if selected { Color32::WHITE } else { C_TEXT }),
+                        )
+                        .clicked()
+                    {
+                        self.switch_to(index);
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn safe_relative_path(path: &Path) -> bool {
+    !path.as_os_str().is_empty()
+        && !path.is_absolute()
+        && !path.components().any(|part| {
+            matches!(
+                part,
+                std::path::Component::ParentDir
+                    | std::path::Component::RootDir
+                    | std::path::Component::Prefix(_)
+            )
+        })
+}
+
+enum ProjectNode {
+    Directory { name: String, path: String },
+    File { index: usize, name: String },
+}
+
+fn project_nodes(root: &Path, files: &[ProjectFile], prefix: &str) -> Vec<ProjectNode> {
+    let mut directories = BTreeSet::new();
+    let mut nodes = Vec::new();
+    let prefix_with_separator = if prefix.is_empty() {
+        String::new()
+    } else {
+        format!("{prefix}/")
+    };
+    let directory = if prefix.is_empty() {
+        root.to_path_buf()
+    } else {
+        root.join(prefix)
+    };
+    if let Ok(entries) = fs::read_dir(directory) {
+        for entry in entries.flatten() {
+            if entry.file_type().is_ok_and(|kind| kind.is_dir()) {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if !matches!(
+                    name.as_str(),
+                    ".git" | "target" | "build" | "deps" | ".idea" | ".vscode"
+                ) {
+                    directories.insert(name);
+                }
+            }
+        }
+    }
+    for (index, file) in files.iter().enumerate() {
+        let Some(relative) = file.path.strip_prefix(&prefix_with_separator) else {
+            continue;
+        };
+        if let Some((directory, _)) = relative.split_once('/') {
+            directories.insert(directory.to_string());
+        } else {
+            nodes.push(ProjectNode::File {
+                index,
+                name: relative.to_string(),
+            });
+        }
+    }
+    nodes.extend(directories.into_iter().map(|name| ProjectNode::Directory {
+        path: if prefix.is_empty() {
+            name.clone()
+        } else {
+            format!("{prefix}/{name}")
+        },
+        name,
+    }));
+    nodes.sort_by_key(|node| match node {
+        ProjectNode::Directory { name, .. } | ProjectNode::File { name, .. } => name.to_lowercase(),
+    });
+    nodes
 }
 
 fn is_nex_project(path: &Path) -> bool {
@@ -414,6 +837,87 @@ fn project_file_index(root: &Path, files: &[ProjectFile]) -> Option<usize> {
         .to_string_lossy()
         .replace('\\', "/");
     files.iter().position(|file| file.path == relative)
+}
+
+fn parse_imported_location(
+    message: &str,
+    root: &Path,
+) -> Option<(String, Option<usize>, Option<usize>, String)> {
+    let end = message.find(".nex:")? + ".nex".len();
+    let absolute = PathBuf::from(&message[..end]);
+    let relative = absolute
+        .strip_prefix(root)
+        .ok()?
+        .to_string_lossy()
+        .replace('\\', "/");
+    let mut parts = message[end + 1..].splitn(3, ':');
+    let first = parts.next().unwrap_or_default();
+    if let (Ok(line), Some(second)) = (first.parse::<usize>(), parts.next()) {
+        if let Ok(column) = second.parse::<usize>() {
+            let message = parts.next().unwrap_or_default().trim().to_string();
+            return Some((relative, Some(line), Some(column), message));
+        }
+    }
+    Some((relative, None, None, first.trim().to_string()))
+}
+
+fn check_source(root: &Path, relative: &str, source: String) -> Vec<EditorDiagnostic> {
+    let path = root.join(relative);
+    let options = nex_driver::CompileOptions {
+        emit: nex_driver::Emit::Check,
+        build_dir: Some(root.join("build")),
+        ..Default::default()
+    };
+    let result = match nex_driver::compile_source(path.display().to_string(), source, options) {
+        Ok(result) => result,
+        Err(error) => {
+            return vec![EditorDiagnostic {
+                file: relative.to_string(),
+                line: None,
+                column: None,
+                severity: "error".to_string(),
+                code: "NXC".to_string(),
+                message: error.to_string(),
+            }];
+        }
+    };
+    result
+        .diagnostics
+        .iter()
+        .map(|diagnostic| {
+            if let Some(span) = diagnostic.span {
+                let (line, column) = result.source.line_col(span.start);
+                EditorDiagnostic {
+                    file: relative.to_string(),
+                    line: Some(line),
+                    column: Some(column),
+                    severity: diagnostic.severity.label().to_string(),
+                    code: diagnostic.code.clone(),
+                    message: diagnostic.message.clone(),
+                }
+            } else if let Some((file, line, column, message)) =
+                parse_imported_location(&diagnostic.message, root)
+            {
+                EditorDiagnostic {
+                    file,
+                    line,
+                    column,
+                    severity: diagnostic.severity.label().to_string(),
+                    code: diagnostic.code.clone(),
+                    message,
+                }
+            } else {
+                EditorDiagnostic {
+                    file: relative.to_string(),
+                    line: None,
+                    column: None,
+                    severity: diagnostic.severity.label().to_string(),
+                    code: diagnostic.code.clone(),
+                    message: diagnostic.message.clone(),
+                }
+            }
+        })
+        .collect()
 }
 
 fn run_project(root: &Path, entry: &Path) -> Result<(String, String), String> {
@@ -553,6 +1057,27 @@ impl eframe::App for Studio {
             self.compile_time = Some(completion.elapsed);
             self.is_running = false;
         }
+        while let Ok(completion) = self.check_receiver.try_recv() {
+            if completion.revision == self.check_revision {
+                self.diagnostics = completion.diagnostics;
+                if !self.diagnostics.is_empty() {
+                    self.show_problems = true;
+                }
+                self.status = if self.diagnostics.is_empty() {
+                    "No source issues".to_string()
+                } else {
+                    format!("{} source issue(s)", self.diagnostics.len())
+                };
+            }
+        }
+        self.start_due_check();
+        if let Some(due) = self.check_due {
+            ctx.request_repaint_after(due.saturating_duration_since(Instant::now()));
+        }
+        if ctx.input(|i| i.viewport().close_requested()) && self.has_unsaved_changes() {
+            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+            self.show_exit_prompt = true;
+        }
         if self.is_running {
             ctx.request_repaint_after(std::time::Duration::from_millis(100));
         }
@@ -579,6 +1104,9 @@ impl eframe::App for Studio {
             .input(|i| i.key_pressed(egui::Key::Minus) && (i.modifiers.ctrl || i.modifiers.command))
         {
             self.font_size = (self.font_size - 1.0).max(9.0);
+        }
+        if ctx.input(|i| i.key_pressed(egui::Key::O) && (i.modifiers.ctrl || i.modifiers.command)) {
+            self.show_project_dialog = true;
         }
 
         // Menu bar.
@@ -707,27 +1235,58 @@ impl eframe::App for Studio {
                     .inner_margin(egui::Margin::symmetric(10, 8))
                     .show(ui, |ui| {
                         if self.activity == Activity::Search {
-                            ui.colored_label(C_MUTED, "SEARCH");
+                            ui.colored_label(C_MUTED, "SEARCH IN PROJECT");
                             ui.add_space(4.0);
                             ui.add(
                                 egui::TextEdit::singleline(&mut self.find)
-                                    .hint_text("Search in file…")
+                                    .hint_text("Search all .nex files…")
                                     .desired_width(f32::INFINITY),
                             );
                             ui.add_space(6.0);
-                            if !self.find.is_empty() {
-                                let mut count = 0;
-                                for (i, line) in self.code.lines().enumerate() {
-                                    if line.contains(&self.find) {
-                                        count += 1;
-                                        ui.colored_label(
-                                            C_TEXT,
-                                            format!("{:>4}: {}", i + 1, line.trim()),
-                                        );
-                                    }
-                                }
-                                if count == 0 {
+                            if self.find.is_empty() {
+                                ui.colored_label(
+                                    C_MUTED,
+                                    "Results from every project source file appear here.",
+                                );
+                            } else {
+                                let needle = self.find.to_lowercase();
+                                let matches: Vec<(usize, usize, String, String)> = self
+                                    .files
+                                    .iter()
+                                    .enumerate()
+                                    .flat_map(|(index, file)| {
+                                        file.code.lines().enumerate().filter_map({
+                                            let needle = needle.clone();
+                                            let path = file.path.clone();
+                                            move |(line, text)| {
+                                                text.to_lowercase().contains(&needle).then(|| {
+                                                    (
+                                                        index,
+                                                        line + 1,
+                                                        path.clone(),
+                                                        text.trim().to_string(),
+                                                    )
+                                                })
+                                            }
+                                        })
+                                    })
+                                    .take(300)
+                                    .collect();
+                                if matches.is_empty() {
                                     ui.colored_label(C_MUTED, "No matches");
+                                } else {
+                                    ui.colored_label(C_MUTED, format!("{} matches", matches.len()));
+                                    egui::ScrollArea::vertical().show(ui, |ui| {
+                                        for (index, line, path, text) in matches {
+                                            if ui
+                                                .small_button(format!("{path}:{line}  {text}"))
+                                                .clicked()
+                                            {
+                                                self.switch_to(index);
+                                                self.jump_to_line = Some(line);
+                                            }
+                                        }
+                                    });
                                 }
                             }
                         } else {
@@ -742,47 +1301,19 @@ impl eframe::App for Studio {
                                     self.show_new_file_dialog = true;
                                 }
                                 if ui
+                                    .small_button("📁+")
+                                    .on_hover_text("Create a folder")
+                                    .clicked()
+                                    && self.project_root.is_some()
+                                {
+                                    self.show_new_folder_dialog = true;
+                                }
+                                if ui
                                     .small_button("↻")
                                     .on_hover_text("Refresh project files")
                                     .clicked()
                                 {
-                                    if let Some(root) = self.project_root.clone() {
-                                        if let Err(error) = self.save_all() {
-                                            self.status = format!("Save before refresh: {error}");
-                                            return;
-                                        }
-                                        match load_project(&root) {
-                                            Ok(files) => {
-                                                let active_path = self
-                                                    .files
-                                                    .get(self.active)
-                                                    .map(|f| f.path.clone());
-                                                self.files = files;
-                                                self.open_files.clear();
-                                                if let Some(path) = active_path {
-                                                    if let Some(index) = self
-                                                        .files
-                                                        .iter()
-                                                        .position(|file| file.path == path)
-                                                    {
-                                                        self.active = index;
-                                                        self.open_files.push(index);
-                                                        self.code = self.files[index].code.clone();
-                                                    }
-                                                }
-                                                if self.open_files.is_empty()
-                                                    && !self.files.is_empty()
-                                                {
-                                                    self.active = 0;
-                                                    self.open_files.push(0);
-                                                    self.code = self.files[0].code.clone();
-                                                }
-                                            }
-                                            Err(error) => {
-                                                self.status = format!("Refresh failed: {error}")
-                                            }
-                                        }
-                                    }
+                                    self.refresh_project();
                                 }
                             });
                             ui.add_space(4.0);
@@ -793,27 +1324,8 @@ impl eframe::App for Studio {
                                 .map(|n| n.to_string_lossy().to_string())
                                 .unwrap_or_else(|| "Open a folder".to_string());
                             ui.colored_label(C_TEXT, format!("▾  {project_name}"));
-                            let file_names: Vec<String> =
-                                self.files.iter().map(|file| file.path.clone()).collect();
-                            for (index, name) in file_names.iter().enumerate() {
-                                let selected = self.active == index;
-                                let indent = 4.0 + name.matches('/').count() as f32 * 12.0;
-                                let display_name = name.rsplit('/').next().unwrap_or(name);
-                                let dirty = self.files[index].code != self.files[index].saved;
-                                ui.horizontal(|ui| {
-                                    ui.add_space(indent);
-                                    let text = egui::RichText::new(format!(
-                                        "{} {display_name}",
-                                        if dirty { "●" } else { "◇" }
-                                    ))
-                                    .monospace()
-                                    .size(13.0)
-                                    .color(if selected { Color32::WHITE } else { C_TEXT });
-                                    if ui.selectable_label(selected, text).clicked() {
-                                        self.switch_to(index);
-                                    }
-                                });
-                            }
+                            egui::ScrollArea::vertical()
+                                .show(ui, |ui| self.show_project_tree(ui, ""));
                         }
                     });
             });
@@ -894,6 +1406,10 @@ impl eframe::App for Studio {
                                         if ui.selectable_label(active, text).clicked() {
                                             self.switch_to(index);
                                         }
+                                        if ui.small_button("×").on_hover_text("Close tab").clicked()
+                                        {
+                                            self.request_close_tab(index);
+                                        }
                                     });
                                 });
                         }
@@ -933,6 +1449,26 @@ impl eframe::App for Studio {
                             .small()
                             .color(C_MUTED),
                         );
+                        if !self.recent_projects.is_empty() {
+                            ui.add_space(28.0);
+                            ui.heading(egui::RichText::new("Recent projects").size(17.0));
+                            ui.add_space(5.0);
+                            for project in self.recent_projects.clone() {
+                                let name = project
+                                    .file_name()
+                                    .map(|part| part.to_string_lossy().to_string())
+                                    .unwrap_or_else(|| project.display().to_string());
+                                if ui
+                                    .selectable_label(
+                                        false,
+                                        format!("{name}  ·  {}", project.display()),
+                                    )
+                                    .clicked()
+                                {
+                                    self.open_project_folder(project);
+                                }
+                            }
+                        }
                     });
                 });
             } else {
@@ -952,6 +1488,25 @@ impl eframe::App for Studio {
                 let response = editor.show(ui, &mut self.code);
                 if response.response.changed() {
                     self.persist_current();
+                    self.queue_check();
+                }
+                if let Some(line) = self.jump_to_line.take() {
+                    let char_index = self
+                        .code
+                        .lines()
+                        .take(line.saturating_sub(1))
+                        .map(|text| text.chars().count() + 1)
+                        .sum();
+                    let id = response.response.id;
+                    let mut state =
+                        egui::text_edit::TextEditState::load(ctx, id).unwrap_or_default();
+                    state
+                        .cursor
+                        .set_char_range(Some(egui::text::CCursorRange::one(
+                            egui::text::CCursor::new(char_index),
+                        )));
+                    state.store(ctx, id);
+                    response.response.request_focus();
                 }
                 // Cursor line/col.
                 let char_off = response.cursor_range.map(|r| r.primary.index).unwrap_or(0);
@@ -963,7 +1518,11 @@ impl eframe::App for Studio {
                     .unwrap_or(self.code.len());
                 let bytes = &self.code.as_bytes()[..offset];
                 let line = bytes.iter().filter(|b| **b == b'\n').count() + 1;
-                let col = bytes.iter().rev().take_while(|b| **b != b'\n').count() + 1;
+                let col = self.code[..offset]
+                    .rsplit('\n')
+                    .next()
+                    .map(|line| line.chars().count() + 1)
+                    .unwrap_or(1);
                 self.cursor_line = line;
                 self.cursor_col = col;
 
@@ -971,9 +1530,20 @@ impl eframe::App for Studio {
                     ui.add_space(5.0);
                     ui.separator();
                     ui.horizontal(|ui| {
-                        ui.colored_label(C_MUTED, "OUTPUT");
+                        if ui.selectable_label(!self.show_problems, "OUTPUT").clicked() {
+                            self.show_problems = false;
+                        }
+                        if ui
+                            .selectable_label(
+                                self.show_problems,
+                                format!("PROBLEMS ({})", self.diagnostics.len()),
+                            )
+                            .clicked()
+                        {
+                            self.show_problems = true;
+                        }
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if ui.small_button("Clear").clicked() {
+                            if !self.show_problems && ui.small_button("Clear").clicked() {
                                 self.output.clear();
                             }
                         });
@@ -982,14 +1552,64 @@ impl eframe::App for Studio {
                         .auto_shrink([false, false])
                         .max_height(160.0)
                         .show(ui, |ui| {
-                            ui.add(
-                                egui::TextEdit::multiline(&mut self.output)
-                                    .font(egui::TextStyle::Monospace)
-                                    .desired_width(f32::INFINITY)
-                                    .desired_rows(6)
-                                    .interactive(false)
-                                    .text_color(C_TEXT),
-                            );
+                            if self.show_problems {
+                                if self.diagnostics.is_empty() {
+                                    ui.colored_label(
+                                        C_MUTED,
+                                        "No source issues in the active file.",
+                                    );
+                                }
+                                for diagnostic in self.diagnostics.clone() {
+                                    let location = diagnostic.line.map_or_else(
+                                        || diagnostic.file.clone(),
+                                        |line| {
+                                            diagnostic.column.map_or_else(
+                                                || format!("{}:{line}", diagnostic.file),
+                                                |column| {
+                                                    format!("{}:{line}:{column}", diagnostic.file)
+                                                },
+                                            )
+                                        },
+                                    );
+                                    let label = format!(
+                                        "{} [{}] {}: {}",
+                                        diagnostic.severity.to_uppercase(),
+                                        diagnostic.code,
+                                        location,
+                                        diagnostic.message
+                                    );
+                                    let color = if diagnostic.severity == "error" {
+                                        Color32::from_rgb(255, 130, 130)
+                                    } else {
+                                        C_TEXT
+                                    };
+                                    if ui
+                                        .selectable_label(
+                                            false,
+                                            egui::RichText::new(label).color(color),
+                                        )
+                                        .clicked()
+                                    {
+                                        if let Some(index) = self
+                                            .files
+                                            .iter()
+                                            .position(|file| file.path == diagnostic.file)
+                                        {
+                                            self.switch_to(index);
+                                            self.jump_to_line = diagnostic.line;
+                                        }
+                                    }
+                                }
+                            } else {
+                                ui.add(
+                                    egui::TextEdit::multiline(&mut self.output)
+                                        .font(egui::TextStyle::Monospace)
+                                        .desired_width(f32::INFINITY)
+                                        .desired_rows(6)
+                                        .interactive(false)
+                                        .text_color(C_TEXT),
+                                );
+                            }
                         });
                 }
             }
@@ -1010,6 +1630,11 @@ impl eframe::App for Studio {
                     );
                     ui.add_space(8.0);
                     ui.horizontal(|ui| {
+                        if ui.button("Browse…").clicked() {
+                            if let Some(path) = pick_project_folder() {
+                                self.project_path_input = path.display().to_string();
+                            }
+                        }
                         if ui.button("Open folder").clicked() {
                             self.open_project();
                         }
@@ -1036,6 +1661,72 @@ impl eframe::App for Studio {
                         }
                         if ui.button("Cancel").clicked() {
                             self.show_new_file_dialog = false;
+                        }
+                    });
+                });
+        }
+        if self.show_new_folder_dialog {
+            egui::Window::new("Create project folder")
+                .collapsible(false)
+                .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+                .show(ctx, |ui| {
+                    ui.label("Folder path inside the project");
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.create_folder_path_input)
+                            .desired_width(320.0),
+                    );
+                    ui.horizontal(|ui| {
+                        if ui.button("Create folder").clicked() {
+                            self.create_folder();
+                        }
+                        if ui.button("Cancel").clicked() {
+                            self.show_new_folder_dialog = false;
+                        }
+                    });
+                });
+        }
+        if let Some(index) = self.pending_close_tab {
+            let name = self
+                .files
+                .get(index)
+                .map(|file| file.path.clone())
+                .unwrap_or_default();
+            egui::Window::new("Save changes?")
+                .collapsible(false)
+                .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+                .show(ctx, |ui| {
+                    ui.label(format!("Save changes to {name} before closing this tab?"));
+                    ui.horizontal(|ui| {
+                        if ui.button("Save").clicked() {
+                            self.close_tab(index, true);
+                        }
+                        if ui.button("Discard").clicked() {
+                            self.close_tab(index, false);
+                        }
+                        if ui.button("Cancel").clicked() {
+                            self.pending_close_tab = None;
+                        }
+                    });
+                });
+        }
+        if self.show_exit_prompt {
+            egui::Window::new("Unsaved changes")
+                .collapsible(false)
+                .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+                .show(ctx, |ui| {
+                    ui.label("Save your project changes before exiting?");
+                    ui.horizontal(|ui| {
+                        if ui.button("Save and exit").clicked() {
+                            self.save_and_exit(ctx);
+                        }
+                        if ui.button("Discard and exit").clicked() {
+                            self.discard_and_exit(ctx);
+                        }
+                        if ui.button("Cancel").clicked() {
+                            self.show_exit_prompt = false;
                         }
                     });
                 });
