@@ -73,7 +73,11 @@
 
 ## NEX 0.8 - NEX Studio
 
-- [ ] Editor, project explorer, terminal.
+- [x] Standalone desktop MVP: project explorer, syntax-highlighted editor,
+      file tabs, create/save, and background build/run.
+- [ ] Native folder picker, project-wide search, and workspace settings.
+- [ ] LSP integration in the editor: diagnostics, completion, hover, and navigation.
+- [ ] Terminal panel.
 - [x] LSP integration (`nex lsp`: hover, go-to-definition, completion, document symbols, formatting, diagnostics).
 - [ ] Debugger and profiler integration.
 

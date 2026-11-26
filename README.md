@@ -65,7 +65,8 @@ runtime (`runtime/core/nex_rt.c`) — not a hidden language runtime.
 - Not implemented yet: ownership, borrowing and lifetime checking; async/await;
   the rest of the standard library (general-purpose data structures beyond
   arrays, crypto, spawning child processes); a package registry; Python and
-  Rust adapters; NEX Studio. `nex lsp` is a built-in
+  Rust adapters; the full NEX Studio IDE (the standalone desktop MVP is in
+  development; LSP editing features and debugging are still planned). `nex lsp` is a built-in
   language server (hover, go-to-definition, completion, document symbols,
   formatting, live diagnostics). `nex debug` and
   `nex profile` build a debug/release executable and run it; they are not a
@@ -147,12 +148,15 @@ fn main():
 NEX/
   compiler/      Rust crates: diagnostics, lexer, parser, AST, semantic, IR, backend, driver
   runtime/       Small C runtime used by generated programs
-  tools/cli/     The `nex` command-line interface
+  tools/cli/        The `nex` command-line interface
+  tools/studio_egui/ Standalone desktop IDE for NEX
+  tools/studio/     Earlier local web editor prototype
+  tools/studio_native/ Earlier Win32 desktop prototype
   tests/         Unit and end-to-end tests
   examples/      Example NEX projects
   docs/          User and developer documentation
   specs/         Language and compiler specifications
-  studio/        Reserved for NEX Studio
+  studio/           Reserved for future Studio assets
 ```
 
 ## Using NEX from an AI agent
