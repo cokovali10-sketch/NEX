@@ -15,3 +15,4 @@ path = "src/main.rs"
 eframe = { version = "0.34", default-features = false, features = ["glow", "default_fonts", "accesskit"] }
 egui_code_editor = "0.2"
 nex-driver = { path = "../../compiler/driver" }
+nex-diagnostics = { path = "../../compiler/diagnostics" }

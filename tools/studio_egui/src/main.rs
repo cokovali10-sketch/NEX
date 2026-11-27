@@ -8,6 +8,7 @@
 use eframe::egui;
 use egui::Color32;
 use egui_code_editor::{CodeEditor, ColorTheme, Syntax};
+use nex_diagnostics::help_for_code;
 use std::collections::BTreeSet;
 use std::ffi::c_void;
 use std::fs;
@@ -105,6 +106,7 @@ struct EditorDiagnostic {
     severity: String,
     code: String,
     message: String,
+    help: Option<String>,
 }
 
 fn recent_projects_path() -> Option<PathBuf> {
@@ -878,6 +880,7 @@ fn check_source(root: &Path, relative: &str, source: String) -> Vec<EditorDiagno
                 severity: "error".to_string(),
                 code: "NXC".to_string(),
                 message: error.to_string(),
+                help: None,
             }];
         }
     };
@@ -894,6 +897,7 @@ fn check_source(root: &Path, relative: &str, source: String) -> Vec<EditorDiagno
                     severity: diagnostic.severity.label().to_string(),
                     code: diagnostic.code.clone(),
                     message: diagnostic.message.clone(),
+                    help: help_for_code(&diagnostic.code).map(str::to_string),
                 }
             } else if let Some((file, line, column, message)) =
                 parse_imported_location(&diagnostic.message, root)
@@ -905,6 +909,7 @@ fn check_source(root: &Path, relative: &str, source: String) -> Vec<EditorDiagno
                     severity: diagnostic.severity.label().to_string(),
                     code: diagnostic.code.clone(),
                     message,
+                    help: help_for_code(&diagnostic.code).map(str::to_string),
                 }
             } else {
                 EditorDiagnostic {
@@ -914,6 +919,7 @@ fn check_source(root: &Path, relative: &str, source: String) -> Vec<EditorDiagno
                     severity: diagnostic.severity.label().to_string(),
                     code: diagnostic.code.clone(),
                     message: diagnostic.message.clone(),
+                    help: help_for_code(&diagnostic.code).map(str::to_string),
                 }
             }
         })
@@ -1560,45 +1566,58 @@ impl eframe::App for Studio {
                                     );
                                 }
                                 for diagnostic in self.diagnostics.clone() {
-                                    let location = diagnostic.line.map_or_else(
-                                        || diagnostic.file.clone(),
-                                        |line| {
-                                            diagnostic.column.map_or_else(
-                                                || format!("{}:{line}", diagnostic.file),
-                                                |column| {
-                                                    format!("{}:{line}:{column}", diagnostic.file)
-                                                },
+                                    ui.vertical(|ui| {
+                                        let location = diagnostic.line.map_or_else(
+                                            || diagnostic.file.clone(),
+                                            |line| {
+                                                diagnostic.column.map_or_else(
+                                                    || format!("{}:{line}", diagnostic.file),
+                                                    |column| {
+                                                        format!(
+                                                            "{}:{line}:{column}",
+                                                            diagnostic.file
+                                                        )
+                                                    },
+                                                )
+                                            },
+                                        );
+                                        let label = format!(
+                                            "{} [{}] {}: {}",
+                                            diagnostic.severity.to_uppercase(),
+                                            diagnostic.code,
+                                            location,
+                                            diagnostic.message
+                                        );
+                                        let color = if diagnostic.severity == "error" {
+                                            Color32::from_rgb(255, 130, 130)
+                                        } else {
+                                            C_TEXT
+                                        };
+                                        if ui
+                                            .selectable_label(
+                                                false,
+                                                egui::RichText::new(label).color(color),
                                             )
-                                        },
-                                    );
-                                    let label = format!(
-                                        "{} [{}] {}: {}",
-                                        diagnostic.severity.to_uppercase(),
-                                        diagnostic.code,
-                                        location,
-                                        diagnostic.message
-                                    );
-                                    let color = if diagnostic.severity == "error" {
-                                        Color32::from_rgb(255, 130, 130)
-                                    } else {
-                                        C_TEXT
-                                    };
-                                    if ui
-                                        .selectable_label(
-                                            false,
-                                            egui::RichText::new(label).color(color),
-                                        )
-                                        .clicked()
-                                    {
-                                        if let Some(index) = self
-                                            .files
-                                            .iter()
-                                            .position(|file| file.path == diagnostic.file)
+                                            .clicked()
                                         {
-                                            self.switch_to(index);
-                                            self.jump_to_line = diagnostic.line;
+                                            if let Some(index) = self
+                                                .files
+                                                .iter()
+                                                .position(|file| file.path == diagnostic.file)
+                                            {
+                                                self.switch_to(index);
+                                                self.jump_to_line = diagnostic.line;
+                                            }
                                         }
-                                    }
+                                        if let Some(help) = diagnostic.help.as_deref() {
+                                            ui.label(
+                                                egui::RichText::new(format!("↳ {help}"))
+                                                    .small()
+                                                    .color(C_MUTED),
+                                            );
+                                        }
+                                    });
+                                    ui.separator();
                                 }
                             } else {
                                 ui.add(

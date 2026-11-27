@@ -30,7 +30,7 @@ read from `[build] entry` in `nex.toml`; when that is missing, Studio looks for
 - Create `.nex` files and folders using relative paths inside the project.
 - Save all files with the toolbar or Ctrl+S.
 - Search loaded NEX source files in the project and jump to matching lines.
-- Debounced background compiler diagnostics in a clickable Problems panel.
+- Debounced background compiler diagnostics with actionable fix hints in a clickable Problems panel.
 - Prompts before closing unsaved tabs or exiting with unsaved changes.
 - Build and run the project in the background with Ctrl+Enter.
 - Build output is written to the project's `build/` folder.
