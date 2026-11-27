@@ -650,8 +650,10 @@ fn lower_statement(
                 .ok_or_else(|| format!("unknown variable `{base}` during code generation"))?;
             let mut ptr = slot.ptr;
             let mut last_ty = IrType::Void;
+            let mut last_field_ty = Type::Error;
             for (struct_name, index, ty) in &steps {
                 last_ty = IrType::from_type(*ty);
+                last_field_ty = *ty;
                 let next = builder.new_value();
                 builder.emit(Inst::FieldPtr {
                     dst: next,
@@ -661,6 +663,26 @@ fn lower_statement(
                     field_ty: last_ty,
                 });
                 ptr = next;
+            }
+            // Free the previous growable-array buffer held in the field before
+            // overwriting it, mirroring scalar reassignment. Skip when the
+            // right-hand side is itself a field access, to avoid freeing a
+            // buffer we are about to store again (use-after-free).
+            if matches!(last_field_ty, Type::DynArray(_))
+                && !matches!(value.kind, ExprKind::Field { .. })
+            {
+                let old_header = builder.new_value();
+                builder.emit(Inst::Load {
+                    dst: old_header,
+                    ptr,
+                    ty: IrType::String,
+                });
+                builder.emit(Inst::Call {
+                    dst: None,
+                    name: "nex_rt_array_free".to_string(),
+                    args: vec![Operand::Value(old_header)],
+                    ret: IrType::Void,
+                });
             }
             let operand = lower_expr(builder, value, scopes, storage, analysis, Type::Error)?;
             builder.emit(Inst::Store {
@@ -1397,7 +1419,9 @@ fn copy_struct(
     let info = analysis
         .struct_info(struct_name)
         .ok_or_else(|| format!("unknown struct `{struct_name}` during code generation"))?;
-    for (index, (_, field_ty)) in info.fields.iter().enumerate() {
+    // Clone the field list so we can iterate while potentially recursing.
+    let fields: Vec<(String, Type)> = info.fields.clone();
+    for (index, (_, field_ty)) in fields.iter().enumerate() {
         let ir_ty = IrType::from_type(*field_ty);
         let dst_field = builder.new_value();
         builder.emit(Inst::FieldPtr {
@@ -1415,17 +1439,50 @@ fn copy_struct(
             index: index as u32,
             field_ty: ir_ty,
         });
-        let value = builder.new_value();
-        builder.emit(Inst::Load {
-            dst: value,
-            ptr: src_field,
-            ty: ir_ty,
-        });
-        builder.emit(Inst::Store {
-            ptr: dst_field,
-            value: Operand::Value(value),
-            ty: ir_ty,
-        });
+        if let Type::DynArray(display) = *field_ty {
+            // Value semantics: clone the growable array instead of aliasing
+            // the (move-only) header pointer.
+            let src_value = builder.new_value();
+            builder.emit(Inst::Load {
+                dst: src_value,
+                ptr: src_field,
+                ty: IrType::String,
+            });
+            let info = analysis.array_info(display).cloned();
+            let elem_size = info
+                .map(|i| ir_elem_size(analysis, IrType::from_type(i.elem)))
+                .unwrap_or(8);
+            let cloned = builder.new_value();
+            builder.emit(Inst::Call {
+                dst: Some(cloned),
+                name: "nex_rt_array_clone".to_string(),
+                args: vec![
+                    Operand::Value(src_value),
+                    Operand::Const(Const::Int(elem_size)),
+                ],
+                ret: IrType::String,
+            });
+            builder.emit(Inst::Store {
+                ptr: dst_field,
+                value: Operand::Value(cloned),
+                ty: IrType::String,
+            });
+        } else if let Type::Struct(nested) = *field_ty {
+            // Recurse so nested growable arrays are cloned too.
+            copy_struct(builder, dst_field, src_field, nested, analysis)?;
+        } else {
+            let value = builder.new_value();
+            builder.emit(Inst::Load {
+                dst: value,
+                ptr: src_field,
+                ty: ir_ty,
+            });
+            builder.emit(Inst::Store {
+                ptr: dst_field,
+                value: Operand::Value(value),
+                ty: ir_ty,
+            });
+        }
     }
     Ok(())
 }
