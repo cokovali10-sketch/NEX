@@ -27,6 +27,10 @@ struct FunctionBuilder {
     /// be freed at scope exit (RAII). A slot leaves this set when it is assigned
     /// a borrowed value (e.g. from another variable or a parameter).
     owned: std::collections::HashSet<ValueId>,
+    /// Local struct slots that own growable-array fields and must have those
+    /// fields freed at scope exit (RAII). Only locals (not parameters) are
+    /// registered; deep-copy on struct copy keeps them independent.
+    owned_structs: Vec<(ValueId, &'static str)>,
 }
 
 impl FunctionBuilder {
@@ -56,6 +60,7 @@ impl FunctionBuilder {
             loop_stack: Vec::new(),
             growable_slots: std::collections::HashSet::new(),
             owned: std::collections::HashSet::new(),
+            owned_structs: Vec::new(),
         }
     }
 
@@ -254,6 +259,9 @@ pub fn build(program: &Program, analysis: &Analysis) -> Result<IrModule, String>
                 builder.growable_slots.insert(ptr);
                 builder.owned.insert(ptr);
             }
+            if let Type::Struct(name) = ty {
+                builder.owned_structs.push((ptr, name));
+            }
             storage.insert(span, (ptr, ir_ty));
         }
 
@@ -313,6 +321,28 @@ pub fn build(program: &Program, analysis: &Analysis) -> Result<IrModule, String>
                 }
                 builder.func.blocks[block_index].insts.extend(frees);
             }
+        }
+
+        // RAII for structs: free growable-array fields of owned struct locals
+        // before returning.
+        if !builder.owned_structs.is_empty() {
+            let ret_blocks: Vec<usize> = builder
+                .func
+                .blocks
+                .iter()
+                .enumerate()
+                .filter(|(_, block)| matches!(block.terminator, Some(Terminator::Ret(_))))
+                .map(|(index, _)| index)
+                .collect();
+            let owned_structs: Vec<(ValueId, &'static str)> = builder.owned_structs.clone();
+            let saved_current = builder.current;
+            for block_index in ret_blocks {
+                builder.current = BlockId(block_index as u32);
+                for (slot, struct_name) in &owned_structs {
+                    free_struct_arrays(&mut builder, *slot, struct_name, analysis);
+                }
+            }
+            builder.current = saved_current;
         }
 
         module.functions.push(builder.func);
@@ -586,6 +616,11 @@ fn lower_statement(
                 .ok_or_else(|| format!("unknown variable `{name}` during code generation"))?;
             match (slot.ptr, slot.ty) {
                 (ptr, IrType::Struct(struct_name)) => {
+                    // Free the previous struct's growable-array fields before
+                    // overwriting, mirroring scalar/growable reassignment.
+                    if builder.owned_structs.iter().any(|(s, _)| *s == ptr) {
+                        free_struct_arrays(builder, ptr, struct_name, analysis);
+                    }
                     let source = lower_struct_place(builder, value, scopes, storage, analysis)?;
                     copy_struct(builder, ptr, source, struct_name, analysis)?;
                     Ok(())
@@ -916,6 +951,7 @@ fn lower_statement(
                         if builder.growable_slots.contains(&slot.ptr) {
                             builder.owned.remove(&slot.ptr);
                         }
+                        builder.owned_structs.retain(|(s, _)| *s != slot.ptr);
                     }
                 }
                 let operand = lower_expr(builder, value, scopes, storage, analysis, Type::Error)?;
@@ -1765,6 +1801,48 @@ fn lower_place_equality(
             Ok(result.unwrap_or(Operand::Const(Const::Bool(true))))
         }
         _ => lower_scalar_place_equality(builder, lhs, rhs, ty),
+    }
+}
+
+/// Emits frees for every growable-array field contained in the struct pointed
+/// to by `base` (recursing into nested structs). Used by RAII at scope exit
+/// and by struct reassignment.
+fn free_struct_arrays(
+    builder: &mut FunctionBuilder,
+    base: ValueId,
+    struct_name: &'static str,
+    analysis: &Analysis,
+) {
+    let Some(info) = analysis.struct_info(struct_name) else {
+        return;
+    };
+    let fields: Vec<(String, Type)> = info.fields.clone();
+    for (index, (_, field_ty)) in fields.iter().enumerate() {
+        let ir_ty = IrType::from_type(*field_ty);
+        let field_ptr = builder.new_value();
+        builder.emit(Inst::FieldPtr {
+            dst: field_ptr,
+            base,
+            struct_name,
+            index: index as u32,
+            field_ty: ir_ty,
+        });
+        if let Type::DynArray(_) = field_ty {
+            let header = builder.new_value();
+            builder.emit(Inst::Load {
+                dst: header,
+                ptr: field_ptr,
+                ty: IrType::String,
+            });
+            builder.emit(Inst::Call {
+                dst: None,
+                name: "nex_rt_array_free".to_string(),
+                args: vec![Operand::Value(header)],
+                ret: IrType::Void,
+            });
+        } else if let Type::Struct(nested) = field_ty {
+            free_struct_arrays(builder, field_ptr, nested, analysis);
+        }
     }
 }
 
