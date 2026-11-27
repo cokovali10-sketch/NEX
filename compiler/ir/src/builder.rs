@@ -4598,6 +4598,57 @@ fn lower_expr(
                         value: Operand::Value(empty),
                         ty: IrType::String,
                     });
+                    // The slot no longer owns a live buffer; prevent a
+                    // second free at scope exit or on a repeated drop.
+                    builder.owned.remove(&slot.ptr);
+                } else if let ExprKind::Field { base, .. } = &args[0].kind {
+                    // `drop(s.field)` where `field` is a growable array: free the
+                    // header stored in the field and leave a fresh empty header
+                    // behind so the field stays usable and a repeated drop is safe.
+                    let Some((struct_name, index, field_ty)) = analysis.field_read(args[0].span)
+                    else {
+                        return Ok(Operand::Const(Const::Bool(false)));
+                    };
+                    if !matches!(field_ty, Type::DynArray(_)) {
+                        return Ok(Operand::Const(Const::Bool(false)));
+                    }
+                    let base_ptr =
+                        match lower_struct_place(builder, base, scopes, storage, analysis) {
+                            Ok(ptr) => ptr,
+                            Err(_) => return Ok(Operand::Const(Const::Bool(false))),
+                        };
+                    let field_ptr = builder.new_value();
+                    builder.emit(Inst::FieldPtr {
+                        dst: field_ptr,
+                        base: base_ptr,
+                        struct_name,
+                        index,
+                        field_ty: IrType::String,
+                    });
+                    let header = builder.new_value();
+                    builder.emit(Inst::Load {
+                        dst: header,
+                        ptr: field_ptr,
+                        ty: IrType::String,
+                    });
+                    builder.emit(Inst::Call {
+                        dst: None,
+                        name: "nex_rt_array_free".to_string(),
+                        args: vec![Operand::Value(header)],
+                        ret: IrType::Void,
+                    });
+                    let empty = builder.new_value();
+                    builder.emit(Inst::Call {
+                        dst: Some(empty),
+                        name: "nex_rt_array_new".to_string(),
+                        args: Vec::new(),
+                        ret: IrType::String,
+                    });
+                    builder.emit(Inst::Store {
+                        ptr: field_ptr,
+                        value: Operand::Value(empty),
+                        ty: IrType::String,
+                    });
                 } else {
                     // A temporary such as `drop(make_array())` is not bound to a
                     // slot and is owned by this expression, so free it directly.

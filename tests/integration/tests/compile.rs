@@ -2743,3 +2743,23 @@ fn main():
     assert_eq!(code, 0, "stderr: {stderr}");
     assert_eq!(stdout, "313");
 }
+
+#[test]
+fn drop_on_struct_field_frees_and_resets() {
+    let source = r#"
+struct Bag:
+    xs: [i64]
+
+fn main():
+    var b = Bag([1, 2, 3])
+    print(len(b.xs))
+    drop(b.xs)
+    print(len(b.xs))
+    push(b.xs, 9)
+    print(len(b.xs))
+    print(b.xs[0])
+"#;
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "3019");
+}
