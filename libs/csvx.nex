@@ -1,0 +1,20 @@
+# csvx - safely quote CSV fields and assemble rows.
+pub fn escape_field(value: string) -> string:
+    if str_contains(value, ",") or str_contains(value, "\"") or str_contains(value, "\n") or str_contains(value, "\r"):
+        let escaped = str_replace(value, "\"", "\"\"")
+        return concat("\"", concat(escaped, "\""))
+    return value
+
+pub fn encode_row(values: [string]) -> string:
+    var fields: [string] = []
+    for __nex_index in 0..len(values):
+        let value = values[__nex_index]
+        push(fields, escape_field(value))
+    return join(fields, ",")
+
+pub fn encode_rows(rows: [[string]]) -> string:
+    var lines: [string] = []
+    for __nex_index in 0..len(rows):
+        let row = rows[__nex_index]
+        push(lines, encode_row(row))
+    return join(lines, "\n")

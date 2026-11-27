@@ -1,0 +1,13 @@
+# htmlx - escape text before inserting it into an HTML text or quoted attribute.
+pub fn escape(value: string) -> string:
+    var result = str_replace(value, "&", "&amp;")
+    result = str_replace(result, "<", "&lt;")
+    result = str_replace(result, ">", "&gt;")
+    result = str_replace(result, "\"", "&quot;")
+    result = str_replace(result, "'", "&#39;")
+    return result
+
+pub fn text_element(tag: string, value: string) -> string:
+    if tag != "p" and tag != "span" and tag != "div" and tag != "strong" and tag != "em" and tag != "li" and tag != "code":
+        return ""
+    return concat("<", concat(tag, concat(">", concat(escape(value), concat("</", concat(tag, ">"))))))

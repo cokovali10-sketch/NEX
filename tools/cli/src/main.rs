@@ -583,15 +583,27 @@ fn cmd_add(args: &[String]) -> ExitCode {
         return ExitCode::from(2);
     }
     let source = PathBuf::from(&args[0]);
-    if !source.is_dir() {
-        eprintln!("nex: `{}` is not a directory", source.display());
+    let is_nex_file = source.is_file()
+        && source.extension().and_then(|extension| extension.to_str()) == Some("nex");
+    if !source.is_dir() && !is_nex_file {
+        eprintln!(
+            "nex: `{}` is not a directory or `.nex` file",
+            source.display()
+        );
         return ExitCode::from(2);
     }
-    let name = source
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("dependency")
-        .to_string();
+    let name = if is_nex_file {
+        source
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+            .unwrap_or("dependency")
+    } else {
+        source
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("dependency")
+    }
+    .to_string();
 
     let project = match discover(&PathBuf::from(".")) {
         Ok(project) => project,
@@ -606,12 +618,21 @@ fn cmd_add(args: &[String]) -> ExitCode {
         eprintln!("nex: cannot create deps dir: {error}");
         return ExitCode::from(1);
     }
-    let dest = deps_dir.join(&name);
+    let dest = if is_nex_file {
+        deps_dir.join(format!("{name}.nex"))
+    } else {
+        deps_dir.join(&name)
+    };
     if dest.exists() {
         eprintln!("nex: dependency `{name}` already exists");
         return ExitCode::from(1);
     }
-    if let Err(error) = copy_dir_all(&source, &dest) {
+    let copy_result = if is_nex_file {
+        std::fs::copy(&source, &dest).map(|_| ())
+    } else {
+        copy_dir_all(&source, &dest)
+    };
+    if let Err(error) = copy_result {
         eprintln!("nex: failed to copy dependency: {error}");
         return ExitCode::from(1);
     }

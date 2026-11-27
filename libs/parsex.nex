@@ -1,0 +1,24 @@
+# parsex - non-panicking integer and boolean parsing helpers.
+# Parse helpers return a (valid, value) tuple; invalid values use a zero fallback.
+pub fn try_i64(value: string) -> (bool, i64):
+    if len(value) == 0:
+        return (false, 0)
+    var start = 0
+    if str_starts_with(value, "-") or str_starts_with(value, "+"):
+        start = 1
+    if start == len(value):
+        return (false, 0)
+    var i = start
+    while i < len(value):
+        if not str_contains("0123456789", char_at(value, i)):
+            return (false, 0)
+        i += 1
+    return (true, parse_i64(value))
+
+pub fn try_bool(value: string) -> (bool, bool):
+    let normalized = str_lower(str_trim(value))
+    if normalized == "true" or normalized == "1" or normalized == "yes":
+        return (true, true)
+    if normalized == "false" or normalized == "0" or normalized == "no":
+        return (true, false)
+    return (false, false)

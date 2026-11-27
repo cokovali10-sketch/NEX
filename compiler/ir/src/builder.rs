@@ -3120,7 +3120,7 @@ fn lower_expr(
                 return Ok(Operand::Value(dst));
             }
 
-            if callee.starts_with("router_") {
+            if !callee.contains('.') && callee.starts_with("router_") {
                 let mut call_args = Vec::new();
                 for arg in args {
                     call_args.push(lower_expr(
@@ -3236,7 +3236,7 @@ fn lower_expr(
                 return Ok(Operand::Value(dst));
             }
 
-            if callee.starts_with("builder_") {
+            if !callee.contains('.') && callee.starts_with("builder_") {
                 let mut call_args = Vec::new();
                 for arg in args {
                     call_args.push(lower_expr(
@@ -3285,7 +3285,7 @@ fn lower_expr(
                 return Ok(Operand::Value(raw));
             }
 
-            if callee.starts_with("map_") {
+            if !callee.contains('.') && callee.starts_with("map_") {
                 let mut call_args = Vec::new();
                 for arg in args {
                     call_args.push(lower_expr(
@@ -3296,6 +3296,13 @@ fn lower_expr(
                         analysis,
                         Type::Error,
                     )?);
+                }
+                // `map_new` keeps its capacity parameter private to the
+                // runtime API; the NEX builtin intentionally takes no args.
+                // Pass the runtime's minimum capacity explicitly instead of
+                // issuing an ABI-mismatched zero-argument call.
+                if callee == "map_new" && call_args.is_empty() {
+                    call_args.push(Operand::Const(Const::Int(8)));
                 }
                 let (name, ret) = match callee {
                     "map_new" => ("nex_rt_map_new", IrType::I64),
@@ -3339,7 +3346,7 @@ fn lower_expr(
                 return Ok(Operand::Value(dst));
             }
 
-            if callee.starts_with("json_") {
+            if !callee.contains('.') && callee.starts_with("json_") {
                 let mut call_args = Vec::new();
                 for arg in args {
                     call_args.push(lower_expr(
@@ -4870,7 +4877,14 @@ fn lower_expr(
             }
 
             // Unicode-aware string functions
-            if callee == "utf8_len" || callee == "utf8_char_at" || callee == "utf8_substr" || callee == "utf8_reverse" || callee == "utf8_upper" || callee == "utf8_lower" || callee == "utf8_char_code_at" {
+            if callee == "utf8_len"
+                || callee == "utf8_char_at"
+                || callee == "utf8_substr"
+                || callee == "utf8_reverse"
+                || callee == "utf8_upper"
+                || callee == "utf8_lower"
+                || callee == "utf8_char_code_at"
+            {
                 let mut call_args = Vec::new();
                 for arg in args {
                     call_args.push(lower_expr(

@@ -1,0 +1,16 @@
+# optionx - optional values represented by (present, value) tuples.
+pub fn some_i64(value: i64) -> (bool, i64):
+    return (true, value)
+
+pub fn empty_i64() -> (bool, i64):
+    return (false, 0)
+
+pub fn unwrap_i64(present: bool, value: i64, fallback: i64) -> i64:
+    if present:
+        return value
+    return fallback
+
+pub fn unwrap_string(present: bool, value: string, fallback: string) -> string:
+    if present:
+        return value
+    return fallback

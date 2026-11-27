@@ -1,5 +1,7 @@
 use mathx from "../mathx.nex"
+
 use strx from "../strx.nex"
+
 use seq from "../seq.nex"
 
 fn main():
@@ -37,6 +39,6 @@ fn main():
     var i = 0
     var line = ""
     while i < len(r):
-        line = line + to_string(r[i])
-        i = i + 1
+        line += to_string(r[i])
+        i += 1
     println("reverse = " + line)

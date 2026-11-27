@@ -1,0 +1,138 @@
+use pathx from "../pathx.nex"
+
+use fsx from "../fsx.nex"
+
+use envx from "../envx.nex"
+
+use clix from "../clix.nex"
+
+use jsonx from "../jsonx.nex"
+
+use mapx from "../mapx.nex"
+
+use timex from "../timex.nex"
+
+use textx from "../textx.nex"
+
+use formatx from "../formatx.nex"
+
+use validate from "../validate.nex"
+
+use urlx from "../urlx.nex"
+
+use csvx from "../csvx.nex"
+
+use htmlx from "../htmlx.nex"
+
+use json_buildx from "../json_buildx.nex"
+
+use seqstr from "../seqstr.nex"
+
+use routerx from "../routerx.nex"
+
+use setx from "../setx.nex"
+
+use optionx from "../optionx.nex"
+
+use resultx from "../resultx.nex"
+
+use configx from "../configx.nex"
+
+use parsex from "../parsex.nex"
+
+use statsx from "../statsx.nex"
+
+use cookiex from "../cookiex.nex"
+
+use timefmt from "../timefmt.nex"
+
+use hashx from "../hashx.nex"
+
+use bytex from "../bytex.nex"
+
+use httpx from "../httpx.nex"
+
+fn main():
+    println("== paths ==")
+    println(pathx.join("src\\", "main.nex"))
+    println(pathx.basename("src/main.nex"))
+    println(pathx.dirname("src/main.nex"))
+    println(pathx.extension("src/main.nex"))
+    assert(pathx.basename("") == "")
+    assert(pathx.basename("a/b/") == "b")
+    assert(pathx.dirname("README") == ".")
+    assert(pathx.extension(".env") == "")
+    assert(pathx.join("D:\\NEX", "src\\main.nex") == "D:/NEX/src/main.nex")
+
+    println("== environment and args ==")
+    println(envx.get_or("NEX_DEMO_NAME", "NEX"))
+    println(to_string(envx.arg_or(0, "<no argument>")))
+    println(to_string(clix.has_flag("--verbose")))
+    println(clix.option("--name", "guest"))
+
+    println("== files ==")
+    let lines: [string] = ["first", "second"]
+    if fsx.write_lines("build/foundation-demo.txt", lines):
+        println(to_string(len(fsx.read_lines("build/foundation-demo.txt"))))
+        assert(len(fsx.read_lines("build/foundation-demo.txt")) == 2)
+
+    println("== JSON and maps ==")
+    let document = json_parse("{\"name\":\"NEX\",\"count\":3}")
+    println(jsonx.string_or(document, "name", "unknown"))
+    println(to_string(jsonx.number_or(document, "count", 0.0)))
+    let values = map_new()
+    println(to_string(mapx.increment(values, "runs", 1)))
+    println(to_string(map_len(values)))
+    println(mapx.get_or(values, "runs", "0"))
+
+    println("== elapsed time ==")
+    let started = now_ms()
+    sleep_ms(1)
+    println(to_string(timex.elapsed_ms(started)))
+
+    println("== text and formatting ==")
+    assert(textx.count_words("NEX makes native apps") == 4)
+    println(formatx.grouped_i64(1234567))
+    println(formatx.pad_left("7", 3, "0"))
+
+    println("== validation and URLs ==")
+    assert(validate.is_integer("-42"))
+    assert(validate.is_ascii_identifier("nex_module2"))
+    println(urlx.query_value("/search?q=nex&page=2", "q"))
+    println(urlx.encode_component("hello world"))
+
+    println("== serialization ==")
+    println(csvx.encode_row(["NEX", "native, fast"]))
+    println(htmlx.escape("<nex & \"tools\">"))
+    println(json_buildx.object([json_buildx.string_field("language", "NEX")]))
+
+    println("== collections and routes ==")
+    let words: [string] = ["nex", "nex", "studio"]
+    println(to_string(len(seqstr.unique(words))))
+    let numbers: [i64] = [1, 2]
+    println(to_string(setx.has(setx.add(numbers, 3), 3)))
+    let router = router_new()
+    let route = routerx.add_get(router, "/health")
+    println(to_string(routerx.matched(route)))
+
+    println("== options, results, and parsing ==")
+    let (present, maybe_count) = optionx.some_i64(42)
+    println(to_string(optionx.unwrap_i64(present, maybe_count, 0)))
+    let (succeeded, result_count, _) = resultx.success_i64(7)
+    println(to_string(resultx.unwrap_or_i64(succeeded, result_count, 0)))
+    let (is_number, parsed_number) = parsex.try_i64("123")
+    assert(is_number and parsed_number == 123)
+
+    println("== config and statistics ==")
+    let settings = configx.parse("# app\nport = 8080\nmode = dev")
+    println(configx.get_or(settings, "port", "80"))
+    let samples: [i64] = [8, 2, 4]
+    println(to_string(statsx.mean(samples)))
+    println(to_string(statsx.median(samples)))
+
+    println("== web and utility helpers ==")
+    println(cookiex.get("theme=dark; session=abc", "session"))
+    println(timefmt.compact_ms(2500))
+    println(to_string(hashx.djb2_codepoints("NEX")))
+    println(bytex.hex_i64(255))
+    println(httpx.ok_text("ready"))

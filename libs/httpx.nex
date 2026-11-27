@@ -1,0 +1,15 @@
+# httpx - convenience response constructors for the built-in HTTP helpers.
+pub fn text(status: string, body: string) -> string:
+    return http_response(status, "text/plain; charset=utf-8", body)
+
+pub fn html(status: string, body: string) -> string:
+    return http_response(status, "text/html; charset=utf-8", body)
+
+pub fn json(status: string, body: string) -> string:
+    return http_response(status, "application/json; charset=utf-8", body)
+
+pub fn ok_text(body: string) -> string:
+    return text("200 OK", body)
+
+pub fn not_found() -> string:
+    return text("404 Not Found", "not found")

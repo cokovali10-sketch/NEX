@@ -1,0 +1,13 @@
+# cookiex - simple lookup in an HTTP Cookie header (without percent decoding).
+pub fn get(header: string, name: string) -> string:
+    let pairs = str_split(header, ";")
+    for __nex_index in 0..len(pairs):
+        let pair = pairs[__nex_index]
+        let clean = str_trim(pair)
+        let equals = str_index_of(clean, "=")
+        if equals > 0 and str_trim(str_substring(clean, 0, equals)) == name:
+            return str_trim(str_substring(clean, equals + 1, len(clean)))
+    return ""
+
+pub fn has(header: string, name: string) -> bool:
+    return get(header, name) != ""

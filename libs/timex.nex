@@ -1,0 +1,14 @@
+# timex - readable helpers for monotonic duration measurement.
+pub fn elapsed_ms(started_at: i64) -> i64:
+    let elapsed = now_ms() - started_at
+    if elapsed < 0:
+        return 0
+    return elapsed
+
+pub fn seconds_to_ms(seconds: i64) -> i64:
+    if seconds <= 0:
+        return 0
+    return seconds * 1000
+
+pub fn sleep_seconds(seconds: i64):
+    sleep_ms(seconds_to_ms(seconds))

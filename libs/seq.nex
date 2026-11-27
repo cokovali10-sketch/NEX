@@ -1,11 +1,11 @@
 # seq - helpers for growable integer arrays [i64].
 # Use: use seq from "seq.nex"  then  seq.sum(a)
-
 # Sum of all elements (0 for an empty array).
 pub fn sum(a: [i64]) -> i64:
     var total = 0
-    for x in a:
-        total = total + x
+    for __nex_index in 0..len(a):
+        let x = a[__nex_index]
+        total += x
     return total
 
 pub fn max(a: [i64]) -> i64:
@@ -16,7 +16,7 @@ pub fn max(a: [i64]) -> i64:
     while i < len(a):
         if a[i] > m:
             m = a[i]
-        i = i + 1
+        i += 1
     return m
 
 pub fn min(a: [i64]) -> i64:
@@ -27,14 +27,15 @@ pub fn min(a: [i64]) -> i64:
     while i < len(a):
         if a[i] < m:
             m = a[i]
-        i = i + 1
+        i += 1
     return m
 
 pub fn count(a: [i64], x: i64) -> i64:
     var c = 0
-    for v in a:
+    for __nex_index in 0..len(a):
+        let v = a[__nex_index]
         if v == x:
-            c = c + 1
+            c += 1
     return c
 
 # First index of `x`, or -1 if absent.
@@ -43,7 +44,7 @@ pub fn index_of(a: [i64], x: i64) -> i64:
     while i < len(a):
         if a[i] == x:
             return i
-        i = i + 1
+        i += 1
     return 0 - 1
 
 # A new array with the elements in reverse order.
@@ -52,5 +53,5 @@ pub fn reverse(a: [i64]) -> [i64]:
     var i = len(a) - 1
     while i >= 0:
         push(out, a[i])
-        i = i - 1
+        i -= 1
     return out

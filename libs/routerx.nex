@@ -1,0 +1,15 @@
+# routerx - readable helpers for the built-in HTTP route table.
+pub fn is_not_found(route_id: i64) -> bool:
+    return route_id == 0
+
+pub fn is_method_not_allowed(route_id: i64) -> bool:
+    return route_id == -1
+
+pub fn matched(route_id: i64) -> bool:
+    return route_id > 0
+
+pub fn add_get(router: i64, path: string) -> i64:
+    return router_add(router, "GET", path)
+
+pub fn add_post(router: i64, path: string) -> i64:
+    return router_add(router, "POST", path)

@@ -1,0 +1,92 @@
+# pathx - portable lexical path helpers for NEX strings.
+# Paths are not resolved against the filesystem; separators are normalized to '/'.
+pub fn normalize(path: string) -> string:
+    return str_replace(path, "\\", "/")
+
+pub fn is_absolute(path: string) -> bool:
+    let value = normalize(path)
+    if str_starts_with(value, "/"):
+        return true
+    if len(value) >= 3 and str_substring(value, 1, 2) == ":" and str_substring(value, 2, 3) == "/":
+        return true
+    return false
+
+pub fn basename(path: string) -> string:
+    let value = normalize(path)
+    if len(value) == 0:
+        return ""
+    var end = len(value)
+    while end > 0 and str_substring(value, end - 1, end) == "/":
+        end -= 1
+    if end == 0:
+        return "/"
+    let trimmed = str_substring(value, 0, end)
+    let separator = str_index_of_from(trimmed, "/", 0)
+    var last = separator
+    var cursor = separator + 1
+    while separator >= 0 and cursor <= len(trimmed):
+        let next = str_index_of_from(trimmed, "/", cursor)
+        if next < 0:
+            break
+        last = next
+        cursor = next + 1
+    if last < 0:
+        return trimmed
+    return str_substring(trimmed, last + 1, len(trimmed))
+
+pub fn dirname(path: string) -> string:
+    let value = normalize(path)
+    var end = len(value)
+    while end > 1 and str_substring(value, end - 1, end) == "/":
+        end -= 1
+    let trimmed = str_substring(value, 0, end)
+    var last = str_index_of_from(trimmed, "/", 0)
+    var cursor = last + 1
+    while last >= 0 and cursor <= len(trimmed):
+        let next = str_index_of_from(trimmed, "/", cursor)
+        if next < 0:
+            break
+        last = next
+        cursor = next + 1
+    if last < 0:
+        return "."
+    if last == 0:
+        return "/"
+    if last == 2 and str_substring(trimmed, 1, 2) == ":":
+        return str_substring(trimmed, 0, 3)
+    return str_substring(trimmed, 0, last)
+
+pub fn extension(path: string) -> string:
+    let name = basename(path)
+    var dot = str_index_of_from(name, ".", 0)
+    var last = dot
+    var cursor = dot + 1
+    while dot >= 0 and cursor <= len(name):
+        let next = str_index_of_from(name, ".", cursor)
+        if next < 0:
+            break
+        last = next
+        cursor = next + 1
+    if last <= 0 or last == len(name) - 1:
+        return ""
+    return str_substring(name, last + 1, len(name))
+
+pub fn stem(path: string) -> string:
+    let name = basename(path)
+    let ext = extension(name)
+    if len(ext) == 0:
+        return name
+    return str_substring(name, 0, len(name) - len(ext) - 1)
+
+pub fn join(base: string, child: string) -> string:
+    let left = normalize(base)
+    let right = normalize(child)
+    if is_absolute(right):
+        return right
+    if len(left) == 0:
+        return right
+    if len(right) == 0:
+        return left
+    if str_substring(left, len(left) - 1, len(left)) == "/":
+        return concat(left, right)
+    return concat(concat(left, "/"), right)

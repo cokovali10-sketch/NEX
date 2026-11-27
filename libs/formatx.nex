@@ -1,0 +1,45 @@
+# formatx - practical formatting helpers for numbers and text.
+pub fn pad_left(value: string, width: i64, fill: string) -> string:
+    var result = value
+    var unit = fill
+    if len(unit) == 0:
+        unit = " "
+    while len(result) < width:
+        result = concat(unit, result)
+    return result
+
+pub fn pad_right(value: string, width: i64, fill: string) -> string:
+    var result = value
+    var unit = fill
+    if len(unit) == 0:
+        unit = " "
+    while len(result) < width:
+        result = concat(result, unit)
+    return result
+
+pub fn grouped_i64(value: i64) -> string:
+    let raw = to_string(value)
+    let negative = str_starts_with(clone(raw), "-")
+    let raw_length = len(raw)
+    var digits = clone(raw)
+    if negative:
+        digits = str_substring(clone(raw), 1, raw_length)
+    var result = ""
+    var i = 0
+    let digit_count = len(digits)
+    while i < digit_count:
+        if i > 0 and (digit_count - i) % 3 == 0:
+            result = concat(result, ",")
+        result = concat(result, char_at(clone(digits), i))
+        i += 1
+    if negative:
+        return concat("-", result)
+    return result
+
+pub fn percent(value: i64, total: i64) -> string:
+    if total == 0:
+        return "0%"
+    let whole = value / total
+    let remainder = value % total
+    let amount = whole * 100 + remainder * 100 / total
+    return concat(to_string(amount), "%")

@@ -1,0 +1,6 @@
+[package]
+name = "nex-library-examples"
+version = "0.1.0"
+
+[build]
+entry = "foundation.nex"

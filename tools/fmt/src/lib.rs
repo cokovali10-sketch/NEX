@@ -296,15 +296,20 @@ impl<'a> Printer<'a> {
         text.push_str(&item.path.join("."));
         if let Some(file) = &item.file {
             text.push_str(" from ");
-            text.push_str(file);
+            write_string(file, &mut text);
         }
         self.push_node(&text, Some(item.span));
     }
 
     fn struct_decl(&mut self, item: &StructDecl) {
         let visibility = if item.public { "pub " } else { "" };
+        let type_params = if item.type_params.is_empty() {
+            String::new()
+        } else {
+            format!("<{}>", item.type_params.join(", "))
+        };
         self.push_node(
-            format!("{visibility}struct {}:", item.name),
+            format!("{visibility}struct {}{type_params}:", item.name),
             Some(item.span),
         );
         self.indent += 1;
@@ -422,7 +427,11 @@ impl<'a> Printer<'a> {
         if let Some(abi) = &item.extern_abi {
             text.push_str(&format!("extern \"{abi}\" "));
         }
-        text.push_str(&format!("fn {}(", item.name));
+        text.push_str(&format!("fn {}", item.name));
+        if !item.type_params.is_empty() {
+            text.push_str(&format!("<{}>", item.type_params.join(", ")));
+        }
+        text.push('(');
         let params: Vec<String> = item.params.iter().map(param_str).collect();
         text.push_str(&params.join(", "));
         text.push(')');
@@ -696,6 +705,10 @@ fn type_str(ty: &TypeExpr) -> String {
             return format!("&{}", type_str(inner));
         }
     }
+    if !ty.generic_args.is_empty() {
+        let args: Vec<String> = ty.generic_args.iter().map(type_str).collect();
+        return format!("{}<{}>", ty.name, args.join(", "));
+    }
     ty.name.clone()
 }
 
@@ -897,6 +910,30 @@ mod tests {
         let source = "fn add(a: i64,b: i64)->i64:\n    return a+b\nfn main():\n    var x=1\n    print(add(1,2))\n";
         let expected = "fn add(a: i64, b: i64) -> i64:\n    return a + b\n\nfn main():\n    var x = 1\n    print(add(1, 2))\n";
         assert_eq!(format(source), expected);
+    }
+
+    #[test]
+    fn preserves_quoted_file_imports() {
+        let source = "use pathx from \"../libs/pathx.nex\"\n\nfn main():\n    print(pathx.basename(\"a/b.nex\"))\n";
+        let once = format(source);
+        assert!(
+            once.starts_with("use pathx from \"../libs/pathx.nex\"\n"),
+            "{once}"
+        );
+        assert_eq!(format(&once), once);
+    }
+
+    #[test]
+    fn preserves_generic_functions_and_types() {
+        let source = "struct Box<T>:\n    item: T\n\nfn choose<T>(left: T, right: T) -> T:\n    return left\n\nfn main():\n    let boxed: Box<i64> = Box(1)\n    print(choose(boxed.item, 2))\n";
+        let once = format(source);
+        assert!(once.contains("struct Box<T>:"), "{once}");
+        assert!(
+            once.contains("fn choose<T>(left: T, right: T) -> T:"),
+            "{once}"
+        );
+        assert!(once.contains("Box<i64>"), "{once}");
+        assert_eq!(format(&once), once);
     }
 
     #[test]

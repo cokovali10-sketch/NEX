@@ -1,0 +1,17 @@
+# bytex - hexadecimal formatting for non-negative NEX integers.
+pub fn hex_digit(value: i64) -> string:
+    if value < 0 or value > 15:
+        return ""
+    return char_at("0123456789ABCDEF", value)
+
+pub fn hex_i64(value: i64) -> string:
+    if value < 0:
+        return ""
+    if value == 0:
+        return "0"
+    var remaining = value
+    var result = ""
+    while remaining > 0:
+        result = hex_digit(remaining % 16) + result
+        remaining /= 16
+    return result

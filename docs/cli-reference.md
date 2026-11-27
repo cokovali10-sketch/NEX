@@ -18,8 +18,9 @@
 - `nex version`: print the compiler version.
 - `nex fmt [--check | --write] <file.nex>...`: format source files.
 - `nex lint [--deny-warnings] <file.nex>...`: report suspicious code.
-- `nex add <path>`: copy a local package into `deps/` and record it in
-  `nex.toml`.
+- `nex add <path>`: copy a local package directory or `.nex` module file into
+  `deps/` and record it in `nex.toml`. A copied module can be imported by its
+  short name, for example `use pathx from "pathx"`.
 - `nex benchmark [path] [-n N]`: build with `--release` and time `N` runs.
 - `nex debug [path]`: build with debug symbols and run the executable. This is
   a convenience wrapper; it does not attach a debugger.

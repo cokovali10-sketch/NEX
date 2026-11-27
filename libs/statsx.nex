@@ -1,0 +1,42 @@
+# statsx - integer statistics for growable [i64] arrays.
+pub fn sum(values: [i64]) -> i64:
+    var total = 0
+    for __nex_index in 0..len(values):
+        let value = values[__nex_index]
+        total += value
+    return total
+
+pub fn mean(values: [i64]) -> i64:
+    if len(values) == 0:
+        return 0
+    return sum(values) / len(values)
+
+pub fn median(values: [i64]) -> i64:
+    if len(values) == 0:
+        return 0
+    var ordered = clone(values)
+    sort(ordered)
+    let middle = len(ordered) / 2
+    if len(ordered) % 2 == 1:
+        return ordered[middle]
+    return (ordered[middle - 1] + ordered[middle]) / 2
+
+pub fn min(values: [i64]) -> i64:
+    if len(values) == 0:
+        return 0
+    var result = values[0]
+    for __nex_index in 0..len(values):
+        let value = values[__nex_index]
+        if value < result:
+            result = value
+    return result
+
+pub fn max(values: [i64]) -> i64:
+    if len(values) == 0:
+        return 0
+    var result = values[0]
+    for __nex_index in 0..len(values):
+        let value = values[__nex_index]
+        if value > result:
+            result = value
+    return result

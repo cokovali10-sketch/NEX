@@ -1,0 +1,48 @@
+# validate - small ASCII-oriented validation helpers (not a security policy).
+pub fn is_digit(ch: string) -> bool:
+    return len(ch) == 1 and str_contains("0123456789", ch)
+
+pub fn is_alpha(ch: string) -> bool:
+    if len(ch) != 1:
+        return false
+    return str_contains("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ", ch)
+
+pub fn is_ascii_identifier(value: string) -> bool:
+    if len(value) == 0:
+        return false
+    let first = char_at(value, 0)
+    if first != "_" and not is_alpha(first):
+        return false
+    var i = 1
+    while i < len(value):
+        let ch = char_at(value, i)
+        if ch != "_" and not is_alpha(ch) and not is_digit(ch):
+            return false
+        i += 1
+    return true
+
+pub fn is_integer(value: string) -> bool:
+    if len(value) == 0:
+        return false
+    var start = 0
+    if str_starts_with(value, "-") or str_starts_with(value, "+"):
+        start = 1
+    if start == len(value):
+        return false
+    var i = start
+    while i < len(value):
+        if not is_digit(char_at(value, i)):
+            return false
+        i += 1
+    return true
+
+# A pragmatic syntax check only; use server-side verification for real addresses.
+pub fn is_simple_email(value: string) -> bool:
+    let at = str_index_of(value, "@")
+    if at <= 0 or at == len(value) - 1:
+        return false
+    if str_index_of_from(value, "@", at + 1) >= 0:
+        return false
+    let domain = str_substring(value, at + 1, len(value))
+    let dot = str_index_of(domain, ".")
+    return dot > 0 and dot < len(domain) - 1

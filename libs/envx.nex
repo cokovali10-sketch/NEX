@@ -1,0 +1,22 @@
+# envx - convenience helpers for process environment and positional arguments.
+pub fn get_or(name: string, fallback: string) -> string:
+    let value = env(name)
+    if len(value) == 0:
+        return fallback
+    return value
+
+pub fn is_set(name: string) -> bool:
+    return len(env(name)) > 0
+
+pub fn arg_or(index: i64, fallback: string) -> string:
+    if index < 0 or index >= args_count():
+        return fallback
+    return arg_at(index)
+
+pub fn has_argument(value: string) -> bool:
+    var i = 0
+    while i < args_count():
+        if arg_at(i) == value:
+            return true
+        i += 1
+    return false

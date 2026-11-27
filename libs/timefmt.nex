@@ -1,0 +1,17 @@
+# timefmt - compact non-negative millisecond duration formatting.
+pub fn compact_ms(milliseconds: i64) -> string:
+    if milliseconds < 0:
+        return "negative duration"
+    if milliseconds < 1000:
+        return to_string(milliseconds) + "ms"
+    let seconds = milliseconds / 1000
+    let millis = milliseconds % 1000
+    if seconds < 60:
+        return to_string(seconds) + "." + to_string(millis / 100) + "s"
+    let minutes = seconds / 60
+    let remaining_seconds = seconds % 60
+    if minutes < 60:
+        return to_string(minutes) + "m " + to_string(remaining_seconds) + "s"
+    let hours = minutes / 60
+    let remaining_minutes = minutes % 60
+    return to_string(hours) + "h " + to_string(remaining_minutes) + "m " + to_string(remaining_seconds) + "s"

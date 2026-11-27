@@ -1,0 +1,11 @@
+# resultx - result values represented by (ok, value, error) tuples.
+pub fn success_i64(value: i64) -> (bool, i64, string):
+    return (true, value, "")
+
+pub fn failure_i64(error: string) -> (bool, i64, string):
+    return (false, 0, error)
+
+pub fn unwrap_or_i64(ok: bool, value: i64, fallback: i64) -> i64:
+    if ok:
+        return value
+    return fallback

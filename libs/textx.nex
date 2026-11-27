@@ -1,0 +1,44 @@
+# textx - small whole-text helpers. Length and indexing follow NEX string builtins.
+pub fn is_blank(value: string) -> bool:
+    return len(str_trim(value)) == 0
+
+pub fn lines(value: string) -> [string]:
+    if len(value) == 0:
+        return []
+    let normalized = str_replace(value, "\r\n", "\n")
+    return str_split(normalized, "\n")
+
+pub fn count_lines(value: string) -> i64:
+    if len(value) == 0:
+        return 0
+    return str_split_count(str_replace(value, "\r\n", "\n"), "\n")
+
+pub fn count_words(value: string) -> i64:
+    let text = str_trim(value)
+    if len(text) == 0:
+        return 0
+    var words = 0
+    var inside = false
+    var i = 0
+    while i < len(text):
+        let ch = char_at(text, i)
+        let whitespace = ch == " " or ch == "\t" or ch == "\n" or ch == "\r"
+        if whitespace:
+            inside = false
+        elif not inside:
+            words += 1
+            inside = true
+        i += 1
+    return words
+
+pub fn before(value: string, separator: string) -> string:
+    let index = str_index_of(value, separator)
+    if index < 0:
+        return value
+    return str_substring(value, 0, index)
+
+pub fn after(value: string, separator: string) -> string:
+    let index = str_index_of(value, separator)
+    if index < 0:
+        return ""
+    return str_substring(value, index + len(separator), len(value))

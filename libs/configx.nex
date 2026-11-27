@@ -1,0 +1,27 @@
+# configx - parse simple UTF-8 key=value configuration text into a NEX map.
+# Lines beginning with # are ignored; values are trimmed but not unquoted.
+pub fn parse(text: string) -> i64:
+    let normalized = str_replace(text, "\r\n", "\n")
+    let lines = str_split(normalized, "\n")
+    let config = map_new()
+    for __nex_index in 0..len(lines):
+        let line = lines[__nex_index]
+        let clean = str_trim(line)
+        if len(clean) > 0 and not str_starts_with(clean, "#"):
+            let equals = str_index_of(clean, "=")
+            if equals > 0:
+                let key = str_trim(str_substring(clean, 0, equals))
+                let value = str_trim(str_substring(clean, equals + 1, len(clean)))
+                if len(key) > 0:
+                    map_set(config, key, value)
+    return config
+
+pub fn get_or(config: i64, key: string, fallback: string) -> string:
+    if not map_has(config, key):
+        return fallback
+    return map_get(config, key)
+
+pub fn load_file(path: string) -> i64:
+    if not file_exists(path):
+        return map_new()
+    return parse(read_file(path))

@@ -1,0 +1,31 @@
+# urlx - query helpers and ASCII percent encoding for URL components.
+pub fn query_value(url: string, key: string) -> string:
+    let query_start = str_index_of(url, "?")
+    if query_start < 0:
+        return ""
+    let query = str_substring(url, query_start + 1, len(url))
+    let pairs = str_split(query, "&")
+    for __nex_index in 0..len(pairs):
+        let pair = pairs[__nex_index]
+        let equals = str_index_of(pair, "=")
+        if equals >= 0 and str_substring(pair, 0, equals) == key:
+            return str_substring(pair, equals + 1, len(pair))
+    return ""
+
+pub fn encode_component(value: string) -> string:
+    let digits = "0123456789ABCDEF"
+    var result = ""
+    var i = 0
+    while i < len(value):
+        let ch = char_at(value, i)
+        let code = char_code(ch)
+        if str_contains("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.~", ch):
+            result = concat(result, ch)
+        elif code > 127:
+            result = concat(result, ch)
+        else:
+            result = concat(result, "%")
+            result = concat(result, char_at(digits, code / 16))
+            result = concat(result, char_at(digits, code % 16))
+        i += 1
+    return result

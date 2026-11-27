@@ -103,8 +103,13 @@ fn compile_source_inner(
     options: CompileOptions,
 ) -> Result<CompileResult, DriverError> {
     let mut visited = std::collections::HashSet::new();
-    let (mut program, sources, mut diagnostics) =
-        load_program_text(&source_name, source_text, &mut visited)?;
+    let mut next_span_offset = 0usize;
+    let (mut program, sources, mut diagnostics) = load_program_text(
+        &source_name,
+        source_text,
+        &mut visited,
+        &mut next_span_offset,
+    )?;
 
     let source = sources
         .first()
@@ -178,7 +183,10 @@ fn load_program_text(
     name: &str,
     text: String,
     visited: &mut std::collections::HashSet<std::path::PathBuf>,
+    next_span_offset: &mut usize,
 ) -> Result<(nex_ast::Program, Vec<SourceFile>, Vec<Diagnostic>), DriverError> {
+    let span_offset = *next_span_offset;
+    *next_span_offset = next_span_offset.saturating_add(text.len().saturating_add(1));
     let source = SourceFile::new(name.to_string(), text.clone());
     let lexed = Lexer::new(&text).lex();
     let mut diagnostics = lexed.diagnostics.clone();
@@ -186,6 +194,7 @@ fn load_program_text(
     diagnostics.extend(parsed.diagnostics.clone());
 
     let mut program = parsed.program;
+    nex_ast::offset_program(&mut program, span_offset);
     let mut sources = vec![source];
 
     // Resolve file-based imports.
@@ -195,9 +204,9 @@ fn load_program_text(
             let base_dir = std::path::Path::new(name)
                 .parent()
                 .unwrap_or_else(|| std::path::Path::new("."));
-            let imported_path = base_dir.join(file);
+            let imported_path = resolve_import_path(base_dir, file)?;
             let (imported_program, imported_sources, imported_diagnostics) =
-                load_program_file(&imported_path, visited)?;
+                load_program_file(&imported_path, visited, next_span_offset)?;
             diagnostics.extend(imported_diagnostics);
 
             let alias = if use_decl.path.len() == 1 {
@@ -224,9 +233,73 @@ fn load_program_text(
     Ok((program, sources, diagnostics))
 }
 
+fn resolve_import_path(base_dir: &Path, requested: &str) -> Result<PathBuf, DriverError> {
+    let requested_path = Path::new(requested);
+    if requested_path.is_absolute() {
+        if requested_path.is_file() {
+            return Ok(requested_path.to_path_buf());
+        }
+    } else {
+        let direct = base_dir.join(requested_path);
+        if direct.is_file() {
+            return Ok(direct);
+        }
+        if requested_path.extension().is_none() {
+            let with_extension = direct.with_extension("nex");
+            if with_extension.is_file() {
+                return Ok(with_extension);
+            }
+        }
+
+        let project_root = base_dir
+            .ancestors()
+            .find(|ancestor| ancestor.join("nex.toml").is_file());
+        let search_roots: Vec<&Path> = if let Some(root) = project_root {
+            base_dir
+                .ancestors()
+                .take_while(|ancestor| *ancestor != root)
+                .chain(std::iter::once(root))
+                .collect()
+        } else {
+            base_dir.ancestors().collect()
+        };
+
+        for root in search_roots {
+            let candidate = root.join("deps").join(requested_path);
+            if candidate.is_file() {
+                return Ok(candidate);
+            }
+            if requested_path.extension().is_none() {
+                let with_extension = candidate.with_extension("nex");
+                if with_extension.is_file() {
+                    return Ok(with_extension);
+                }
+                if candidate.is_dir() {
+                    for entry in [
+                        candidate.join("lib.nex"),
+                        candidate.join("src").join("lib.nex"),
+                        candidate.join("main.nex"),
+                        candidate.join("src").join("main.nex"),
+                    ] {
+                        if entry.is_file() {
+                            return Ok(entry);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Err(DriverError::Io(std::io::Error::new(
+        std::io::ErrorKind::NotFound,
+        format!("cannot resolve imported NEX module `{requested}`"),
+    )))
+}
+
 fn load_program_file(
     path: &std::path::Path,
     visited: &mut std::collections::HashSet<std::path::PathBuf>,
+    next_span_offset: &mut usize,
 ) -> Result<(nex_ast::Program, Vec<SourceFile>, Vec<Diagnostic>), DriverError> {
     let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
     if !visited.insert(canonical.clone()) {
@@ -237,7 +310,8 @@ fn load_program_file(
     }
     let text = fs::read_to_string(&canonical).map_err(DriverError::Io)?;
     let name = canonical.display().to_string();
-    let (program, sources, diagnostics) = load_program_text(&name, text, visited)?;
+    let (program, sources, diagnostics) =
+        load_program_text(&name, text, visited, next_span_offset)?;
     // Tag diagnostics from imported files with their real file and position.
     let primary = sources.first();
     let tagged: Vec<Diagnostic> = diagnostics
@@ -258,6 +332,30 @@ fn load_program_file(
 }
 
 fn prefix_program(mut program: nex_ast::Program, prefix: &str) -> nex_ast::Program {
+    // Imported declarations are renamed to `module.name`. Keep calls between
+    // functions declared in the same source file in sync before renaming them.
+    // Without this, a library's public function could not call its own private
+    // helpers after a file import.
+    let local_functions: std::collections::HashSet<String> = program
+        .functions
+        .iter()
+        .map(|function| function.name.clone())
+        .collect();
+    for global in &mut program.globals {
+        prefix_local_calls(&mut global.init, &local_functions, prefix);
+    }
+    for constant in &mut program.consts {
+        prefix_local_calls(&mut constant.init, &local_functions, prefix);
+    }
+    for function in &mut program.functions {
+        prefix_local_calls_in_block(&mut function.body, &local_functions, prefix);
+    }
+    for implementation in &mut program.impls {
+        for method in &mut implementation.methods {
+            prefix_local_calls_in_block(&mut method.body, &local_functions, prefix);
+        }
+    }
+
     for item in &mut program.structs {
         item.name = format!("{prefix}.{}", item.name);
     }
@@ -285,6 +383,134 @@ fn prefix_program(mut program: nex_ast::Program, prefix: &str) -> nex_ast::Progr
     }
     program.modules.push(prefix.to_string());
     program
+}
+
+fn prefix_local_calls_in_block(
+    block: &mut nex_ast::Block,
+    local_functions: &std::collections::HashSet<String>,
+    prefix: &str,
+) {
+    use nex_ast::StmtKind;
+
+    for statement in &mut block.stmts {
+        match &mut statement.kind {
+            StmtKind::Let { init, .. }
+            | StmtKind::Assign { value: init, .. }
+            | StmtKind::AssignField { value: init, .. } => {
+                prefix_local_calls(init, local_functions, prefix);
+            }
+            StmtKind::AssignMany { values, .. } => {
+                for value in values {
+                    prefix_local_calls(value, local_functions, prefix);
+                }
+            }
+            StmtKind::AssignIndex { index, value, .. }
+            | StmtKind::AssignIndexDeref { index, value, .. } => {
+                prefix_local_calls(index, local_functions, prefix);
+                prefix_local_calls(value, local_functions, prefix);
+            }
+            StmtKind::AssignDeref { place, value } => {
+                prefix_local_calls(place, local_functions, prefix);
+                prefix_local_calls(value, local_functions, prefix);
+            }
+            StmtKind::AssignFieldDeref {
+                reference, value, ..
+            } => {
+                prefix_local_calls(reference, local_functions, prefix);
+                prefix_local_calls(value, local_functions, prefix);
+            }
+            StmtKind::If {
+                branches,
+                else_branch,
+            } => {
+                for (condition, body) in branches {
+                    prefix_local_calls(condition, local_functions, prefix);
+                    prefix_local_calls_in_block(body, local_functions, prefix);
+                }
+                if let Some(body) = else_branch {
+                    prefix_local_calls_in_block(body, local_functions, prefix);
+                }
+            }
+            StmtKind::While { cond, body } => {
+                prefix_local_calls(cond, local_functions, prefix);
+                prefix_local_calls_in_block(body, local_functions, prefix);
+            }
+            StmtKind::For {
+                start, end, body, ..
+            } => {
+                prefix_local_calls(start, local_functions, prefix);
+                prefix_local_calls(end, local_functions, prefix);
+                prefix_local_calls_in_block(body, local_functions, prefix);
+            }
+            StmtKind::Return(value) => {
+                if let Some(value) = value {
+                    prefix_local_calls(value, local_functions, prefix);
+                }
+            }
+            StmtKind::Match { scrutinee, arms } => {
+                prefix_local_calls(scrutinee, local_functions, prefix);
+                for arm in arms {
+                    if let Some(guard) = &mut arm.guard {
+                        prefix_local_calls(guard, local_functions, prefix);
+                    }
+                    prefix_local_calls_in_block(&mut arm.body, local_functions, prefix);
+                }
+            }
+            StmtKind::Unsafe(body) | StmtKind::Defer(body) => {
+                prefix_local_calls_in_block(body, local_functions, prefix);
+            }
+            StmtKind::Expr(expression) => {
+                prefix_local_calls(expression, local_functions, prefix);
+            }
+            StmtKind::Break | StmtKind::Continue | StmtKind::Pass => {}
+        }
+    }
+}
+
+fn prefix_local_calls(
+    expression: &mut nex_ast::Expr,
+    local_functions: &std::collections::HashSet<String>,
+    prefix: &str,
+) {
+    use nex_ast::ExprKind;
+
+    match &mut expression.kind {
+        ExprKind::Unary { operand, .. } | ExprKind::Try(operand) | ExprKind::Deref(operand) => {
+            prefix_local_calls(operand, local_functions, prefix)
+        }
+        ExprKind::Binary { left, right, .. } => {
+            prefix_local_calls(left, local_functions, prefix);
+            prefix_local_calls(right, local_functions, prefix);
+        }
+        ExprKind::Call { callee, args, .. } => {
+            if local_functions.contains(callee) {
+                *callee = format!("{prefix}.{callee}");
+            }
+            for argument in args {
+                prefix_local_calls(argument, local_functions, prefix);
+            }
+        }
+        ExprKind::Cast { expr, .. } | ExprKind::Borrow { place: expr, .. } => {
+            prefix_local_calls(expr, local_functions, prefix);
+        }
+        ExprKind::Tuple(items) | ExprKind::Array(items) => {
+            for item in items {
+                prefix_local_calls(item, local_functions, prefix);
+            }
+        }
+        ExprKind::Index { base, index } => {
+            prefix_local_calls(base, local_functions, prefix);
+            prefix_local_calls(index, local_functions, prefix);
+        }
+        ExprKind::Field { base, .. } => prefix_local_calls(base, local_functions, prefix),
+        ExprKind::Int(_)
+        | ExprKind::Float(_)
+        | ExprKind::Str(_)
+        | ExprKind::Char(_)
+        | ExprKind::Bool(_)
+        | ExprKind::Ident(_)
+        | ExprKind::Error => {}
+    }
 }
 
 pub fn compile_file(path: &Path, options: CompileOptions) -> Result<CompileResult, DriverError> {
@@ -351,6 +577,64 @@ mod tests {
         .expect("compilation should not fail at toolchain level");
         assert!(!result.has_errors(), "{:?}", result.diagnostics);
         assert!(result.artifacts.as_ref().unwrap().executable.is_some());
+    }
+
+    #[test]
+    fn imported_functions_can_call_private_helpers() {
+        let dir = std::env::temp_dir().join("nex-driver-import-helper");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("src")).unwrap();
+        std::fs::write(
+            dir.join("src").join("math.nex"),
+            "fn twice(value: i64) -> i64:\n    return value * 2\n\npub fn four_times(value: i64) -> i64:\n    return twice(twice(value))\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("src").join("main.nex"),
+            "use math from \"math.nex\"\n\nfn main():\n    print(math.four_times(3))\n",
+        )
+        .unwrap();
+
+        let result = compile_file(
+            &dir.join("src").join("main.nex"),
+            CompileOptions {
+                emit: Emit::Check,
+                build_dir: Some(dir.join("build")),
+                ..CompileOptions::default()
+            },
+        )
+        .expect("checking an imported helper should succeed");
+        assert!(!result.has_errors(), "{:?}", result.diagnostics);
+    }
+
+    #[test]
+    fn resolves_short_import_names_from_project_dependencies() {
+        let dir = std::env::temp_dir().join("nex-driver-dependency-import");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("src")).unwrap();
+        std::fs::create_dir_all(dir.join("deps")).unwrap();
+        std::fs::write(dir.join("nex.toml"), "[package]\nname = \"test\"\n").unwrap();
+        std::fs::write(
+            dir.join("deps").join("textx.nex"),
+            "pub fn twice(value: i64) -> i64:\n    return value * 2\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("src").join("main.nex"),
+            "use textx from \"textx\"\n\nfn main():\n    print(textx.twice(3))\n",
+        )
+        .unwrap();
+
+        let result = compile_file(
+            &dir.join("src").join("main.nex"),
+            CompileOptions {
+                emit: Emit::Check,
+                build_dir: Some(dir.join("build")),
+                ..CompileOptions::default()
+            },
+        )
+        .expect("dependency import should resolve");
+        assert!(!result.has_errors(), "{:?}", result.diagnostics);
     }
 
     #[test]

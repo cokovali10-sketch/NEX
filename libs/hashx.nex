@@ -1,0 +1,9 @@
+# hashx - a lightweight non-cryptographic DJB2 hash over NEX characters.
+# Do not use this for passwords, signatures, or security checks.
+pub fn djb2_codepoints(value: string) -> i64:
+    var hash = 5381
+    var i = 0
+    while i < len(value):
+        hash = hash * 33 ^ char_code(char_at(value, i))
+        i += 1
+    return hash

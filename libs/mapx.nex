@@ -1,0 +1,16 @@
+# mapx - convenience helpers for string-keyed, string-valued maps.
+pub fn get_or(map: i64, key: string, fallback: string) -> string:
+    if not map_has(map, key):
+        return fallback
+    return map_get(map, key)
+
+pub fn set_if_absent(map: i64, key: string, value: string) -> bool:
+    if map_has(map, key):
+        return false
+    return map_set(map, key, value)
+
+pub fn increment(map: i64, key: string, amount: i64) -> i64:
+    let current = parse_i64(get_or(map, key, "0"))
+    let next = current + amount
+    map_set(map, key, to_string(next))
+    return next

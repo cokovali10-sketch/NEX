@@ -1,0 +1,30 @@
+# fsx - small helpers around NEX's whole-file I/O builtins.
+pub fn read_lines(path: string) -> [string]:
+    if not file_exists(path):
+        return []
+    let content = read_file(path)
+    if len(content) == 0:
+        return []
+    let text = str_replace(content, "\r\n", "\n")
+    return str_split(text, "\n")
+
+pub fn write_lines(path: string, lines: [string]) -> bool:
+    return write_file(path, join(lines, "\n"))
+
+pub fn append_line(path: string, line: string) -> bool:
+    if not file_exists(path):
+        return write_file(path, concat(line, "\n"))
+    let current = read_file(path)
+    if len(current) == 0:
+        return write_file(path, concat(line, "\n"))
+    if str_ends_with(current, "\n"):
+        return write_file(path, concat(current, concat(line, "\n")))
+    return write_file(path, concat(concat(current, "\n"), concat(line, "\n")))
+
+pub fn copy_text(source: string, destination: string) -> bool:
+    return file_copy(source, destination)
+
+pub fn remove_file(path: string) -> bool:
+    if not file_exists(path):
+        return false
+    return file_delete(path)

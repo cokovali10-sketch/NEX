@@ -1,0 +1,29 @@
+# jsonx - safe default accessors for NEX's read-only JSON DOM.
+pub fn has_key(object: i64, key: string) -> bool:
+    return json_get(object, key) != 0
+
+pub fn string_or(object: i64, key: string, fallback: string) -> string:
+    let value = json_get(object, key)
+    if json_type(value) != "string":
+        return fallback
+    return json_str(value)
+
+pub fn number_or(object: i64, key: string, fallback: f64) -> f64:
+    let value = json_get(object, key)
+    if json_type(value) != "number":
+        return fallback
+    return json_num(value)
+
+pub fn bool_or(object: i64, key: string, fallback: bool) -> bool:
+    let value = json_get(object, key)
+    if json_type(value) != "bool":
+        return fallback
+    return json_bool(value)
+
+pub fn array_string_at(array: i64, index: i64, fallback: string) -> string:
+    if index < 0 or index >= json_len(array):
+        return fallback
+    let value = json_at(array, index)
+    if json_type(value) != "string":
+        return fallback
+    return json_str(value)

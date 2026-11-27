@@ -1,0 +1,19 @@
+# json_buildx - small JSON object/array builders using the runtime escaper.
+pub fn string_field(key: string, value: string) -> string:
+    return concat(json_quote(key), concat(":", json_quote(value)))
+
+pub fn integer_field(key: string, value: i64) -> string:
+    return concat(json_quote(key), concat(":", to_string(value)))
+
+pub fn boolean_field(key: string, value: bool) -> string:
+    return concat(json_quote(key), concat(":", to_string(value)))
+
+pub fn object(fields: [string]) -> string:
+    return concat("{", concat(join(fields, ","), "}"))
+
+pub fn string_array(values: [string]) -> string:
+    var quoted: [string] = []
+    for __nex_index in 0..len(values):
+        let value = values[__nex_index]
+        push(quoted, json_quote(value))
+    return concat("[", concat(join(quoted, ","), "]"))

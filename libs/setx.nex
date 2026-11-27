@@ -1,0 +1,29 @@
+# setx - unique-value helpers for growable integer arrays.
+pub fn has(values: [i64], target: i64) -> bool:
+    return contains(values, target)
+
+pub fn add(values: [i64], target: i64) -> [i64]:
+    let result = clone(values)
+    if not has(result, target):
+        push(result, target)
+    return result
+
+pub fn remove(values: [i64], target: i64) -> [i64]:
+    var result: [i64] = []
+    for __nex_index in 0..len(values):
+        let value = values[__nex_index]
+        if value != target:
+            push(result, value)
+    return result
+
+pub fn union(left: [i64], right: [i64]) -> [i64]:
+    var result: [i64] = []
+    for __nex_index in 0..len(left):
+        let value = left[__nex_index]
+        if not has(result, value):
+            push(result, value)
+    for __nex_index in 0..len(right):
+        let value = right[__nex_index]
+        if not has(result, value):
+            push(result, value)
+    return result

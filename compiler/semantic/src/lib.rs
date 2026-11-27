@@ -3612,13 +3612,23 @@ impl<'a> Checker<'a> {
         // Unicode-aware string operations
         if callee == "utf8_len" {
             if args.len() != 1 {
-                self.error("NXS004", format!("`utf8_len` expects 1 argument, found {}", args.len()), span);
-                for arg in args { self.infer(arg); }
+                self.error(
+                    "NXS004",
+                    format!("`utf8_len` expects 1 argument, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
                 return Type::Error;
             }
             let value_ty = self.infer(&args[0]);
             if value_ty != Type::String && value_ty != Type::Error {
-                self.error("NXS004", format!("`utf8_len` expects a `string`, found `{value_ty}`"), span);
+                self.error(
+                    "NXS004",
+                    format!("`utf8_len` expects a `string`, found `{value_ty}`"),
+                    span,
+                );
                 return Type::Error;
             }
             return Type::I64;
@@ -3626,13 +3636,23 @@ impl<'a> Checker<'a> {
 
         if callee == "utf8_char_at" {
             if args.len() != 2 {
-                self.error("NXS004", format!("`utf8_char_at` expects 2 arguments, found {}", args.len()), span);
-                for arg in args { self.infer(arg); }
+                self.error(
+                    "NXS004",
+                    format!("`utf8_char_at` expects 2 arguments, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
                 return Type::Error;
             }
             let value_ty = self.infer(&args[0]);
             if value_ty != Type::String && value_ty != Type::Error {
-                self.error("NXS004", format!("`utf8_char_at` expects a `string`, found `{value_ty}`"), span);
+                self.error(
+                    "NXS004",
+                    format!("`utf8_char_at` expects a `string`, found `{value_ty}`"),
+                    span,
+                );
                 return Type::Error;
             }
             let index_ty = self.infer(&args[1]);
@@ -3645,13 +3665,23 @@ impl<'a> Checker<'a> {
 
         if callee == "utf8_substr" {
             if args.len() != 3 {
-                self.error("NXS004", format!("`utf8_substr` expects 3 arguments, found {}", args.len()), span);
-                for arg in args { self.infer(arg); }
+                self.error(
+                    "NXS004",
+                    format!("`utf8_substr` expects 3 arguments, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
                 return Type::Error;
             }
             let value_ty = self.infer(&args[0]);
             if value_ty != Type::String && value_ty != Type::Error {
-                self.error("NXS004", format!("`utf8_substr` expects a `string`, found `{value_ty}`"), span);
+                self.error(
+                    "NXS004",
+                    format!("`utf8_substr` expects a `string`, found `{value_ty}`"),
+                    span,
+                );
                 return Type::Error;
             }
             let start_ty = self.infer(&args[1]);
@@ -3669,13 +3699,23 @@ impl<'a> Checker<'a> {
 
         if callee == "utf8_upper" || callee == "utf8_lower" {
             if args.len() != 1 {
-                self.error("NXS004", format!("`{callee}` expects 1 argument, found {}", args.len()), span);
-                for arg in args { self.infer(arg); }
+                self.error(
+                    "NXS004",
+                    format!("`{callee}` expects 1 argument, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
                 return Type::Error;
             }
             let value_ty = self.infer(&args[0]);
             if value_ty != Type::String && value_ty != Type::Error {
-                self.error("NXS004", format!("`{callee}` expects a `string`, found `{value_ty}`"), span);
+                self.error(
+                    "NXS004",
+                    format!("`{callee}` expects a `string`, found `{value_ty}`"),
+                    span,
+                );
                 return Type::Error;
             }
             return Type::String;
@@ -3683,13 +3723,23 @@ impl<'a> Checker<'a> {
 
         if callee == "utf8_reverse" {
             if args.len() != 1 {
-                self.error("NXS004", format!("`utf8_reverse` expects 1 argument, found {}", args.len()), span);
-                for arg in args { self.infer(arg); }
+                self.error(
+                    "NXS004",
+                    format!("`utf8_reverse` expects 1 argument, found {}", args.len()),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
                 return Type::Error;
             }
             let value_ty = self.infer(&args[0]);
             if value_ty != Type::String && value_ty != Type::Error {
-                self.error("NXS004", format!("`utf8_reverse` expects a `string`, found `{value_ty}`"), span);
+                self.error(
+                    "NXS004",
+                    format!("`utf8_reverse` expects a `string`, found `{value_ty}`"),
+                    span,
+                );
                 return Type::Error;
             }
             return Type::String;
@@ -3697,13 +3747,26 @@ impl<'a> Checker<'a> {
 
         if callee == "utf8_char_code_at" {
             if args.len() != 2 {
-                self.error("NXS004", format!("`utf8_char_code_at` expects 2 arguments, found {}", args.len()), span);
-                for arg in args { self.infer(arg); }
+                self.error(
+                    "NXS004",
+                    format!(
+                        "`utf8_char_code_at` expects 2 arguments, found {}",
+                        args.len()
+                    ),
+                    span,
+                );
+                for arg in args {
+                    self.infer(arg);
+                }
                 return Type::Error;
             }
             let value_ty = self.infer(&args[0]);
             if value_ty != Type::String && value_ty != Type::Error {
-                self.error("NXS004", format!("`utf8_char_code_at` expects a `string`, found `{value_ty}`"), span);
+                self.error(
+                    "NXS004",
+                    format!("`utf8_char_code_at` expects a `string`, found `{value_ty}`"),
+                    span,
+                );
                 return Type::Error;
             }
             let index_ty = self.infer(&args[1]);
@@ -5528,7 +5591,13 @@ impl<'a> Checker<'a> {
             return Type::Error;
         };
 
-        if callee.contains('.') && !sig.public {
+        let same_module = self
+            .current_fn
+            .as_ref()
+            .and_then(|function| function.name.rsplit_once('.'))
+            .map(|(module, _)| module)
+            == callee.rsplit_once('.').map(|(module, _)| module);
+        if callee.contains('.') && !sig.public && !same_module {
             self.error(
                 "NXS038",
                 format!("function `{callee}` is private"),

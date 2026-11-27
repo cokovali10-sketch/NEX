@@ -129,6 +129,69 @@ pub struct FnDecl {
     pub span: Span,
 }
 
+/// Offset every source span in a parsed program by `delta`.
+///
+/// File imports are merged into one semantic program. Giving each imported
+/// file a unique span range keeps span-keyed type and lowering tables from
+/// confusing nodes that happen to occupy the same byte offsets in different
+/// files.
+pub fn offset_program(program: &mut Program, delta: usize) {
+    program.span = offset_span(program.span, delta);
+    for global in &mut program.globals {
+        global.span = offset_span(global.span, delta);
+        if let Some(ty) = &mut global.ty {
+            offset_type_expr(ty, delta);
+        }
+        offset_expr(&mut global.init, delta);
+    }
+    for usage in &mut program.uses {
+        usage.span = offset_span(usage.span, delta);
+    }
+    for item in &mut program.structs {
+        item.span = offset_span(item.span, delta);
+        for field in &mut item.fields {
+            field.span = offset_span(field.span, delta);
+            offset_type_expr(&mut field.ty, delta);
+        }
+    }
+    for item in &mut program.enums {
+        item.span = offset_span(item.span, delta);
+        for variant in &mut item.variants {
+            variant.span = offset_span(variant.span, delta);
+        }
+    }
+    for item in &mut program.traits {
+        item.span = offset_span(item.span, delta);
+        for method in &mut item.methods {
+            method.span = offset_span(method.span, delta);
+            offset_params(&mut method.params, delta);
+            if let Some(ret) = &mut method.ret {
+                offset_type_expr(ret, delta);
+            }
+        }
+    }
+    for item in &mut program.impls {
+        item.span = offset_span(item.span, delta);
+        for method in &mut item.methods {
+            offset_fn_decl(method, delta);
+        }
+    }
+    for item in &mut program.type_aliases {
+        item.span = offset_span(item.span, delta);
+        offset_type_expr(&mut item.ty, delta);
+    }
+    for item in &mut program.consts {
+        item.span = offset_span(item.span, delta);
+        if let Some(ty) = &mut item.ty {
+            offset_type_expr(ty, delta);
+        }
+        offset_expr(&mut item.init, delta);
+    }
+    for function in &mut program.functions {
+        offset_fn_decl(function, delta);
+    }
+}
+
 /// Offset every span in a function declaration by `delta` bytes.
 ///
 /// Monomorphized copies of a generic function reuse the source spans of the

@@ -1,0 +1,31 @@
+# seqstr - helpers for growable arrays of strings.
+pub fn contains(values: [string], target: string) -> bool:
+    for __nex_index in 0..len(values):
+        let value = values[__nex_index]
+        if value == target:
+            return true
+    return false
+
+pub fn index_of(values: [string], target: string) -> i64:
+    var i = 0
+    while i < len(values):
+        if values[i] == target:
+            return i
+        i += 1
+    return -1
+
+pub fn unique(values: [string]) -> [string]:
+    var result: [string] = []
+    for __nex_index in 0..len(values):
+        let value = values[__nex_index]
+        if not contains(result, value):
+            push(result, value)
+    return result
+
+pub fn reverse(values: [string]) -> [string]:
+    var result: [string] = []
+    var i = len(values) - 1
+    while i >= 0:
+        push(result, values[i])
+        i -= 1
+    return result
