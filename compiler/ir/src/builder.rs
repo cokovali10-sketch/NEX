@@ -485,6 +485,7 @@ fn lower_statement(
                 .copied()
                 .ok_or_else(|| format!("missing storage for binding `{name}`"))?;
             let expected = analysis.decl_type(statement.span).unwrap_or(Type::Error);
+
             if let Type::Struct(struct_name) = expected {
                 let source = lower_struct_place(builder, init, scopes, storage, analysis)?;
                 copy_struct(builder, ptr, source, struct_name, analysis)?;
@@ -1242,6 +1243,7 @@ fn lower_struct_place(
             }
             let slot = lookup_slot(scopes, name)
                 .ok_or_else(|| format!("unknown variable `{name}` during code generation"))?;
+
             if matches!(slot.ty, IrType::Struct(_)) {
                 Ok(slot.ptr)
             } else {

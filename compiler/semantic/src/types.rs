@@ -1,4 +1,5 @@
 use std::fmt;
+use std::sync::Mutex;
 
 /// Types implemented by the NEX compiler.
 ///
@@ -182,4 +183,26 @@ impl fmt::Display for Type {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(self.name())
     }
+}
+
+/// Process-wide intern cache for `&'static str` type names.
+///
+/// The compiler interns type names as `&'static str` (see `Type`). Historically
+/// every intern site called `Box::leak`, so a long-running process such as
+/// `nex lsp` leaked one allocation per distinct type name per analysis. Routing
+/// all intern sites through this cache makes repeated names reuse the same
+/// allocation; only genuinely new names leak, and their count is bounded by the
+/// number of distinct types in the program.
+static INTERN_CACHE: Mutex<Option<std::collections::HashMap<String, &'static str>>> =
+    Mutex::new(None);
+
+pub fn intern(s: String) -> &'static str {
+    let mut guard = INTERN_CACHE.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let cache = guard.get_or_insert_with(std::collections::HashMap::new);
+    if let Some(existing) = cache.get(&s) {
+        return existing;
+    }
+    let leaked: &'static str = Box::leak(s.clone().into_boxed_str());
+    cache.insert(s, leaked);
+    leaked
 }

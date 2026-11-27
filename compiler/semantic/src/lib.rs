@@ -468,7 +468,7 @@ impl<'a> Checker<'a> {
                 continue;
             }
 
-            let name_static: &'static str = Box::leak(definition.name.clone().into_boxed_str());
+            let name_static: &'static str = types::intern(definition.name.clone());
             for variant in &variants {
                 self.analysis
                     .variant_map
@@ -776,7 +776,7 @@ impl<'a> Checker<'a> {
             resolved.push((field_name.to_string(), ty));
         }
         self.current_type_params.clear();
-        let name_static: &'static str = Box::leak(name.to_string().into_boxed_str());
+        let name_static: &'static str = types::intern(name.to_string());
         self.analysis.structs.insert(
             name.to_string(),
             StructInfo {
@@ -819,7 +819,7 @@ impl<'a> Checker<'a> {
                 let field_ty = self.resolve_type(&field.ty);
                 fields.push((field.name.clone(), field_ty));
             }
-            let name_static = Box::leak(mono_name.clone().into_boxed_str());
+            let name_static = types::intern(mono_name.clone());
             self.analysis.structs.insert(
                 mono_name.clone(),
                 StructInfo {
@@ -849,7 +849,7 @@ impl<'a> Checker<'a> {
                     (field_name.clone(), substituted)
                 })
                 .collect();
-            let name_static = Box::leak(mono_name.clone().into_boxed_str());
+            let name_static = types::intern(mono_name.clone());
             self.analysis.structs.insert(
                 mono_name.clone(),
                 StructInfo {
@@ -933,7 +933,7 @@ impl<'a> Checker<'a> {
                 );
                 continue;
             }
-            let name_static: &'static str = Box::leak(definition.name.clone().into_boxed_str());
+            let name_static: &'static str = types::intern(definition.name.clone());
             self.analysis.structs.insert(
                 definition.name.clone(),
                 StructInfo {
@@ -5895,7 +5895,7 @@ impl<'a> Checker<'a> {
             return resolved;
         }
         if self.current_type_params.contains(&ty.name) {
-            let name = Box::leak(ty.name.clone().into_boxed_str());
+            let name = types::intern(ty.name.clone());
             return Type::TypeParam(name);
         }
         if let Some(ty) = self.analysis.type_aliases.get(&ty.name).copied() {
@@ -6044,7 +6044,7 @@ fn intern_tuple_name(elem_types: &[Type]) -> &'static str {
         .map(|ty| sanitize_type_name(ty.name()))
         .collect::<Vec<_>>()
         .join("_");
-    Box::leak(format!("tuple_{}_{}", elem_types.len(), signature).into_boxed_str())
+    types::intern(format!("tuple_{}_{}", elem_types.len(), signature))
 }
 
 fn sanitize_type_name(name: &str) -> String {
@@ -6063,12 +6063,12 @@ pub const DYN_ARRAY_LLVM: &str = "{ ptr, i64, i64 }";
 
 /// Interns the display name of a growable array, e.g. `[i64]`.
 fn intern_dyn_array_type(elem: Type) -> &'static str {
-    Box::leak(format!("[{elem}]").into_boxed_str())
+    types::intern(format!("[{elem}]"))
 }
 
 fn intern_array_type(elem: Type, len: usize) -> (&'static str, &'static str) {
-    let display = Box::leak(format!("[{}; {}]", elem, len).into_boxed_str());
-    let llvm = Box::leak(format!("[{} x {}]", len, llvm_type_name(elem)).into_boxed_str());
+    let display = types::intern(format!("[{}; {}]", elem, len));
+    let llvm = types::intern(format!("[{} x {}]", len, llvm_type_name(elem)));
     (display, llvm)
 }
 

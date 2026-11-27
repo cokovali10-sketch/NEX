@@ -2763,3 +2763,21 @@ fn main():
     assert_eq!(code, 0, "stderr: {stderr}");
     assert_eq!(stdout, "3019");
 }
+
+#[test]
+fn struct_copy_deep_clones_growable_arrays() {
+    let source = r#"
+struct Bag:
+    xs: [i64]
+
+fn main():
+    var a = Bag([1, 2, 3])
+    var b = a
+    push(b.xs, 9)
+    print(len(a.xs))
+    print(len(b.xs))
+"#;
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "34");
+}
