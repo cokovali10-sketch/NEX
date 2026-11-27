@@ -14,3 +14,4 @@ path = "src/main.rs"
 
 [dependencies]
 nex-driver = { path = "../../compiler/driver" }
+nex-diagnostics = { path = "../../compiler/diagnostics" }

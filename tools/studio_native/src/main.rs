@@ -26,8 +26,10 @@
 #![allow(unsafe_op_in_unsafe_fn)]
 
 use std::ffi::c_void;
+use std::path::PathBuf;
 use std::process::Command;
 
+use nex_diagnostics::{SourceFile, render_all};
 use nex_driver::{CompileOptions, compile_source};
 
 type HWND = isize;
@@ -278,21 +280,23 @@ unsafe fn get_text(hwnd: HWND) -> String {
     String::from_utf8_lossy(&buf).to_string()
 }
 
-fn line_of(source: &str, offset: usize) -> usize {
-    source
-        .as_bytes()
-        .iter()
-        .take(offset.min(source.len()))
-        .filter(|byte| **byte == b'\n')
-        .count()
-        + 1
+/// Compiles the code in process and runs the produced executable.
+fn studio_build_dir() -> PathBuf {
+    if let Some(path) = std::env::var_os("NEX_STUDIO_BUILD_DIR") {
+        return PathBuf::from(path);
+    }
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/nex-studio")
 }
 
 /// Compiles the code in process and runs the produced executable.
 fn run_code(code: &str) -> String {
-    let dir = std::env::temp_dir().join("nex_studio_native");
-    let _ = std::fs::remove_dir_all(&dir);
-    let _ = std::fs::create_dir_all(&dir);
+    let dir = studio_build_dir();
+    if let Err(error) = std::fs::create_dir_all(&dir) {
+        return format!(
+            "failed to create build directory {}: {error}\n",
+            dir.display()
+        );
+    }
     if let Err(error) = std::fs::write(dir.join("main.nex"), code) {
         return format!("failed to write source: {error}\n");
     }
@@ -304,22 +308,9 @@ fn run_code(code: &str) -> String {
         Ok(result) => result,
         Err(error) => return format!("compile error: {error}\n"),
     };
-    let _ = std::fs::write("C:/Users/Acer/AppData/Local/Temp/opencode/nex-analysis/debug3.txt", format!("has_errors: {} | artifacts: {} | exe: {}", result.has_errors(), result.artifacts.is_some(), result.artifacts.as_ref().and_then(|a| a.executable.as_ref()).map(|p| p.display().to_string()).unwrap_or_default()));
 
-    let mut out = String::new();
-    for diagnostic in &result.diagnostics {
-        let span_start = diagnostic.span.map(|span| span.start).unwrap_or(0);
-        let line = line_of(code, span_start);
-        let label = if diagnostic.is_error() {
-            "error"
-        } else {
-            "warning"
-        };
-        out.push_str(&format!(
-            "{label} [{}] line {line}: {}\n",
-            diagnostic.code, diagnostic.message
-        ));
-    }
+    let source = SourceFile::new("main.nex", code);
+    let mut out = render_all(&source, &result.diagnostics);
     if result.has_errors() {
         return out;
     }
@@ -343,7 +334,6 @@ fn run_code(code: &str) -> String {
     }
     out
 }
-
 unsafe fn update_gutter() {
     let edit = CONTROLS.edit;
     if edit == 0 {

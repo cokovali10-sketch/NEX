@@ -136,6 +136,7 @@ version = "1.0.1"
 name = "nex-studio-native"
 version = "1.0.1"
 dependencies = [
+ "nex-diagnostics",
  "nex-driver",
 ]
 

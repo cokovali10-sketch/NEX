@@ -263,6 +263,28 @@ pub fn help_for_code(code: &str) -> Option<&'static str> {
     match code {
         "NXL004" => Some("use four spaces for each indentation level; tabs are not allowed"),
         "NXP004" => Some("call a declared function or struct constructor by name"),
+        "NXL002" => Some("close the string with a matching quote on this line"),
+        "NXL003" => Some("use a supported escape such as `\\n`, `\\t`, `\\\\`, or `\\u{1F600}`"),
+        "NXL005" => Some("make indentation use consistent groups of four spaces"),
+        "NXS001" => {
+            Some("check the spelling, declare the name first, or import it from its module")
+        }
+        "NXS012" => Some("use `break` or `continue` inside a `for` or `while` loop"),
+        "NXS014" => Some("make the condition a boolean expression, for example `count > 0`"),
+        "NXS044" => Some(
+            "make the implementation method's receiver, parameters, and return type match the trait",
+        ),
+        "NXS045" => Some("add every method required by the trait implementation"),
+        "NXS046" => {
+            Some("check the receiver type and method name, or call a declared function directly")
+        }
+        "NXS047" => Some(
+            "store the nested field in a local variable, then call the method on that variable",
+        ),
+        "NXS051" => {
+            Some("use a mutable reference to assign through a field, index, or dereference")
+        }
+        "NXS052" => Some("borrow a variable or another assignable place, such as `&value`"),
         "NXP010" => Some("declare a function, constant, struct, enum, or module at this level"),
         "NXS002" => Some(
             "use a concrete value type such as `i64`, `f64`, `bool`, `char`, `string`, or a declared struct/enum",
@@ -270,6 +292,7 @@ pub fn help_for_code(code: &str) -> Option<&'static str> {
         "NXS003" => Some("choose a unique name for this declaration"),
         "NXS004" => Some("check the function name, argument count, and argument types"),
         "NXS006" => Some("convert the value explicitly with `as` or change the expected type"),
+        "NXS005" => Some("make the number of bound names match the tuple or struct fields"),
         "NXS007" => Some("declare the binding with `var` when it must be mutated"),
         "NXS008" => Some("make both operands the same type; NEX does not apply implicit widening"),
         "NXS009" => Some("remove the returned value or declare a return type"),
@@ -338,6 +361,16 @@ mod tests {
         assert!(rendered.contains("^"));
     }
 
+    #[test]
+    fn common_errors_have_actionable_help() {
+        assert!(
+            help_for_code("NXS001")
+                .unwrap()
+                .contains("declare the name")
+        );
+        assert!(help_for_code("NXS046").unwrap().contains("method name"));
+        assert!(help_for_code("NXS999").is_none());
+    }
     #[test]
     fn spans_merge_to_cover_both_sides() {
         assert_eq!(Span::new(2, 4).merge(Span::new(6, 9)), Span::new(2, 9));

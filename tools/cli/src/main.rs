@@ -189,10 +189,8 @@ fn cmd_fmt(args: &[String]) -> ExitCode {
         let result = nex_fmt::format_source(&source);
         if result.has_errors() {
             eprintln!("nex: `{path}` is not valid NEX; it was left untouched");
-            for _diagnostic in &result.diagnostics {
-                let file = nex_diagnostics::SourceFile::new(path.clone(), source.clone());
-                eprintln!("{}", render_all(&file, &result.diagnostics));
-            }
+            let file = nex_diagnostics::SourceFile::new(path.clone(), source.clone());
+            eprintln!("{}", render_all(&file, &result.diagnostics));
             status = ExitCode::from(1);
             continue;
         }
@@ -452,10 +450,13 @@ fn check_report(result: Result<CompileResult, DriverError>, json: bool) -> ExitC
                         .map(|span| result.source.line_col(span.start))
                         .unwrap_or((0, 0));
                     output.push_str(&format!(
-                        "{{\"severity\":{},\"code\":{},\"message\":{},\"file\":{},\"line\":{},\"column\":{},\"span\":",
+                        "{{\"severity\":{},\"code\":{},\"message\":{},\"help\":{},\"file\":{},\"line\":{},\"column\":{},\"span\":",
                         json_string(&diagnostic.severity.label().to_lowercase()),
                         json_string(&diagnostic.code),
                         json_string(&diagnostic.message),
+                        nex_diagnostics::help_for_code(&diagnostic.code)
+                            .map(json_string)
+                            .unwrap_or_else(|| "null".to_string()),
                         json_string(result.source.name()),
                         line,
                         column,
