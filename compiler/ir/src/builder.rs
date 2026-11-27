@@ -523,7 +523,8 @@ fn lower_statement(
                 }
                 temps.push((ptr, ty));
             }
-            for (name, (ptr, ty)) in names.iter().zip(temps.iter()) {
+            for (i, (name, (ptr, ty))) in names.iter().zip(temps.iter()).enumerate() {
+                let source_expr = values.get(i);
                 let target = lookup_slot(scopes, name)
                     .ok_or_else(|| format!("unknown variable `{name}` during code generation"))?
                     .ptr;
@@ -544,6 +545,11 @@ fn lower_statement(
                         }
                     }
                     _ => {
+                        if builder.growable_slots.contains(&target)
+                            && builder.owned.contains(&target)
+                        {
+                            builder.emit_array_free(target);
+                        }
                         let value = builder.new_value();
                         builder.emit(Inst::Load {
                             dst: value,
@@ -555,6 +561,16 @@ fn lower_statement(
                             value: Operand::Value(value),
                             ty: *ty,
                         });
+                        if builder.growable_slots.contains(&target) {
+                            let borrow = source_expr
+                                .map(|v| matches!(&v.kind, ExprKind::Ident(_)))
+                                .unwrap_or(false);
+                            if borrow {
+                                builder.owned.remove(&target);
+                            } else {
+                                builder.owned.insert(target);
+                            }
+                        }
                     }
                 }
             }
@@ -590,7 +606,12 @@ fn lower_statement(
                     Ok(())
                 }
                 (ptr, ty) => {
-                    if builder.growable_slots.contains(&ptr) && builder.owned.contains(&ptr) {
+                    // Self-assignment (`x = x`) must not free the slot's buffer
+                    // before reading it back: that would be a use-after-free.
+                    if builder.growable_slots.contains(&ptr)
+                        && builder.owned.contains(&ptr)
+                        && !matches!(&value.kind, ExprKind::Ident(ident) if ident == name)
+                    {
                         builder.emit_array_free(ptr);
                     }
                     let operand =
@@ -601,7 +622,11 @@ fn lower_statement(
                         ty,
                     });
                     if builder.growable_slots.contains(&ptr) {
-                        if matches!(value.kind, ExprKind::Ident(_)) {
+                        if matches!(&value.kind, ExprKind::Ident(ident) if ident == name) {
+                            // Keep ownership: the slot still owns its (possibly
+                            // unchanged) buffer.
+                            builder.owned.insert(ptr);
+                        } else if matches!(value.kind, ExprKind::Ident(_)) {
                             builder.owned.remove(&ptr);
                         } else {
                             builder.owned.insert(ptr);

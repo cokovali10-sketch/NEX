@@ -2723,3 +2723,23 @@ fn fstring_interpolates_expressions() {
     assert_eq!(code, 0, "stderr: {stderr}");
     assert_eq!(stdout, "hello NEX\nsum = 43\n");
 }
+
+#[test]
+fn self_assignment_of_growable_array_keeps_value() {
+    let source = r#"
+fn main():
+    var a: [i64] = [1, 2, 3]
+    a = a
+    var junk: [i64] = []
+    var i = 0
+    while i < 1000:
+        push(junk, i)
+        i += 1
+    print(len(a))
+    print(a[0])
+    print(a[2])
+"#;
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "313");
+}

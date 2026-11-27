@@ -25,7 +25,6 @@ rust-version = "1.85"
 license = "MIT"
 authors = ["NEX Engineering"]
 repository = "https://github.com/cokovali10-sketch/NEX"
-description = "NEX native compiled programming language and developer ecosystem"
 
 [workspace.dependencies]
 nex-diagnostics = { path = "compiler/diagnostics" }
