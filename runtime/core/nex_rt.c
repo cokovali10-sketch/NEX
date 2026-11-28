@@ -2124,6 +2124,24 @@ char *nex_rt_map_key_at(long long handle, long long index) {
     return nex_rt_json_empty_string();
 }
 
+char *nex_rt_map_value_at(long long handle, long long index) {
+    nex_map *map = nex_map_handle(handle);
+    if (map == NULL || index < 0) {
+        return nex_rt_json_empty_string();
+    }
+    long long current = 0;
+    for (size_t i = 0; i < map->capacity; i++) {
+        if (!map->entries[i].occupied) {
+            continue;
+        }
+        if (current == index) {
+            return nex_map_copy(map->entries[i].value);
+        }
+        current++;
+    }
+    return nex_rt_json_empty_string();
+}
+
 static void nex_map_grow(nex_map *map) {
     size_t old_capacity = map->capacity;
     nex_map_entry *old_entries = map->entries;

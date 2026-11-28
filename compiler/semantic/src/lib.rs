@@ -4324,7 +4324,7 @@ impl<'a> Checker<'a> {
             return Type::I64;
         }
 
-        if callee == "map_len" || callee == "map_key_at" {
+        if callee == "map_len" || callee == "map_key_at" || callee == "map_value_at" {
             let expected = if callee == "map_len" { 1 } else { 2 };
             if args.len() != expected {
                 self.error(
@@ -4349,10 +4349,14 @@ impl<'a> Checker<'a> {
                 );
                 return Type::Error;
             }
-            if callee == "map_key_at" {
+            if callee == "map_key_at" || callee == "map_value_at" {
                 let index_ty = self.infer(&args[1]);
                 if index_ty != Type::I64 && index_ty != Type::Error {
-                    self.error("NXS004", "`map_key_at` expects an `i64` index", span);
+                    self.error(
+                        "NXS004",
+                        format!("`{callee}` expects an `i64` index"),
+                        span,
+                    );
                     return Type::Error;
                 }
                 return Type::String;

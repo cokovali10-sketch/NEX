@@ -743,6 +743,7 @@ fn lower_expr(
                     "map_has" => ("nex_rt_map_has", IrType::I64),
                     "map_remove" => ("nex_rt_map_remove", IrType::I64),
                     "map_len" => ("nex_rt_map_len", IrType::I64),
+                    "map_value_at" => ("nex_rt_map_value_at", IrType::String),
                     _ => ("nex_rt_map_key_at", IrType::String),
                 };
                 let dst = builder.new_value();
