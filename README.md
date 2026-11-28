@@ -64,15 +64,20 @@ runtime (`runtime/core/nex_rt.c`) — not a hidden language runtime.
   threads/mutexes, a thread pool, a router, a string builder, time and math
   functions, process environment/arguments, `exit`, and logging (see
   `docs/standard-library.md`).
-- Not implemented yet: ownership, borrowing and lifetime checking; async/await;
-  the rest of the standard library (general-purpose data structures beyond
-  arrays, crypto, spawning child processes); a package registry; Python and
+- Not implemented yet: full borrowing and lifetime checking (stage-2 references
+  exist: `&T`/`&mut T` with statement-scoped borrow checking, but no lifetimes);
+  async/await; the rest of the standard library (general-purpose data structures
+  beyond arrays, crypto, spawning child processes); a package registry; Python and
   Rust adapters; the full NEX Studio IDE (the standalone desktop MVP is in
   development; LSP editing features and debugging are still planned). `nex lsp` is a built-in
   language server (hover, go-to-definition, completion, document symbols,
   formatting, live diagnostics). `nex debug` and
   `nex profile` build a debug/release executable and run it; they are not a
   full debugger or profiler.
+- Memory safety (new): stage-1 move checker for growable arrays and strings;
+  automatic RAII for `[T]` locals and struct fields (deep-cloned on copy, freed
+  at scope exit, including on early return); `drop(x)`; verified crash-free and
+  ASAN-clean across 181 end-to-end tests.
 - Platform support: Windows x86-64 is the primary tested host. CI also builds
   and tests on Ubuntu. `--target <triple>` selects a Clang target, but only the
   host platform is validated end to end by the test suite.
