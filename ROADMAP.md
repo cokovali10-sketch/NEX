@@ -39,7 +39,9 @@
 ## NEX 0.4 - Memory and Safety
 
 - [~] Ownership and borrowing model (stage 1 move checker + RAII for `[T]`
-      locals and struct fields; full borrow/lifetime analysis still open).
+      locals and struct fields, plus deep-clone value semantics for struct copy/
+      assign/param/return and `[Struct]` arrays; full borrow/lifetime analysis
+      still open).
 - [ ] Lifetime analysis.
 - [x] Allocators and arenas.
 - [x] Bounds checking for array indexing.
