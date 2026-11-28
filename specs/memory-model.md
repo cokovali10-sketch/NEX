@@ -113,9 +113,10 @@ planned.
   every `[T]` field via `nex_rt_array_clone`, and recurses into nested struct
   fields. The source struct keeps its buffers; the copy gets independent ones,
   so `push(b.xs, 9)` never changes `a.xs`.
-- A struct parameter is therefore a real copy too: the callee owns independent
-  array buffers and frees them at return, so mutating `param.field` inside the
-  function is invisible to the caller.
+- A growable array whose element type is a struct is also deep-cloned element-wise
+  (including each element's nested `[T]` fields) when its owning struct is
+  copied, assigned, passed by value, or returned. `clone(list)` of a `[Struct]`
+  array likewise deep-clones every element.
 - Reassigning a struct field of type `[T]` (`b.xs = other`) deep-clones the
   source array into the field and frees the old field buffer, so `other` stays
   valid and the field never aliases it. Reassigning a struct-typed field

@@ -20,9 +20,10 @@
   deep-clones the nested struct, and `list[i] = c` deep-clones the element.
   Struct self-assignment (`s = s`) and parallel assignment (`a, b = b, a`) no
   longer free the fields they are about to read.
-- `clone(struct)` and `push(list, struct_local)` now work: `clone` materialises
-  the struct value into a temporary, and `push` stores an independent deep copy
-  instead of aliasing the local that the caller frees at return.
+- Growable arrays whose element type is a struct are now deep-cloned too: copying
+  a struct containing a `[Struct]` field (or an array of structs) clones each
+  element struct, including its nested `[T]` fields, so mutations of one copy's
+  elements never leak into the other.
 
 - Struct values that contain growable-array fields now have real value
   semantics: copying a struct (`var b = a`, by-value parameter passing, by-value
