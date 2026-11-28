@@ -217,15 +217,32 @@ pub fn build(program: &Program, analysis: &Analysis) -> Result<IrModule, String>
         let mut scopes: Vec<HashMap<String, Slot>> = Vec::new();
         let mut param_scope = HashMap::new();
         let ir_params = builder.func.params.clone();
-        for (param, (value, ty)) in function.params.iter().zip(ir_params.iter()) {
+        for (index, (param, (value, ty))) in
+            function.params.iter().zip(ir_params.iter()).enumerate()
+        {
             // Parameters are stored in stack slots so that struct parameters
             // (and scalar parameters) are addressable and use value semantics.
             let ptr = builder.alloca_at_entry(*ty);
-            builder.emit(Inst::Store {
-                ptr,
-                value: Operand::Value(*value),
-                ty: *ty,
-            });
+            let operand = Operand::Value(*value);
+            if let Some(Type::Struct(name)) = signature.params.get(index).copied() {
+                // Value semantics: the callee owns its own copy of every
+                // growable-array field, so mutating `param.field` cannot change
+                // the caller's struct. The caller keeps its buffers.
+                let incoming = builder.alloca_at_entry(*ty);
+                builder.emit(Inst::Store {
+                    ptr: incoming,
+                    value: operand,
+                    ty: *ty,
+                });
+                copy_struct(&mut builder, ptr, incoming, name, analysis)?;
+                builder.owned_structs.push((ptr, name));
+            } else {
+                builder.emit(Inst::Store {
+                    ptr,
+                    value: operand,
+                    ty: *ty,
+                });
+            }
             param_scope.insert(param.name.clone(), Slot { ptr, ty: *ty });
         }
         scopes.push(param_scope);
@@ -1844,6 +1861,60 @@ fn free_struct_arrays(
             });
         } else if let Type::Struct(nested) = field_ty {
             free_struct_arrays(builder, field_ptr, nested, analysis);
+        }
+    }
+}
+
+/// Frees every growable-array field of a struct and replaces it with a fresh
+/// empty header, so the struct stays usable and a later scope-exit free cannot
+/// double-free. Recurses into nested struct fields.
+fn reset_struct_arrays(
+    builder: &mut FunctionBuilder,
+    base: ValueId,
+    struct_name: &'static str,
+    analysis: &Analysis,
+) {
+    let Some(info) = analysis.struct_info(struct_name) else {
+        return;
+    };
+    let fields: Vec<(String, Type)> = info.fields.clone();
+    for (index, (_, field_ty)) in fields.iter().enumerate() {
+        let ir_ty = IrType::from_type(*field_ty);
+        let field_ptr = builder.new_value();
+        builder.emit(Inst::FieldPtr {
+            dst: field_ptr,
+            base,
+            struct_name,
+            index: index as u32,
+            field_ty: ir_ty,
+        });
+        if let Type::DynArray(_) = field_ty {
+            let header = builder.new_value();
+            builder.emit(Inst::Load {
+                dst: header,
+                ptr: field_ptr,
+                ty: IrType::String,
+            });
+            builder.emit(Inst::Call {
+                dst: None,
+                name: "nex_rt_array_free".to_string(),
+                args: vec![Operand::Value(header)],
+                ret: IrType::Void,
+            });
+            let empty = builder.new_value();
+            builder.emit(Inst::Call {
+                dst: Some(empty),
+                name: "nex_rt_array_new".to_string(),
+                args: Vec::new(),
+                ret: IrType::String,
+            });
+            builder.emit(Inst::Store {
+                ptr: field_ptr,
+                value: Operand::Value(empty),
+                ty: IrType::String,
+            });
+        } else if let Type::Struct(nested) = field_ty {
+            reset_struct_arrays(builder, field_ptr, nested, analysis);
         }
     }
 }
@@ -4696,6 +4767,19 @@ fn lower_expr(
             }
 
             if callee == "drop" {
+                // `drop(struct_local)` releases every growable-array field and
+                // resets it to an empty header. Without the reset the fields
+                // dangle, so the very next `len(x.field)` was a use-after-free.
+                let arg_ty = analysis.expr_type(args[0].span).unwrap_or(Type::Error);
+                if let Type::Struct(name) = arg_ty {
+                    let base_ptr =
+                        match lower_struct_place(builder, &args[0], scopes, storage, analysis) {
+                            Ok(ptr) => ptr,
+                            Err(_) => return Ok(Operand::Const(Const::Bool(false))),
+                        };
+                    reset_struct_arrays(builder, base_ptr, name, analysis);
+                    return Ok(Operand::Const(Const::Bool(false)));
+                }
                 let arg_value =
                     lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
                 let header = operand_value_id(builder, arg_value)?;

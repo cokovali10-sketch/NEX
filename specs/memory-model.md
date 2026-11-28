@@ -99,8 +99,36 @@ planned.
 - Returning an owned array transfers ownership to the caller (it is not freed).
 - `string` is deliberately not auto-freed: string literals are static, and
   NEX does not yet distinguish static from heap strings.
-- Not yet implemented: `Drop` trait / user-defined destructors, and RAII for
-  structs.
+- Self-assignment `x = x` and parallel assignment `a, b = b, a` keep ownership
+  on the slot instead of freeing the buffer that is being re-stored, so they
+  are not use-after-free.
+- Not yet implemented: `Drop` trait / user-defined destructors, and `string`
+  auto-free.
+
+## Structs that own growable arrays
+
+- A struct field of type `[T]` is an owning header pointer, exactly like a
+  local growable array. Copying a struct (`var b = a`, passing by value,
+  returning by value, assigning a whole struct) performs a **deep clone** of
+  every `[T]` field via `nex_rt_array_clone`, and recurses into nested struct
+  fields. The source struct keeps its buffers; the copy gets independent ones,
+  so `push(b.xs, 9)` never changes `a.xs`.
+- A struct parameter is therefore a real copy too: the callee owns independent
+  array buffers and frees them at return, so mutating `param.field` inside the
+  function is invisible to the caller.
+- Reassigning a struct field of type `[T]` (`b.xs = other`) frees the old
+  buffer first, so repeated assignment does not leak.
+- A local struct owns its `[T]` fields and frees them before every `ret`,
+  including early returns and nested scopes (`owned_structs` RAII). Returning
+  a struct transfers ownership of its arrays to the caller instead of freeing
+  them.
+- `drop(s.field)` on a growable struct field frees the buffer and resets the
+  field to a fresh empty header, so a later scope-exit free cannot double-free.
+- `drop(s)` on a whole struct local frees every `[T]` field (recursing into
+  nested structs) and resets each to a fresh empty header. Like `drop(x)` on an
+  array, it consumes the binding: a later use is `NXS050`.
+- Not yet implemented: reference cycles between structs, and user-defined
+  destructors for struct fields of other owning types.
 
 ## Rules for future implementation
 

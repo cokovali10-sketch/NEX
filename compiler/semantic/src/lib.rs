@@ -2913,10 +2913,10 @@ impl<'a> Checker<'a> {
                 return Type::Void;
             }
             let ty = self.infer(&args[0]);
-            if !matches!(ty, Type::DynArray(_)) {
+            if !matches!(ty, Type::DynArray(_) | Type::Struct(_)) {
                 self.error(
                     "NXS004",
-                    format!("`drop` expects a growable array, found `{ty}`"),
+                    format!("`drop` expects a growable array or a struct, found `{ty}`"),
                     args[0].span,
                 );
             }

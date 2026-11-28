@@ -2,6 +2,41 @@
 
 ## Unreleased
 
+### Fixed
+
+- `nex_rt_array_clone` passed the array *header* to `nex_rt_array_slice`
+  instead of the element buffer, so a cloned growable-array field held the
+  header's bytes (a pointer and the length) rather than the elements. Struct
+  copies therefore reported the right length but read garbage elements. The
+  clone now passes `data`, and the regression test checks element values, not
+  just lengths.
+- Struct parameters now get true value semantics: the callee deep-clones every
+  `[T]` field into its own slot (and frees it at return), so `push(param.xs, v)`
+  no longer mutates the caller's array.
+- `drop(struct_local)` is accepted and frees every growable-array field,
+  resetting each to a fresh empty header; previously it was rejected.
+
+- Struct values that contain growable-array fields now have real value
+  semantics: copying a struct (`var b = a`, by-value parameter passing, by-value
+  return, whole-struct assignment) deep-clones every `[T]` field with
+  `nex_rt_array_clone` and recurses into nested structs. Previously the copy
+  shared the array header, so `push(b.xs, 9)` also grew `a.xs`. Reassigning a
+  `[T]` struct field frees the old buffer first, and a local struct frees its
+  array fields before every `ret` (early returns included); returning a struct
+  transfers that ownership to the caller.
+- `drop(struct.field)` on a growable-array field frees the buffer and resets the
+  field to a fresh empty header, so the scope-exit free cannot double-free.
+  `drop(struct_local)` frees all of its `[T]` fields.
+- Self-assignment (`x = x`) and parallel assignment (`a, b = b, a`) of growable
+  arrays no longer free the buffer that is immediately stored back, which was a
+  use-after-free.
+
+### Changed
+
+- Type names are interned once per process through a `Mutex<HashMap<..>>` cache
+  in `nex-semantic` instead of `Box::leak`-ing a fresh copy at every call site,
+  removing an unbounded leak in long-lived processes such as the LSP server.
+
 ### Added
 
 - 21 new standard-library functions across `libs/`: `mathx` (min3, max3,

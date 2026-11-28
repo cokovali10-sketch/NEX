@@ -3660,12 +3660,17 @@ void *nex_rt_array_clone(void *header, long long elem_size) {
     if (header == NULL) {
         return nex_rt_array_new();
     }
-    long long *words = (long long *)header;
-    long long len = words[1];
-    if (len <= 0) {
+    /* The growable-array header is `{ data, len, cap }`; `nex_rt_array_slice`
+       expects the element buffer, not the header, so pass `data`. Passing the
+       header here copied the header bytes themselves into the new array, which
+       is how a cloned struct field ended up holding pointer bits instead of
+       elements. */
+    void **data_ptr = (void **)header;
+    long long len = ((long long *)header)[1];
+    if (len <= 0 || data_ptr[0] == NULL) {
         return nex_rt_array_new();
     }
-    return nex_rt_array_slice(header, len, elem_size, 0, len);
+    return nex_rt_array_slice(data_ptr[0], len, elem_size, 0, len);
 }
 
 /* Frees a growable array: its backing data and the header. Safe on NULL. */

@@ -2776,8 +2776,142 @@ fn main():
     push(b.xs, 9)
     print(len(a.xs))
     print(len(b.xs))
+    print(a.xs[0])
+    print(a.xs[2])
+    print(b.xs[3])
 "#;
     let (stdout, stderr, code) = run_source(source);
     assert_eq!(code, 0, "stderr: {stderr}");
-    assert_eq!(stdout, "34");
+    // The copy must own independent elements, not just an independent header.
+    assert_eq!(stdout, "34139");
+}
+
+#[test]
+fn struct_returned_from_function_keeps_array_elements() {
+    let source = r#"
+struct Bag:
+    xs: [i64]
+
+fn make(n: i64) -> Bag:
+    var b = Bag([n, n + 1])
+    return b
+
+fn main():
+    var a = make(1)
+    var c = make(10)
+    print(len(a.xs))
+    print(a.xs[0])
+    print(a.xs[1])
+    print(c.xs[0])
+"#;
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "21210");
+}
+
+#[test]
+fn nested_struct_copy_deep_clones_inner_arrays() {
+    let source = r#"
+struct Inner:
+    xs: [i64]
+
+struct Outer:
+    inner: Inner
+    tag: i64
+
+fn main():
+    var a = Outer(Inner([1, 2]), 5)
+    var b = a
+    push(b.inner.xs, 9)
+    print(len(a.inner.xs))
+    print(len(b.inner.xs))
+    print(a.inner.xs[0])
+    print(b.inner.xs[2])
+    print(a.tag)
+"#;
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "23195");
+}
+
+#[test]
+fn whole_struct_assignment_deep_clones_and_frees_old_field() {
+    let source = r#"
+struct Bag:
+    xs: [i64]
+
+fn main():
+    var a = Bag([1, 2])
+    var b = Bag([8, 9, 10])
+    a = b
+    push(a.xs, 4)
+    print(len(a.xs))
+    print(len(b.xs))
+    print(a.xs[3])
+"#;
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "434");
+}
+
+#[test]
+fn struct_parameter_gets_its_own_array_copy() {
+    let source = r#"
+struct Bag:
+    xs: [i64]
+
+fn consume(b: Bag):
+    push(b.xs, 99)
+    print(len(b.xs))
+
+fn main():
+    var a = Bag([1, 2])
+    consume(a)
+    print(len(a.xs))
+    print(a.xs[0])
+"#;
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    // The callee must not grow the caller's array through the parameter.
+    assert_eq!(stdout, "321");
+}
+
+#[test]
+fn nested_struct_parameter_deep_clones_arrays() {
+    let source = r#"
+struct Inner:
+    xs: [i64]
+
+struct Outer:
+    inner: Inner
+
+fn consume(o: Outer):
+    push(o.inner.xs, 9)
+    print(len(o.inner.xs))
+
+fn main():
+    var a = Outer(Inner([1, 2]))
+    consume(a)
+    print(len(a.inner.xs))
+    print(a.inner.xs[0])
+"#;
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "321");
+}
+
+#[test]
+fn drop_on_whole_struct_resets_fields_without_crashing() {
+    let source = r#"
+struct Bag:
+    xs: [i64]
+
+fn main():
+    var b = Bag([1, 2, 3])
+    drop(b)
+    print(1)
+"#;
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "1");
 }

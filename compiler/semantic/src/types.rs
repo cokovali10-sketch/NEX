@@ -197,7 +197,9 @@ static INTERN_CACHE: Mutex<Option<std::collections::HashMap<String, &'static str
     Mutex::new(None);
 
 pub fn intern(s: String) -> &'static str {
-    let mut guard = INTERN_CACHE.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let mut guard = INTERN_CACHE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let cache = guard.get_or_insert_with(std::collections::HashMap::new);
     if let Some(existing) = cache.get(&s) {
         return existing;
