@@ -4352,11 +4352,7 @@ impl<'a> Checker<'a> {
             if callee == "map_key_at" || callee == "map_value_at" {
                 let index_ty = self.infer(&args[1]);
                 if index_ty != Type::I64 && index_ty != Type::Error {
-                    self.error(
-                        "NXS004",
-                        format!("`{callee}` expects an `i64` index"),
-                        span,
-                    );
+                    self.error("NXS004", format!("`{callee}` expects an `i64` index"), span);
                     return Type::Error;
                 }
                 return Type::String;
