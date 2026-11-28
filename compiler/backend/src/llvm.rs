@@ -137,6 +137,8 @@ const RUNTIME_DECLS: &[&str] = &[
     "declare double @nex_rt_min_f64(double, double)",
     "declare double @nex_rt_max_f64(double, double)",
     "declare double @nex_rt_sqrt(double)",
+    "declare double @llvm.sqrt.f64(double)",
+    "declare double @llvm.fabs.f64(double)",
     "declare double @nex_rt_pow(double, double)",
     "declare void @nex_rt_panic(ptr) noreturn",
     "declare void @nex_rt_init_args(i32, ptr)",
@@ -496,6 +498,7 @@ impl<'a> Emitter<'a> {
                 ret,
             } => {
                 let symbol = if name.starts_with("nex_rt_")
+                    || name.starts_with("llvm.")
                     || self
                         .module
                         .externs
@@ -506,14 +509,15 @@ impl<'a> Emitter<'a> {
                 } else {
                     format!("nex.fn.{name}")
                 };
-                let (param_types, return_type) = if name.starts_with("nex_rt_") {
-                    runtime_signature(name)
-                } else {
-                    sig_map
-                        .get(name)
-                        .cloned()
-                        .ok_or_else(|| format!("missing signature for `{name}`"))?
-                };
+                let (param_types, return_type) =
+                    if name.starts_with("nex_rt_") || name.starts_with("llvm.") {
+                        runtime_signature(name)
+                    } else {
+                        sig_map
+                            .get(name)
+                            .cloned()
+                            .ok_or_else(|| format!("missing signature for `{name}`"))?
+                    };
                 let mut rendered_args = Vec::new();
                 for (arg, ty) in args.iter().zip(param_types.iter()) {
                     rendered_args.push(format!(
@@ -836,6 +840,8 @@ fn runtime_signature(name: &str) -> (Vec<IrType>, IrType) {
         "nex_rt_min_i64" | "nex_rt_max_i64" => (vec![i64, i64], i64),
         "nex_rt_min_f64" | "nex_rt_max_f64" => (vec![f64, f64], f64),
         "nex_rt_sqrt" => (vec![f64], f64),
+        "llvm.sqrt.f64" => (vec![f64], f64),
+        "llvm.fabs.f64" => (vec![f64], f64),
         "nex_rt_pow" => (vec![f64, f64], f64),
         "nex_rt_panic" => (vec![ptr], void),
         "nex_rt_init_args" => (vec![i32, ptr], void),

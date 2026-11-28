@@ -1848,7 +1848,7 @@ fn lower_expr(
                     lower_expr(builder, &args[0], scopes, storage, analysis, Type::Error)?;
                 let dst = builder.new_value();
                 let (name, ret) = if arg_ty == Type::F64 {
-                    ("nex_rt_abs_f64", IrType::F64)
+                    ("llvm.fabs.f64", IrType::F64)
                 } else {
                     ("nex_rt_abs", IrType::I64)
                 };
@@ -1899,7 +1899,7 @@ fn lower_expr(
                 let dst = builder.new_value();
                 builder.emit(Inst::Call {
                     dst: Some(dst),
-                    name: "nex_rt_sqrt".to_string(),
+                    name: "llvm.sqrt.f64".to_string(),
                     args: vec![arg_value],
                     ret: IrType::F64,
                 });
