@@ -2915,3 +2915,137 @@ fn main():
     assert_eq!(code, 0, "stderr: {stderr}");
     assert_eq!(stdout, "1");
 }
+
+#[test]
+fn field_array_assignment_deep_clones_and_frees_old() {
+    let source = r#"
+struct Bag:
+    xs: [i64]
+
+fn main():
+    var b = Bag([1, 2])
+    var other: [i64] = [7, 8, 9]
+    b.xs = other
+    push(b.xs, 4)
+    print(len(other))
+    print(len(b.xs))
+    print(b.xs[0])
+"#;
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "347");
+}
+
+#[test]
+fn struct_field_assignment_deep_clones_nested_arrays() {
+    let source = r#"
+struct Inner:
+    xs: [i64]
+
+struct Outer:
+    inner: Inner
+
+fn main():
+    var o = Outer(Inner([1, 2]))
+    var other = Inner([7, 8, 9])
+    o.inner = other
+    push(o.inner.xs, 4)
+    print(len(other.xs))
+    print(len(o.inner.xs))
+    print(o.inner.xs[0])
+"#;
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "347");
+}
+
+#[test]
+fn index_struct_assignment_deep_clones_arrays() {
+    let source = r#"
+struct Bag:
+    xs: [i64]
+
+fn main():
+    var list: [Bag] = [Bag([1]), Bag([2])]
+    var c = Bag([7, 8, 9])
+    list[0] = c
+    push(list[0].xs, 4)
+    print(len(c.xs))
+    print(len(list[0].xs))
+    print(list[0].xs[0])
+"#;
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "347");
+}
+
+#[test]
+fn struct_self_and_parallel_assignment_keep_values() {
+    let source = r#"
+struct Bag:
+    xs: [i64]
+
+fn main():
+    var a = Bag([1, 2])
+    a = a
+    push(a.xs, 3)
+    print(len(a.xs))
+    print(a.xs[2])
+    var b = Bag([7])
+    var c = Bag([8, 9])
+    b, c = c, b
+    print(len(b.xs))
+    print(len(c.xs))
+    print(b.xs[0])
+    print(c.xs[0])
+"#;
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "332187");
+}
+
+#[test]
+fn clone_on_struct_with_array_fields_copies_arrays() {
+    let source = r#"
+struct Bag:
+    xs: [i64]
+
+fn main():
+    var c = Bag([1, 2])
+    var d = clone(c)
+    push(d.xs, 3)
+    print(len(c.xs))
+    print(len(d.xs))
+    print(d.xs[2])
+"#;
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "233");
+}
+
+#[test]
+fn push_struct_local_copies_arrays_instead_of_aliasing() {
+    let source = r#"
+struct Bag:
+    xs: [i64]
+
+fn build() -> [Bag]:
+    var list: [Bag] = []
+    var c = Bag([7, 8])
+    push(list, c)
+    return list
+
+fn main():
+    var l = build()
+    var junk: [i64] = []
+    var i = 0
+    while i < 200:
+        push(junk, i)
+        i = i + 1
+    print(len(l[0].xs))
+    print(l[0].xs[0])
+"#;
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "27");
+}

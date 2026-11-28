@@ -15,6 +15,14 @@
   no longer mutates the caller's array.
 - `drop(struct_local)` is accepted and frees every growable-array field,
   resetting each to a fresh empty header; previously it was rejected.
+- Field assignment no longer aliases or double-frees: `b.xs = other`
+  deep-clones `other` and frees the field's old buffer, `o.inner = other`
+  deep-clones the nested struct, and `list[i] = c` deep-clones the element.
+  Struct self-assignment (`s = s`) and parallel assignment (`a, b = b, a`) no
+  longer free the fields they are about to read.
+- `clone(struct)` and `push(list, struct_local)` now work: `clone` materialises
+  the struct value into a temporary, and `push` stores an independent deep copy
+  instead of aliasing the local that the caller frees at return.
 
 - Struct values that contain growable-array fields now have real value
   semantics: copying a struct (`var b = a`, by-value parameter passing, by-value

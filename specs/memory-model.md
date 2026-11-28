@@ -116,8 +116,13 @@ planned.
 - A struct parameter is therefore a real copy too: the callee owns independent
   array buffers and frees them at return, so mutating `param.field` inside the
   function is invisible to the caller.
-- Reassigning a struct field of type `[T]` (`b.xs = other`) frees the old
-  buffer first, so repeated assignment does not leak.
+- Reassigning a struct field of type `[T]` (`b.xs = other`) deep-clones the
+  source array into the field and frees the old field buffer, so `other` stays
+  valid and the field never aliases it. Reassigning a struct-typed field
+  (`o.inner = other`) deep-clones the nested struct the same way.
+- Parallel assignment of structs (`a, b = b, a`) reads both sources into
+  independent temporaries before writing either target, so the swap is safe and
+  the old buffers are freed.
 - A local struct owns its `[T]` fields and frees them before every `ret`,
   including early returns and nested scopes (`owned_structs` RAII). Returning
   a struct transfers ownership of its arrays to the caller instead of freeing

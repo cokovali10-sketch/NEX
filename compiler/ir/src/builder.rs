@@ -543,6 +543,9 @@ fn lower_statement(
                 let ptr = builder.alloca_at_entry(ty);
                 match ty {
                     IrType::Struct(struct_name) => {
+                        // Parallel assignment must read every source before any
+                        // target is overwritten, so the first pass deep-clones
+                        // each value into an independent temporary.
                         let source = lower_struct_place(builder, value, scopes, storage, analysis)?;
                         copy_struct(builder, ptr, source, struct_name, analysis)?;
                     }
@@ -578,11 +581,18 @@ fn lower_statement(
                     .ptr;
                 match ty {
                     IrType::Struct(struct_name) => {
+                        // The temporary owns its own clones, so freeing the
+                        // target's old buffers first is safe.
+                        if builder.owned_structs.iter().any(|(s, _)| *s == target) {
+                            free_struct_arrays(builder, target, struct_name, analysis);
+                        }
                         copy_struct(builder, target, *ptr, struct_name, analysis)?;
+                        // The temporary is never used again; release its clones.
+                        free_struct_arrays(builder, *ptr, struct_name, analysis);
                     }
                     IrType::Array(array_type) => {
                         let src_ty = analysis
-                            .expr_type(values.first().map(|v| v.span).unwrap_or_default())
+                            .expr_type(values.get(i).map(|v| v.span).unwrap_or_default())
                             .unwrap_or(Type::Error);
                         if let Type::Array { display, .. } = src_ty
                             && let Some(info) = analysis.array_info(display)
@@ -634,13 +644,17 @@ fn lower_statement(
                 .ok_or_else(|| format!("unknown variable `{name}` during code generation"))?;
             match (slot.ptr, slot.ty) {
                 (ptr, IrType::Struct(struct_name)) => {
-                    // Free the previous struct's growable-array fields before
-                    // overwriting, mirroring scalar/growable reassignment.
-                    if builder.owned_structs.iter().any(|(s, _)| *s == ptr) {
-                        free_struct_arrays(builder, ptr, struct_name, analysis);
-                    }
                     let source = lower_struct_place(builder, value, scopes, storage, analysis)?;
-                    copy_struct(builder, ptr, source, struct_name, analysis)?;
+                    // Self-assignment (`s = s`) must not free the fields it is
+                    // about to copy from.
+                    if source != ptr {
+                        // Free the previous struct's growable-array fields before
+                        // overwriting, mirroring scalar/growable reassignment.
+                        if builder.owned_structs.iter().any(|(s, _)| *s == ptr) {
+                            free_struct_arrays(builder, ptr, struct_name, analysis);
+                        }
+                        copy_struct(builder, ptr, source, struct_name, analysis)?;
+                    }
                     Ok(())
                 }
                 (ptr, IrType::Array(array_type)) => {
@@ -717,13 +731,31 @@ fn lower_statement(
                 });
                 ptr = next;
             }
-            // Free the previous growable-array buffer held in the field before
-            // overwriting it, mirroring scalar reassignment. Skip when the
-            // right-hand side is itself a field access, to avoid freeing a
-            // buffer we are about to store again (use-after-free).
-            if matches!(last_field_ty, Type::DynArray(_))
-                && !matches!(value.kind, ExprKind::Field { .. })
-            {
+            // Assigning to a field follows the same value semantics as a whole
+            // variable: a struct value is deep-cloned into the field, and a
+            // growable array is deep-cloned too, so the source stays valid and
+            // cannot be freed while the field still points at it.
+            if let Type::Struct(name) = last_field_ty {
+                let source = lower_struct_place(builder, value, scopes, storage, analysis)?;
+                if source != ptr {
+                    free_struct_arrays(builder, ptr, name, analysis);
+                    copy_struct(builder, ptr, source, name, analysis)?;
+                }
+                return Ok(());
+            }
+            if let Type::DynArray(display) = last_field_ty {
+                let elem_size = analysis
+                    .array_info(display)
+                    .map(|info| ir_elem_size(analysis, IrType::from_type(info.elem)))
+                    .unwrap_or(8);
+                let operand = lower_expr(builder, value, scopes, storage, analysis, Type::Error)?;
+                let cloned = builder.new_value();
+                builder.emit(Inst::Call {
+                    dst: Some(cloned),
+                    name: "nex_rt_array_clone".to_string(),
+                    args: vec![operand, Operand::Const(Const::Int(elem_size))],
+                    ret: IrType::String,
+                });
                 let old_header = builder.new_value();
                 builder.emit(Inst::Load {
                     dst: old_header,
@@ -736,6 +768,12 @@ fn lower_statement(
                     args: vec![Operand::Value(old_header)],
                     ret: IrType::Void,
                 });
+                builder.emit(Inst::Store {
+                    ptr,
+                    value: Operand::Value(cloned),
+                    ty: IrType::String,
+                });
+                return Ok(());
             }
             let operand = lower_expr(builder, value, scopes, storage, analysis, Type::Error)?;
             builder.emit(Inst::Store {
@@ -1311,6 +1349,22 @@ fn lower_struct_place(
             } else {
                 callee
             };
+            // `clone(s)` and other struct-valued expressions are not places:
+            // materialise the value in a temporary slot and use that as the
+            // place. Binding through `copy_struct` then deep-clones arrays.
+            if callee == "clone" {
+                if let Some(Type::Struct(name)) = analysis.expr_type(expr.span) {
+                    let value =
+                        lower_expr(builder, expr, scopes, storage, analysis, Type::Struct(name))?;
+                    let ptr = builder.alloca_at_entry(IrType::Struct(name));
+                    builder.emit(Inst::Store {
+                        ptr,
+                        value,
+                        ty: IrType::Struct(name),
+                    });
+                    return Ok(ptr);
+                }
+            }
             if let Some(info) = analysis.struct_info(callee) {
                 let ptr = builder.alloca_at_entry(IrType::Struct(info.name_static));
                 for (index, arg) in args.iter().enumerate() {
@@ -4610,7 +4664,24 @@ fn lower_expr(
                     index: Operand::Value(current_len),
                     elem_ty: elem_ir,
                 });
-                let value = lower_expr(builder, &args[1], scopes, storage, analysis, element)?;
+                let value = if let Type::Struct(name) = element {
+                    // Value semantics for struct elements: store an independent
+                    // copy. Storing the caller's struct value directly would
+                    // alias its array fields, which the caller's scope-exit
+                    // RAII frees, leaving a dangling element in the list.
+                    let src = lower_struct_place(builder, &args[1], scopes, storage, analysis)?;
+                    let tmp = builder.alloca_at_entry(elem_ir);
+                    copy_struct(builder, tmp, src, name, analysis)?;
+                    let loaded = builder.new_value();
+                    builder.emit(Inst::Load {
+                        dst: loaded,
+                        ptr: tmp,
+                        ty: elem_ir,
+                    });
+                    Operand::Value(loaded)
+                } else {
+                    lower_expr(builder, &args[1], scopes, storage, analysis, element)?
+                };
                 builder.emit(Inst::Store {
                     ptr: slot,
                     value,
