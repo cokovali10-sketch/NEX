@@ -2901,6 +2901,47 @@ fn main():
 }
 
 #[test]
+fn struct_array_field_deep_clones_elements() {
+    let source = r#"
+struct Item:
+    xs: [i64]
+
+struct Box:
+    items: [Item]
+
+fn main():
+    var a = Box([Item([1, 2])])
+    var b = a
+    push(b.items[0].xs, 3)
+    print(len(a.items[0].xs))
+    print(len(b.items[0].xs))
+    print(b.items[0].xs[2])
+"#;
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "233");
+}
+
+#[test]
+fn clone_of_struct_array_deep_clones_elements() {
+    let source = r#"
+struct Item:
+    xs: [i64]
+
+fn main():
+    var a: [Item] = [Item([1, 2])]
+    var b = clone(a)
+    push(b[0].xs, 3)
+    print(len(a[0].xs))
+    print(len(b[0].xs))
+    print(b[0].xs[2])
+"#;
+    let (stdout, stderr, code) = run_source(source);
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert_eq!(stdout, "233");
+}
+
+#[test]
 fn drop_on_whole_struct_resets_fields_without_crashing() {
     let source = r#"
 struct Bag:
@@ -2915,7 +2956,6 @@ fn main():
     assert_eq!(code, 0, "stderr: {stderr}");
     assert_eq!(stdout, "1");
 }
-
 #[test]
 fn field_array_assignment_deep_clones_and_frees_old() {
     let source = r#"
